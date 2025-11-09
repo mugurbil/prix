@@ -1,0 +1,6 @@
+jax>=0.5.1
+jaxlib
+mpi4jax>=0.8.1
+mpi4py~=4.1.0
+numpy~=1.26.4
+setuptools~=80.9.0

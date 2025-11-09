@@ -1,0 +1,58 @@
+#!/usr/bin/env python3
+
+# Copyright (c) Mehmet Ugurbil.
+#
+# This source code is licensed under the MIT license found in the
+# LICENSE file in the root directory of this source tree.
+
+import logging
+from .communicator import Communicator
+
+# from .distributed_communicator import DistributedCommunicator
+from .in_process_communicator import InProcessCommunicator
+
+
+__use_threads = False
+
+
+def get():
+    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
+    cls = InProcessCommunicator
+
+    if not cls.is_initialized():
+        raise RuntimeError("Curl not initialized. Please call curl.init() first.")
+
+    return cls.get()
+
+
+def _init(use_threads, rank, world_size, evaluator_size=0, init_ttp=False):
+    global __tls, __use_threads
+    __use_threads = use_threads
+    print(f"{__use_threads=}")
+    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
+    cls = InProcessCommunicator
+
+    if cls.is_initialized():
+        logging.info(f"Communicator is initialized")
+        return
+
+    cls.initialize(rank, world_size, evaluator_size, init_ttp=init_ttp)
+
+
+def uninit():
+    global __use_threads
+    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
+    cls = InProcessCommunicator
+    cls.shutdown()
+    __use_threads = False
+
+
+def is_initialized():
+    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
+    cls = InProcessCommunicator
+    return cls.is_initialized()
+
+
+# expose classes and functions in package:
+# __all__ = ["Communicator", "DistributedCommunicator", "get", "uninit", "is_initialized"]
+__all__ = ["Communicator", "get", "uninit", "is_initialized"]
