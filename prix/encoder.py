@@ -9,7 +9,7 @@ import numpy as np
 from jax import numpy as jnp
 
 
-def encode(x, precision=16, device=None):
+def encode(x, precision, device=None):
     """Helper function to wrap data if needed"""
 
     scale = 2**precision
@@ -33,7 +33,7 @@ def encode(x, precision=16, device=None):
         raise TypeError("Unknown array type: %s." % type(x))
 
 
-def decode(x, precision=16):
+def decode(x, precision):
     """Helper function that decodes from scaled array"""
     if x is None:
         return None

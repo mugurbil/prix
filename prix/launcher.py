@@ -9,36 +9,40 @@ import copy
 import logging
 import multiprocessing
 import os
+import threading
 import uuid
 
 import prix
-import jax.numpy as jnp
 
 
 class MultiProcessLauncher:
 
     # run_process_fn will be run in subprocesses.
     def __init__(
-        self, world_size, evaluator_size, run_process_fn, fn_args=None, cfg_file=None
+        self,
+        world_size,
+        evaluator_size,
+        run_process_fn,
+        fn_args=None,
     ):
         env = os.environ.copy()
-        env["WORLD_SIZE"] = str(world_size)
-        env["EVALUATOR_SIZE"] = str(evaluator_size)
-        multiprocessing.set_start_method("spawn")
+        multiprocessing.set_start_method("fork")
         # if fn_args is None or 'device' not in fn_args:
         #     device = torch.device(device="cpu")
         # else:
         #     device = torch.device(fn_args.device)
-
-        # Use random file so multiple jobs can be run simultaneously
-        INIT_METHOD = "file:///tmp/crypten-rendezvous-{}".format(uuid.uuid1())
-        env["RENDEZVOUS"] = INIT_METHOD
 
         # Using multiple GPUs
         # if fn_args is not None and 'multi_gpu' in fn_args and fn_args.multi_gpu:
         #     assert (
         #         fn_args.world_size <= torch.cuda.device_count()
         #     ), f"Got {fn_args.world_size} parties, but only {torch.cuda.device_count()} GPUs found"
+
+        mailbox = [multiprocessing.Queue() for _ in range(world_size + evaluator_size)]
+
+        # This prevents one thread from running ahead of the others and doing
+        # multiple puts that would show up in the get calls below
+        barrier = multiprocessing.Barrier(world_size + evaluator_size)
 
         self.processes = []
         self.ttp_process = None  # Track the TTP process separately
@@ -61,10 +65,10 @@ class MultiProcessLauncher:
                     rank,
                     world_size,
                     evaluator_size,
-                    env,
+                    mailbox,
+                    barrier,
                     run_process_fn,
                     new_args,
-                    cfg_file,
                     device,
                 ),
             )
@@ -132,18 +136,16 @@ class MultiProcessLauncher:
         rank,
         world_size,
         evaluator_size,
-        env,
+        mailbox,
+        barrier,
         run_process_fn,
         fn_args,
-        cfg_file=None,
         device=None,
     ):
-        for env_key, env_value in env.items():
-            os.environ[env_key] = env_value
-        os.environ["RANK"] = str(rank)
+        print(f"Creating process {rank}")
         orig_logging_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.INFO)
-        prix.init(cfg_file, str(rank), world_size, device=device)
+        prix.init(rank, world_size, evaluator_size, mailbox, barrier, device=device)
         logging.getLogger().setLevel(orig_logging_level)
         if fn_args is None:
             run_process_fn()
@@ -171,3 +173,42 @@ class MultiProcessLauncher:
             self.ttp_process.terminate()
         for process in self.eval_processes:
             process.terminate()
+
+
+class MultiThreadLauncher:
+
+    # run_process_fn will be run in subprocesses.
+    def __init__(
+        self,
+        world_size,
+        evaluator_size,
+        run_process_fn,
+        fn_args=None,
+    ):
+        env = os.environ.copy()
+        env["WORLD_SIZE"] = str(world_size)
+        env["EVALUATOR_SIZE"] = str(evaluator_size)
+
+        # Use random file so multiple jobs can be run simultaneously
+        INIT_METHOD = "file:///tmp/crypten-rendezvous-{}".format(uuid.uuid1())
+        env["RENDEZVOUS"] = INIT_METHOD
+
+        self.processes = []
+        self.ttp_process = None  # Track the TTP process separately
+        self.eval_processes = []
+
+        if threading.current_thread() != threading.main_thread():
+            return
+        self.threads = [
+            threading.Thread(
+                target=self._run, args=(run_process_fn, rank, world_size, fn_args)
+            )
+            for rank in range(world_size)
+        ]
+        for t in self.threads:
+            t.start()
+
+    def _run(self, test_fn, rank, world_size, fn_args):
+        prix.init_thread(rank, world_size)
+
+        test_fn(fn_args)

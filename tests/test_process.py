@@ -8,9 +8,8 @@ import argparse
 import logging
 
 import prix
-import jax
 
-from examples.multiprocess_launcher import MultiProcessLauncher
+from prix.launcher import MultiProcessLauncher
 
 
 def get_args():
@@ -53,29 +52,24 @@ def get_args():
     return args
 
 
-def get_config(args):
-    cfg_file = prix.cfg.get_default_config_path()
-    if args.evaluator_size:
-        logging.info("Using Fission config")
-        cfg_file = cfg_file.replace("default", "fission")
-    return cfg_file
-
-
-def run_shuffle(cfg_file, device=None):
-    # prix.init(cfg_file, device=device)
-
+def run_shuffle(device=None):
     rank = prix.comm.get().get_rank()
 
     if rank == 0:
-        x = prix.array([42, 99], src=0)
+        x = [42.5, 99.75]
     else:
-        x = prix.array([0, 0], src=0)
+        x = None
 
-    print(f"[Rank {rank}] My share: {x.share}")
+    x = prix.array(x, precision=16, src=0)
+    y = prix.array([21.25, 11.125], precision=8, src=1)
 
-    y = x.reconstruct(dst=0)
+    z = x - y
 
-    print(f"[Rank {rank}] Reconstructed: {y}")
+    print(f"[Rank {rank}] My share: {x.share} {y.share} {z.share}")
+
+    recon = z.reconstruct(dst=0)
+
+    print(f"[Rank {rank}] Reconstructed: {recon}")
 
 
 def _run_experiment(args):
@@ -85,21 +79,18 @@ def _run_experiment(args):
     #     level = logging.CRITICAL
     logging.getLogger().setLevel(level)
 
-    cfg_file = get_config(args)
-    run_shuffle(cfg_file)
+    run_shuffle()
     print("Done")
 
 
 def main():
     args = get_args()
-    cfg_file = get_config(args)
-    prix.cfg.load_config(cfg_file)
 
     print(f"{args.world_size} parties")
 
     if args.multiprocess:
         launcher = MultiProcessLauncher(
-            args.world_size, args.evaluator_size, _run_experiment, args, cfg_file
+            args.world_size, args.evaluator_size, _run_experiment, args
         )
         launcher.start()
         launcher.join()

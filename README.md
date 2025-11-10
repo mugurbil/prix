@@ -6,6 +6,10 @@
 
 PriX is a framework for Private Accelerated Transformers.
 
+```bash
+export JAX_PLATFORMS=cpu
+```
+
 ## Disclaimer
 This is software for a research prototype and not production-ready code.
 This repository builds upon [JAX](https://github.com/jax-ml/jax).

@@ -27,7 +27,7 @@ class Array:
         self,
         array: jnp.array,
         src: int,
-        precision: int = 16,
+        precision: int,
         device=None,
     ):
         """
@@ -91,11 +91,7 @@ class Array:
                 comm.get().send(share_i, i)
                 array = array - share_i
         else:
-            print("RECEIVING")
-            array = encode(array, precision=precision, device=device)
-            print(f"ARRAY={array}")
             array = comm.get().recv(array, src)
-            print(f"COMM ARRAY={array}")
 
         self._share = array
 
@@ -120,3 +116,28 @@ class Array:
             array = comm.get().reduce(self.share, dst)
 
         return decode(array, self.precision)
+
+    def __add__(self, other):
+        """Adds two arrays."""
+        share = other.share
+        if self.precision > other.precision:
+            scale = 2**(self.precision - other.precision)
+            share = share * scale
+        elif self.precision < other.precision:
+            scale = 2**(other.precision - self.precision)
+            self._share *= scale
+            self.precision = other.precision
+
+        self._share += share
+        return self
+
+
+    def __sub__(self, other):
+        """Subtracts two arrays."""
+        return self + (-other)
+
+
+    def __neg__(self):
+        """Negates arrays."""
+        self._share *= -1
+        return self

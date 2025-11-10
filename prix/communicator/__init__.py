@@ -12,23 +12,17 @@ from .communicator import Communicator
 from .in_process_communicator import InProcessCommunicator
 
 
-__use_threads = False
-
-
 def get():
     # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
     cls = InProcessCommunicator
 
     if not cls.is_initialized():
-        raise RuntimeError("Curl not initialized. Please call curl.init() first.")
+        raise RuntimeError("Prix not initialized. Please call prix.init() first.")
 
     return cls.get()
 
 
-def _init(use_threads, rank, world_size, evaluator_size=0, init_ttp=False):
-    global __tls, __use_threads
-    __use_threads = use_threads
-    print(f"{__use_threads=}")
+def _init(rank, world_size, evaluator_size, mailbox, barrier, init_ttp=False):
     # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
     cls = InProcessCommunicator
 
@@ -36,15 +30,15 @@ def _init(use_threads, rank, world_size, evaluator_size=0, init_ttp=False):
         logging.info(f"Communicator is initialized")
         return
 
-    cls.initialize(rank, world_size, evaluator_size, init_ttp=init_ttp)
+    cls.initialize(
+        rank, world_size, evaluator_size, mailbox, barrier, init_ttp=init_ttp
+    )
 
 
 def uninit():
-    global __use_threads
     # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
     cls = InProcessCommunicator
     cls.shutdown()
-    __use_threads = False
 
 
 def is_initialized():

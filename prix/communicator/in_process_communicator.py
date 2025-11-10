@@ -25,7 +25,11 @@ class InProcessCommunicator(Communicator):
     lock = threading.Lock()
 
     @classmethod
-    def initialize(cls, rank, world_size, evaluator_size, init_ttp=False):
+    def initialize(
+        cls, rank, world_size, evaluator_size, mailbox, barrier, init_ttp=False
+    ):
+        InProcessCommunicator.mailbox = mailbox
+        InProcessCommunicator.barrier = barrier
         cls.tls.instance = cls(rank, world_size, evaluator_size)
 
     def __init__(self, rank, world_size, evaluator_size, init_ttp=False):
@@ -33,19 +37,7 @@ class InProcessCommunicator(Communicator):
         self.evaluator_size = evaluator_size
         self.rank = rank
         self.reset_communication_stats()
-        self._name = f"rank{rank}"
-
-        with InProcessCommunicator.lock:
-            if InProcessCommunicator.mailbox is None:
-                InProcessCommunicator.mailbox = [
-                    Queue() for _ in range(self.world_size)
-                ]
-
-                # This prevents one thread from running ahead of the others and doing
-                # multiple puts that would show up in the get calls below
-                InProcessCommunicator.barrier = threading.Barrier(
-                    self.world_size + self.evaluator_size
-                )
+        self._name = f"rank_{rank}"
 
         # logging:
         level = logging.getLogger().level
@@ -70,14 +62,10 @@ class InProcessCommunicator(Communicator):
 
     def send(self, array, dst):
         """Sends the specified array to the destination dst."""
-        print(f"SEND: {array} {dst}")
         self.mailbox[dst].put((self.rank, array.clone()))
-        print(f"SEND: {self.mailbox[dst].empty()=}")
-        print(f"SEND: {self.mailbox[dst]=}")
 
     def recv(self, array, src=None):
         """Receives an array from an (optional) source src."""
-        print(f"RECV: {self.rank=} {array} {self.mailbox[self.rank]=}")
         rank, result = self.mailbox[self.rank].get()
         if src is not None and rank != src:
             raise NotImplementedError("Can't receive messages out of order yet")
@@ -216,10 +204,3 @@ class InProcessCommunicator(Communicator):
     def get_name(self):
         """Returns the party name of the current rank."""
         return self._name
-
-    def set_name(self, name: str):
-        """Sets the party name of the current rank."""
-        assert isinstance(
-            name, str
-        ), f"Improper name provided to process on rank {self.get_rank()}"
-        self._name = name
