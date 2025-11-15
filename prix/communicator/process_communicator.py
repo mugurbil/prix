@@ -33,9 +33,9 @@ class InProcessCommunicator(Communicator):
         cls.tls.instance = cls(rank, world_size, evaluator_size)
 
     def __init__(self, rank, world_size, evaluator_size, init_ttp=False):
+        self.rank = rank
         self.world_size = world_size
         self.evaluator_size = evaluator_size
-        self.rank = rank
         self.reset_communication_stats()
         self._name = f"rank_{rank}"
 
@@ -59,6 +59,17 @@ class InProcessCommunicator(Communicator):
     @classmethod
     def is_initialized(cls):
         return hasattr(cls.tls, "instance")
+
+    def send_obj(self, obj, dst, group=None):
+        """Sends the specified array to the destination dst."""
+        self.mailbox[dst].put((self.rank, obj))
+
+    def recv_obj(self, src, group=None):
+        """Receives an array from an (optional) source src."""
+        rank, result = self.mailbox[self.rank].get()
+        if src is not None and rank != src:
+            raise NotImplementedError("Can't receive messages out of order yet")
+        return result
 
     def send(self, array, dst):
         """Sends the specified array to the destination dst."""
@@ -117,12 +128,11 @@ class InProcessCommunicator(Communicator):
 
         return self.mailbox[self.rank].get()
 
-    def reduce(self, array, dst, op=MPI.SUM, async_op=False):
+    def reduce(self, array, dst, async_op=False):
         """Reduces the array data across all parties."""
         arrays = self.gather(array, dst)
         if self.rank == dst:
-            reduce_fn = self._reduce_op_to_function(op)
-            return reduce_fn(jnp.stack(arrays), axis=0)
+            return jnp.sum(jnp.stack(arrays), axis=0)
 
         return None
 
@@ -133,20 +143,13 @@ class InProcessCommunicator(Communicator):
         cls.mailbox = None
         cls.barrier = None
 
-    def _reduce_op_to_function(self, op):
-        if op == MPI.SUM:
-            return jnp.sum
-
-        raise NotImplementedError()
-
-    def all_reduce(self, array, op=MPI.SUM, async_op=False):
+    def all_reduce(self, array, async_op=False):
         """Reduces the array data across all parties; all get the final result."""
         if async_op:
             raise NotImplementedError()
 
         ag = self.all_gather(array)
-        reduce_fn = self._reduce_op_to_function(op)
-        return reduce_fn(jnp.stack(ag), axis=0)
+        return jnp.sum(jnp.stack(ag), axis=0)
 
     def gather(self, array, dst, async_op=False):
         """Gathers a list of arrays in a single party."""
@@ -192,6 +195,23 @@ class InProcessCommunicator(Communicator):
         # No need for a barrier here.
 
         return self.mailbox[self.rank].get()
+
+    def broadcast_parallel(self, inputs_list, src_list, groups_list):
+        """Broadcasts the tensor to all parties using parallel threads.
+
+        Args:
+            inputs_list (list): List of tensors to broadcast
+            src_list (list): List of source ranks for each broadcast
+            groups_list (list): List of groups for each broadcast
+        """
+        assert len(inputs_list) == len(groups_list) == len(src_list), \
+            f"inputs_list {len(inputs_list)}, src_list {len(src_list)} and groups_list {len(groups_list)} must have same length"
+
+        for array, src, group in zip(inputs_list, src_list, groups_list):
+            if self.rank == src:
+                for i in group:
+                    self.mailbox[i].put(array.clone())
+
 
     def get_world_size(self):
         """Returns the size of the world."""

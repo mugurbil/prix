@@ -9,7 +9,7 @@ import unittest
 
 import jax.numpy as jnp
 
-from prix.encoder import encode, decode
+from prix.encoder import encode, decode, DATATYPE
 
 
 def get_test_array(max_value=10, floating=False):
@@ -19,7 +19,7 @@ def get_test_array(max_value=10, floating=False):
     if floating:
         array = jnp.array(data, dtype=jnp.float32)
     else:
-        array = jnp.array(data, dtype=jnp.int32)
+        array = jnp.array(data, dtype=DATATYPE)
     return array
 
 

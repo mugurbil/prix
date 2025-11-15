@@ -58,11 +58,11 @@ class Communicator:
         """Scatters a list of arrays to all parties."""
         raise NotImplementedError("scatter is not implemented")
 
-    def reduce(self, array, dst, op=None, async_op=False):
+    def reduce(self, array, dst, async_op=False):
         """Reduces the array data across all parties."""
         raise NotImplementedError("reduce is not implemented")
 
-    def all_reduce(self, array, op=None, async_op=False):
+    def all_reduce(self, array, async_op=False):
         """Reduces the array data across all parties; all get the final result."""
         raise NotImplementedError("all_reduce is not implemented")
 
@@ -86,11 +86,11 @@ class Communicator:
         """
         raise NotImplementedError("barrier is not implemented")
 
-    def send_obj(self, obj, dst):
+    def send_obj(self, obj, group):
         """Sends the specified object to the destination `dst`."""
         raise NotImplementedError("send_obj is not implemented")
 
-    def recv_obj(self, src):
+    def recv_obj(self, src, group):
         """Receives an array from a source src."""
         raise NotImplementedError("recv_obj is not implemented")
 

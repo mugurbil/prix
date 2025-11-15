@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 
 """
-python test_process.py --multiprocess
+python tests/test_process.py
 """
 
 import argparse
 import logging
+
+import jax.numpy as jnp
 
 import prix
 
@@ -28,12 +30,6 @@ def get_args():
         help="The number of eval parties to launch. Each party acts as its own process",
     )
     parser.add_argument(
-        "--multiprocess",
-        default=False,
-        action="store_true",
-        help="Run example in multiprocess mode",
-    )
-    parser.add_argument(
         "--device",
         "-d",
         required=False,
@@ -52,34 +48,75 @@ def get_args():
     return args
 
 
-def run_shuffle(device=None):
-    rank = prix.comm.get().get_rank()
-
-    if rank == 0:
-        x = [42.5, 99.75]
-    else:
-        x = None
-
-    x = prix.array(x, precision=16, src=0)
-    y = prix.array([21.25, 11.125], precision=8, src=1)
-
-    z = x - y
-
-    print(f"[Rank {rank}] My share: {x.share} {y.share} {z.share}")
-
-    recon = z.reconstruct(dst=0)
-
-    print(f"[Rank {rank}] Reconstructed: {recon}")
-
-
 def _run_experiment(args):
     # Only Rank 0 will display logs.
     level = logging.INFO
-    # if "RANK" in os.environ and os.environ["RANK"] != "0":
-    #     level = logging.CRITICAL
     logging.getLogger().setLevel(level)
 
-    run_shuffle()
+    rank = prix.comm.get().get_rank()
+
+    # Test Sharing
+    inner = None
+    if rank == 0:
+        inner = [1.5, 2.75]
+    arr = prix.array(inner, precision=4, src=0)
+    print(f"[Rank {rank}] My share: {arr.share}")
+    reconstructed = arr.reconstruct(dst=0)
+    print(f"[Rank {rank}] Reconstructed: {reconstructed}")
+    if rank == 0:
+        assert jnp.array_equal(
+            reconstructed, jnp.array(inner)
+        ), f"Reconstructed {reconstructed} != {inner}"
+    elif rank == 1:
+        assert reconstructed == inner, f"None {reconstructed} != {inner}"
+
+    x_inner = jnp.array([[0, 1], [1, 0]])
+    x = prix.array(x_inner, precision=8, src=0)
+    y_inner = jnp.array([[21.25, 0], [1, 11.125]])
+    y = prix.array(y_inner, precision=8, src=1)
+
+    print("Test Private Recon")
+    left, right = x.reconstruct(), x_inner
+    assert jnp.array_equal(left, right), f"Reconstruct {left} != {right}"
+
+    print("Test Private Add")
+    left, right = (x + y).reconstruct(), x_inner + y_inner
+    assert jnp.array_equal(left, right), f"Add {left} != {right}"
+
+    print("Test Private Neg")
+    left, right = (-y).reconstruct(), -y_inner
+    assert jnp.array_equal(left, right), f"Neg {left} != {right}"
+
+    print("Test Private Sub")
+    left, right = (x - y).reconstruct(), x_inner - y_inner
+    assert jnp.array_equal(left, right), f"Sub {left} != {right}"
+
+    print("Test Private MatMul")
+    left, right = (x @ y).reconstruct(), x_inner @ y_inner
+    assert jnp.array_equal(left, right), f"MatMul {left} != {right}"
+
+    print("Test Private Mul")
+    left, right = (x * y).reconstruct(), x_inner * y_inner
+    assert jnp.array_equal(left, right), f"Mul {left} != {right}"
+
+    z = jnp.array([2, 3])
+
+    print("Test Public MatMul")
+    left, right = (x @ z).reconstruct(), x_inner @ z
+    assert jnp.array_equal(left, right), f"Public MatMul {left} != {right}"
+
+    print("Test Public Mul")
+    left, right = (x * z).reconstruct(), x_inner * z
+    assert jnp.array_equal(left, right), f"Public MatMul {left} != {right}"
+
+    print("Test Right Public MatMul")
+    left, right = (z @ x).reconstruct(), z @ x_inner
+    assert jnp.array_equal(left, right), f"Public MatMul {left} != {right}"
+
+    print("Test Right Public Mul")
+    left, right = (z * x).reconstruct(), z * x_inner
+    assert jnp.array_equal(left, right), f"Public MatMul {left} != {right}"
+
     print("Done")
 
 
@@ -88,15 +125,12 @@ def main():
 
     print(f"{args.world_size} parties")
 
-    if args.multiprocess:
-        launcher = MultiProcessLauncher(
-            args.world_size, args.evaluator_size, _run_experiment, args
-        )
-        launcher.start()
-        launcher.join()
-        launcher.terminate()
-    else:
-        _run_experiment(args)
+    launcher = MultiProcessLauncher(
+        args.world_size, args.evaluator_size, _run_experiment, args
+    )
+    launcher.start()
+    launcher.join()
+    launcher.terminate()
 
 
 if __name__ == "__main__":

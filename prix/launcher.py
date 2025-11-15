@@ -13,6 +13,7 @@ import threading
 import uuid
 
 import prix
+from prix.evaluator import EvaluatorServer
 
 
 class MultiProcessLauncher:
@@ -25,7 +26,6 @@ class MultiProcessLauncher:
         run_process_fn,
         fn_args=None,
     ):
-        env = os.environ.copy()
         multiprocessing.set_start_method("fork")
         # if fn_args is None or 'device' not in fn_args:
         #     device = torch.device(device="cpu")
@@ -42,7 +42,7 @@ class MultiProcessLauncher:
 
         # This prevents one thread from running ahead of the others and doing
         # multiple puts that would show up in the get calls below
-        barrier = multiprocessing.Barrier(world_size + evaluator_size)
+        barrier = multiprocessing.Barrier(world_size)
 
         self.processes = []
         self.ttp_process = None  # Track the TTP process separately
@@ -101,34 +101,34 @@ class MultiProcessLauncher:
         #     ),
         # )
 
-        # for rank in range(evaluator_size):
-        #     evaluator_rank = world_size + rank
-        #     if self.ttp_process:
-        #         evaluator_rank += 1
-        #     if fn_args is not None and 'multi_gpu' in fn_args and fn_args.multi_gpu:
-        #         device = torch.device(f"cpu")
-        #         new_args = copy.deepcopy(fn_args)
-        #         new_args.device = device
-        #     else:
-        #         new_args = fn_args
-        #     print(f'Running party {evaluator_rank} in {device}')
-        #
-        #     process_name = "evaluator process " + str(evaluator_rank)
-        #     process = multiprocessing.Process(
-        #         target=self.__class__._run_process,
-        #         name=process_name,
-        #         args=(
-        #             evaluator_rank,
-        #             world_size,
-        #             evaluator_size,
-        #             env,
-        #             curl.evaluator.EvaluatorServer,
-        #             None,
-        #             cfg_file,
-        #             device
-        #         ),
-        #     )
-        #     self.eval_processes.append(process)
+        print("Launching Evaluator")
+        for rank in range(evaluator_size):
+            evaluator_rank = world_size + rank
+            if self.ttp_process:
+                evaluator_rank += 1
+            # if fn_args is not None and "multi_gpu" in fn_args and fn_args.multi_gpu:
+            #     device = jax.device(f"cpu")
+            #     new_args = copy.deepcopy(fn_args)
+            #     new_args.device = device
+            # else:
+            #     new_args = fn_args
+            # print(f"Running party {evaluator_rank} in {device}")
+
+            process_name = "evaluator process " + str(evaluator_rank)
+            process = multiprocessing.Process(
+                target=self.__class__._run_process,
+                name=process_name,
+                args=(
+                    evaluator_rank,
+                    world_size,
+                    evaluator_size,
+                    mailbox,
+                    barrier,
+                    EvaluatorServer,
+                    None,
+                ),
+            )
+            self.eval_processes.append(process)
 
     @classmethod
     def _run_process(

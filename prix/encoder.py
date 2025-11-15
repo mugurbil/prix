@@ -8,6 +8,9 @@
 import numpy as np
 from jax import numpy as jnp
 
+PRECISION = 16
+DATATYPE = jnp.int32
+
 
 def encode(x, precision, device=None):
     """Helper function to wrap data if needed"""
@@ -15,20 +18,20 @@ def encode(x, precision, device=None):
     scale = 2**precision
     if isinstance(x, int) or isinstance(x, float):
         # Squeeze in order to get a 0-dim array with value `x`
-        return jnp.array([scale * x], dtype=jnp.int32, device=device).squeeze()
+        return jnp.array([scale * x], dtype=DATATYPE, device=device).squeeze()
     elif isinstance(x, list):
         return jnp.array(
             jnp.array(x, dtype=jnp.float32, device=device) * scale,
-            dtype=jnp.int32,
+            dtype=DATATYPE,
             device=device,
         )
     elif jnp.issubdtype(x.dtype, jnp.floating):
-        return jnp.array(scale * x, dtype=jnp.int32, device=device)
+        return jnp.array(scale * x, dtype=DATATYPE, device=device)
     # For integer types cast to long prior to scaling to avoid overflow.
     elif jnp.issubdtype(x.dtype, jnp.integer):
-        return scale * jnp.array(x, dtype=jnp.int32, device=device)
+        return scale * jnp.array(x, dtype=DATATYPE, device=device)
     elif isinstance(x, np.ndarray):
-        return scale * jnp.array(x, dtype=jnp.int32, device=device)
+        return scale * jnp.array(x, dtype=DATATYPE, device=device)
     else:
         raise TypeError("Unknown array type: %s." % type(x))
 
@@ -38,14 +41,14 @@ def decode(x, precision):
     if x is None:
         return None
 
-    assert jnp.issubdtype(x.dtype, jnp.int32), "input must be a int32 array"
+    assert jnp.issubdtype(x.dtype, DATATYPE), "input must be a int array"
 
     if precision > 0:
         scale = 2**precision
-        correction = jnp.array(x < 0, dtype=jnp.int32, device=x.device)
+        correction = jnp.array(x < 0, dtype=DATATYPE, device=x.device)
         dividend = jnp.floor(x / (scale - correction))
         remainder = x % scale
-        remainder += (remainder == 0).astype(jnp.int32) * scale * correction
+        remainder += (remainder == 0).astype(DATATYPE) * scale * correction
 
         x = dividend.astype(jnp.float32) + remainder.astype(jnp.float32) / scale
     return x

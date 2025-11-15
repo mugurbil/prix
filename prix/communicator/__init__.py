@@ -9,7 +9,7 @@ import logging
 from .communicator import Communicator
 
 # from .distributed_communicator import DistributedCommunicator
-from .in_process_communicator import InProcessCommunicator
+from .process_communicator import InProcessCommunicator
 
 
 def get():
