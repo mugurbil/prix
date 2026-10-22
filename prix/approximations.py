@@ -786,6 +786,40 @@ def exp(self):
         for _ in range(iters):
             result = result.square()
         return result
+    elif method == "poly":
+        neg_coeffs = [0.90939454, 0.35179902, 0.06433797, 0.00451738]
+        neg_c0 = 0.98636898
+        if cfg.functions.exp.all_neg:
+            do_poly = (-5.0 - self)._ltz()
+            poly_neg = self.polynomial(neg_coeffs) + neg_c0
+            return do_poly * poly_neg
+        pos_coeffs = [0.87648823, 0.82507053, -0.14632820, 0.15607787]
+        pos_c0 = 1.01072671
+        ltz_pair = prix.stack([self, -5.0 - self])._ltz()
+        is_neg, gt_neg5 = ltz_pair[0], ltz_pair[1]
+        in_pos = 1 - is_neg
+        in_neg = is_neg + gt_neg5 - 1
+        x2 = self.square()
+        x1_x2 = prix.stack([self, x2])
+        terms = prix.cat([x1_x2, x1_x2 * x2])
+        bcast_shape = (2, 4) + (1,) * self.dim()
+        coeffs_enc = prix.encoder.encode(
+            jnp.reshape(jnp.asarray([pos_coeffs, neg_coeffs], dtype=jnp.float32), bcast_shape),
+            precision=terms.precision,
+            device=terms.device,
+        )
+        both = self.shallow_copy()
+        both.share = jnp.sum(jnp.expand_dims(terms.share, axis=0) * coeffs_enc, axis=1)
+        both.precision = terms.precision
+        if both.precision > 0:
+            trunc_method = cfg.encoder.trunc_method.prod
+            if trunc_method == "crypten":
+                both = both.div_(2 ** both.precision)
+            elif trunc_method == "egk":
+                both = both.egk_trunc_pr(62, both.precision)
+        c0_bcast = jnp.reshape(jnp.asarray([pos_c0, neg_c0], dtype=jnp.float32), (2,) + (1,) * self.dim())
+        both = both + c0_bcast
+        return (prix.stack([in_pos, in_neg]) * both).sum(0)
     elif method == "fission":
         return permute_reveal_evaluate_share(self, "exp")
     else:
@@ -1550,6 +1584,12 @@ def erf(self):
         return output.mul(2.0 / math.sqrt(math.pi))
     elif method == "tanh":
         return tanh(math.sqrt(4.0 / math.pi) * (self + 0.044715 * self.pow(3)))
+    elif method == "poly":
+        ltz, do_poly = _ltz_and_abs_lt(self, 2.5)
+        sgn = 1 - 2 * ltz
+        abs_x = sgn * self
+        poly_x = abs_x.polynomial([1.30561301, -0.45803194, -0.01699669, 0.02278162]) - 0.01501806
+        return sgn * (do_poly * (poly_x - 1) + 1)
     elif method == "fourier":
         period = getattr(cfg.functions.erf, "fs_period", 16)
         width = period / 2.0

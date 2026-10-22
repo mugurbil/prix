@@ -9,6 +9,8 @@ NDSS 2025). Both frameworks are benchmarked in four approximation modes:
 
   crypten  - CrypTen's original approximations (Newton-Raphson, limit exp,
              Taylor erf, ...) with CrypTen truncation  (configs/approximations.yaml)
+  poly     - PUMA / Nimbus piecewise low-degree polynomials (no LUTs)
+                                                       (configs/poly.yaml)
   shaft    - SHAFT constant-round Fourier-series activations & ODE softmax
                                                        (configs/shaft.yaml)
   lut      - CuRL wavelet look-up tables                (configs/default.yaml)
@@ -33,6 +35,7 @@ import numpy as np
 MODES = [
     # (key, title, config file, number of Fission evaluators)
     ("crypten", "CrypTen approximations", "approximations.yaml", 0),
+    ("poly", "PUMA/Nimbus piecewise poly", "poly.yaml", 0),
     ("shaft", "SHAFT (Fourier + ODE)", "shaft.yaml", 0),
     ("lut", "CuRL wavelet LUTs", "default.yaml", 0),
     ("fission", "Fission evaluator", "fission.yaml", 1),
@@ -377,9 +380,32 @@ def _install_shaft_into_curl():
             res = res + alpha
         return res
 
+    orig_exp = approx_mod.exp
     orig_gelu = approx_mod.gelu
     orig_silu = approx_mod.silu
+    orig_tanh = approx_mod.tanh
+    orig_sigmoid = approx_mod.sigmoid
+    orig_erf = approx_mod.erf
     orig_softmax = approx_mod.softmax
+
+    def shaft_exp(self):
+        if cfg.functions.exp.method == "poly":
+            neg_coeffs = [0.90939454, 0.35179902, 0.06433797, 0.00451738]
+            neg_c0 = 0.98636898
+            if cfg.functions.exp.all_neg:
+                do_poly = (-5.0 - self)._ltz()
+                poly_neg = self.polynomial(neg_coeffs) + neg_c0
+                return do_poly * poly_neg
+            pos_coeffs = [0.87648823, 0.82507053, -0.14632820, 0.15607787]
+            pos_c0 = 1.01072671
+            ltz_pair = curl.stack([self, -5.0 - self])._ltz()
+            is_neg, gt_neg5 = ltz_pair[0], ltz_pair[1]
+            in_pos = 1 - is_neg
+            in_neg = is_neg + gt_neg5 - 1
+            poly_pos = self.polynomial(pos_coeffs) + pos_c0
+            poly_neg = self.polynomial(neg_coeffs) + neg_c0
+            return in_pos * poly_pos + in_neg * poly_neg
+        return orig_exp(self)
 
     def shaft_gelu(self):
         if cfg.functions.gelu.method == "fourier":
@@ -394,6 +420,14 @@ def _install_shaft_into_curl():
                 device=self.device,
             )
             return relu_x + do_fs * _fourier_series(abs_x, terms, period, beta_sin=beta_sin)
+        elif cfg.functions.gelu.method == "poly":
+            ltz_all = curl.stack([self, self - 3.0, -self - 3.0])._ltz()
+            ltz, do_poly = ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+            neg_part = self * ltz
+            abs_x = self - 2 * neg_part
+            relu_x = self - neg_part
+            poly_x = abs_x.polynomial([-0.55386347, 0.5658561, -0.19719836, 0.02328962]) + 0.00410626
+            return relu_x + do_poly * poly_x
         return orig_gelu(self)
 
     def shaft_silu(self):
@@ -412,7 +446,40 @@ def _install_shaft_into_curl():
                 device=self.device,
             )
             return relu_x + do_fs * _fourier_series(abs_x, terms, period, beta_sin=beta_sin)
+        elif cfg.functions.silu.method == "poly":
+            ltz_all = curl.stack([self, self - 6.0, -self - 6.0])._ltz()
+            ltz, do_poly = ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+            neg_part = self * ltz
+            abs_x = self - 2 * neg_part
+            relu_x = self - neg_part
+            poly_x = abs_x.polynomial([-0.47465521, 0.27018027, -0.05269808, 0.00348313]) - 0.00951912
+            return relu_x + do_poly * poly_x
         return orig_silu(self)
+
+    def shaft_tanh(self):
+        if cfg.functions.sigmoid_tanh.method == "poly":
+            ltz_all = curl.stack([self, self - 2.95, -self - 2.95])._ltz()
+            ltz, do_poly = ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+            sgn = 1 - 2 * ltz
+            abs_x = sgn * self
+            poly_x = abs_x.polynomial([1.1950192, -0.49313435, 0.0737858, -0.00147019]) - 0.01758266
+            return sgn * (do_poly * (poly_x - 1) + 1)
+        return orig_tanh(self)
+
+    def shaft_sigmoid(self):
+        if cfg.functions.sigmoid_tanh.method == "poly":
+            return shaft_tanh(self.div(2)).div(2) + 0.5
+        return orig_sigmoid(self)
+
+    def shaft_erf(self):
+        if cfg.functions.erf.method == "poly":
+            ltz_all = curl.stack([self, self - 2.5, -self - 2.5])._ltz()
+            ltz, do_poly = ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+            sgn = 1 - 2 * ltz
+            abs_x = sgn * self
+            poly_x = abs_x.polynomial([1.30561301, -0.45803194, -0.01699669, 0.02278162]) - 0.01501806
+            return sgn * (do_poly * (poly_x - 1) + 1)
+        return orig_erf(self)
 
     def shaft_softmax(self, dim, **kwargs):
         if cfg.functions.softmax.method == "ode":
@@ -435,8 +502,12 @@ def _install_shaft_into_curl():
             return g
         return orig_softmax(self, dim, **kwargs)
 
+    approx_mod.exp = CrypTensor.exp = shaft_exp
     approx_mod.gelu = CrypTensor.gelu = shaft_gelu
     approx_mod.silu = CrypTensor.silu = shaft_silu
+    approx_mod.tanh = CrypTensor.tanh = shaft_tanh
+    approx_mod.sigmoid = CrypTensor.sigmoid = shaft_sigmoid
+    approx_mod.erf = CrypTensor.erf = shaft_erf
     approx_mod.softmax = CrypTensor.softmax = shaft_softmax
     approx_mod._shaft_installed = True
 

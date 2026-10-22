@@ -13,6 +13,13 @@ James Bradbury, Roy Frostig, Peter Hawkins, Matthew~James Johnson, Chris Leary,
 \newblock {JAX}: Composable transformations of {P}ython+{N}um{P}y programs.
 \newblock \url{http://github.com/jax-ml/jax}, 2018.
 
+\bibitem{dong2023puma}
+Ye~Dong, Wen jie Lu, Yancheng Zheng, Haoqi Wu, Derun Zhao, Jin Tan, Zhicong
+  Huang, Cheng Hong, Tao Wei, and Wenguang Chen.
+\newblock {PUMA}: Secure inference of {LLaMA-7B} in five minutes.
+\newblock {\em arXiv preprint arXiv:2307.12533}, 2023.
+\newblock \url{https://arxiv.org/abs/2307.12533}.
+
 \bibitem{escudero2020improved}
 Daniel Escudero, Satrajit Ghosh, Marcel Keller, Rahul Rachuri, and Peter
   Scholl.
@@ -57,6 +64,14 @@ Peter~M. Kogge and Harold~S. Stone.
 \newblock A parallel algorithm for the efficient solution of a general class of
   recurrence equations.
 \newblock {\em IEEE Transactions on Computers}, C-22(8):786--793, 1973.
+
+\bibitem{li2024nimbus}
+Zhengyi Li, Kang Yang, Jin Tan, Wen jie Lu, Haoqi Wu, Xiao Wang, Yu~Yu, Derun
+  Zhao, Yancheng Zheng, Minyi Guo, and Jiwu Shu.
+\newblock Nimbus: Secure and efficient two-party inference for transformers.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  volume~37, 2024.
+\newblock \url{https://arxiv.org/abs/2411.03700}.
 
 \bibitem{mohassel2017secureml}
 Payman Mohassel and Yupeng Zhang.

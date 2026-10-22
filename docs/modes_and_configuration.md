@@ -1,14 +1,15 @@
 # MPC Approximation Modes & Configuration Reference
 
-PriX supports four nonlinear approximation paradigms out of the box, selectable via `mode="lut" | "shaft" | "crypten" | "fission"` in `prix.run`, `@prix.mpc.run_multiprocess`, `prix.init`, or `prix.set_mode`.
+PriX supports five nonlinear approximation paradigms out of the box, selectable via `mode="lut" | "poly" | "shaft" | "crypten" | "fission"` in `prix.run`, `@prix.mpc.run_multiprocess`, `prix.init`, or `prix.set_mode`.
 
 ---
 
-## 1. Overview of the Four Modes
+## 1. Overview of the Five Modes
 
 | Mode Name | Config File | Truncation | Nonlinear Approximations | Reference |
 |---|---|---|---|---|
 | **`"lut"`** *(default)* | [`configs/default.yaml`](../configs/default.yaml) | `[EGK+20]` probabilistic (`egk`) | Biorthogonal-2.2 & Haar Wavelet LUTs for `exp`, `log`, `reciprocal`, `sqrt`, `inv_sqrt`, `sigmoid`, `tanh`, `erf`, `gelu`, `silu` | [**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045), [**Wave Hello (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083), [**Ripple (ISC 2024)**](https://eprint.iacr.org/2024/866) |
+| **`"poly"`** | [`configs/poly.yaml`](../configs/poly.yaml) | CrypTen (`crypten`) | Piecewise low-degree polynomials for `gelu`, `silu`, `exp`, `sigmoid`, `tanh`, `erf` (1 batched comparison + degree-4 polynomial, no LUTs) | [**PUMA (arXiv 2023)**](https://arxiv.org/abs/2307.12533), [**Nimbus (NeurIPS 2024)**](https://arxiv.org/abs/2411.03700) |
 | **`"shaft"`** | [`configs/shaft.yaml`](../configs/shaft.yaml) | CrypTen (`crypten`) | 1-round trigonometric-triple Fourier series (`gelu`, `silu`, `erf`, `sigmoid`, `tanh`) + constant-round Forward-Euler ODE `softmax` | [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965) |
 | **`"crypten"`** | [`configs/approximations.yaml`](../configs/approximations.yaml) | CrypTen (`crypten`) | Limit `exp`, Newton–Raphson `reciprocal`/`sqrt`/`inv_sqrt`, Taylor `erf`, sigmoid-based `silu`, standard `softmax` | [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984) |
 | **`"fission"`** | [`configs/fission.yaml`](../configs/fission.yaml) | Fission (`fission`) | Permute-and-reveal to a non-colluding plaintext evaluator party (`EvaluatorServer`, auto-spawned by `prix.run`) | [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653) |
@@ -31,6 +32,7 @@ def run_shaft():
 Or switch dynamically inside a process using `prix.set_mode`:
 ```python
 prix.set_mode("lut")      # CuRL Wavelet LUTs
+prix.set_mode("poly")     # PUMA / Nimbus piecewise low-degree polynomials
 prix.set_mode("shaft")    # SHAFT Fourier + ODE
 prix.set_mode("crypten")  # CrypTen classic approximations
 prix.set_mode("fission")  # Fission evaluator

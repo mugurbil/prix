@@ -269,7 +269,7 @@ def _worker_shaft_and_poly():
             x.sigmoid().get_plain_text(), jax.nn.sigmoid(x_val), atol=6e-2
         )
 
-    # Piecewise polynomial approximations
+    # Piecewise polynomial approximations (PUMA / Nimbus)
     with cfg.temp_override({"functions.gelu.method": "poly"}):
         np.testing.assert_allclose(
             x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), atol=2e-2
@@ -280,6 +280,20 @@ def _worker_shaft_and_poly():
         np.testing.assert_allclose(x.tanh().get_plain_text(), jnp.tanh(x_val), atol=2e-2)
         np.testing.assert_allclose(
             x.sigmoid().get_plain_text(), jax.nn.sigmoid(x_val), atol=2e-2
+        )
+    with cfg.temp_override({"functions.erf.method": "poly"}):
+        np.testing.assert_allclose(
+            x.erf().get_plain_text(), jax.scipy.special.erf(x_val), atol=2e-2
+        )
+    exp_val = jnp.array([-4.0, -2.0, -0.5, 0.0, 0.5, 1.5, 2.0], dtype=jnp.float32)
+    exp_in = prix.cryptensor(exp_val)
+    with cfg.temp_override({"functions.exp.method": "poly", "functions.exp.all_neg": False}):
+        np.testing.assert_allclose(exp_in.exp().get_plain_text(), jnp.exp(exp_val), atol=3e-2)
+    neg_exp_val = jnp.array([-4.0, -2.0, -1.0, -0.2, 0.0], dtype=jnp.float32)
+    neg_exp_in = prix.cryptensor(neg_exp_val)
+    with cfg.temp_override({"functions.exp.method": "poly", "functions.exp.all_neg": True}):
+        np.testing.assert_allclose(
+            neg_exp_in.exp().get_plain_text(), jnp.exp(neg_exp_val), atol=3e-2
         )
 
     # SHAFT constant-round ODE softmax

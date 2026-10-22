@@ -86,6 +86,7 @@ def set_mode(mode, device=None):
     """
     Switch PriX's MPC approximation backend in one line:
       - 'lut' / 'default': CuRL Wavelet Look-Up Tables + EGK truncation
+      - 'poly': PUMA / Nimbus piecewise low-degree polynomials (no LUTs)
       - 'shaft': SHAFT 1-round Fourier activations + constant-round ODE Softmax
       - 'crypten': Classic CrypTen polynomial / Newton-Raphson / limit approximations
       - 'fission': Fission hybrid plaintext evaluator

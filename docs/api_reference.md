@@ -4,11 +4,11 @@
 
 ### Execution & Initialization
 - **`@prix.mpc.run_multiprocess(world_size=2, mode=None, evaluator_size=0, device=None)`** *(also `@prix.run_multiprocess`)*
-  Decorator that spawns `world_size` MPC processes, initializes PriX with the specified `mode` (`"lut"`, `"shaft"`, `"crypten"`, `"fission"`), executes the decorated function, and returns Party 0's return value to the caller.
+  Decorator that spawns `world_size` MPC processes, initializes PriX with the specified `mode` (`"lut"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`), executes the decorated function, and returns Party 0's return value to the caller.
 - **`prix.run(fn, *args, world_size=2, mode=None, evaluator_size=0, device=None, **kwargs)`**
   Functional equivalent of `@prix.mpc.run_multiprocess`: runs `fn(*args, **kwargs)` across `world_size` MPC parties and returns Party 0's result. Automatically sets `evaluator_size=1` when `mode="fission"`.
 - **`prix.set_mode(mode, device=None)`**
-  Switches PriX's active configuration preset (`"lut"` / `"default"`, `"shaft"`, `"crypten"`, `"fission"`) and refreshes wavelet lookup tables if already initialized.
+  Switches PriX's active configuration preset (`"lut"` / `"default"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`) and refreshes wavelet lookup tables if already initialized.
 - **`prix.init(rank=0, world_size=1, evaluator_size=0, ..., device=None, mode=None, cfg_file=None)`**
   Initializes the communicator, PRNG streams, wavelet lookup tables, and optional TTP/Evaluator clients for a single worker process.
 - **`prix.uninit()`**
