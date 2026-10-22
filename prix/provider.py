@@ -385,12 +385,38 @@ def _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_s
 
 
 @functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+def _tfp_mul_triple_and_pre_jit(x_share, y_share, c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
+    diff = _sm64_raw(s0, c0, (3, *shape)) - _sm64_raw(s1, c1, (3, *shape))
+    if is_rank0:
+        ab = _sm64_raw(s_loc, c_loc, (2, *shape))
+        a_sh = diff[0] + ab[0]
+        b_sh = diff[1] + ab[1]
+        c_sh = diff[2] + ab[0] * ab[1]
+    else:
+        a_sh, b_sh, c_sh = diff[0], diff[1], diff[2]
+    ed_share = jnp.stack([x_share - a_sh, y_share - b_sh], axis=0)
+    return ed_share, a_sh, b_sh, c_sh
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
 def _tfp_square_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
     if is_rank0:
         r = _sm64_raw(s_loc, c_loc, shape)
         return diff[0] + r, diff[1] + (r * r)
     return diff[0], diff[1]
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+def _tfp_square_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
+    diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
+    if is_rank0:
+        r = _sm64_raw(s_loc, c_loc, shape)
+        r_sh = diff[0] + r
+        r2_sh = diff[1] + (r * r)
+    else:
+        r_sh, r2_sh = diff[0], diff[1]
+    return x_share - r_sh, r_sh, r2_sh
 
 
 @functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
@@ -430,6 +456,58 @@ def _tfp_spk_triples_jit(c_loc, c0, c1, s_loc, s0, s1, shape, k_rounds, is_rank0
         c = a[:, None] & b
         return diff_a ^ a, diff_b ^ b, diff_c ^ c
     return diff_a, diff_b, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "k_rounds", "is_rank0"))
+def _tfp_ltz_rng_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, k_rounds, is_rank0):
+    n = int(np.prod(shape)) if len(shape) > 0 else 1
+    a_shape = (k_rounds,) + shape
+    b_shape = (k_rounds, 2) + shape
+    n_a = k_rounds * n
+    n_b = k_rounds * 2 * n
+    tot_bin = 3 * n + n_a + 2 * n_b
+    tot_all = tot_bin + 2 * n
+
+    u0 = _sm64_raw(s0, c0, (tot_all,))
+    u1 = _sm64_raw(s1, c1, (tot_all,))
+    diff_xor = u0 ^ u1
+    diff_rA = (u0[tot_bin : tot_bin + n] - u1[tot_bin : tot_bin + n]).reshape(shape)
+    diff_rB = diff_xor[tot_bin + n : tot_bin + 2 * n].reshape(shape)
+
+    diff_a0 = diff_xor[:n].reshape(shape)
+    diff_b0 = diff_xor[n : 2 * n].reshape(shape)
+    diff_c0 = diff_xor[2 * n : 3 * n].reshape(shape)
+    off = 3 * n
+    diff_a = diff_xor[off : off + n_a].reshape(a_shape)
+    diff_b = diff_xor[off + n_a : off + n_a + n_b].reshape(b_shape)
+    diff_c = diff_xor[off + n_a + n_b : tot_bin].reshape(b_shape)
+
+    if is_rank0:
+        loc = _sm64_raw(s_loc, c_loc, (2 * n + n_a + n_b + n,))
+        a0 = loc[:n].reshape(shape)
+        b0 = loc[n : 2 * n].reshape(shape)
+        c0 = a0 & b0
+        a_spk = loc[2 * n : 2 * n + n_a].reshape(a_shape)
+        b_spk = loc[2 * n + n_a : 2 * n + n_a + n_b].reshape(b_shape)
+        c_spk = a_spk[:, None] & b_spk
+        r_bit = loc[2 * n + n_a + n_b :].reshape(shape) & jnp.int64(1)
+
+        a0_sh = diff_a0 ^ a0
+        b0_sh = diff_b0 ^ b0
+        c0_sh = diff_c0 ^ c0
+        a_all = diff_a ^ a_spk
+        b_all = diff_b ^ b_spk
+        c_all = diff_c ^ c_spk
+        rA_sh = diff_rA + r_bit
+        rB_sh = diff_rB ^ r_bit
+        ed_share = jnp.stack([x_share ^ a0_sh, b0_sh], axis=0)
+    else:
+        a0_sh, b0_sh, c0_sh = diff_a0, diff_b0, diff_c0
+        a_all, b_all, c_all = diff_a, diff_b, diff_c
+        rA_sh, rB_sh = diff_rA, diff_rB
+        ed_share = jnp.stack([a0_sh, x_share ^ b0_sh], axis=0)
+
+    return ed_share, a0_sh, b0_sh, c0_sh, a_all, b_all, c_all, rA_sh, rB_sh
 
 
 @functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
@@ -491,6 +569,24 @@ def _tfp_egk_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, l_minus_m, m, is_rank0
         b = loc[2] & jnp.int64(1)
         return diff[0] + r, diff[1] + rp, diff[2] + b
     return diff[0], diff[1], diff[2]
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "l", "m", "is_rank0"))
+def _tfp_egk_rng_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, l, m, is_rank0):
+    l_minus_m = l - m
+    diff = _sm64_raw(s0, c0, (3, *shape)) - _sm64_raw(s1, c1, (3, *shape))
+    if is_rank0:
+        loc = _sm64_raw(s_loc, c_loc, (3, *shape))
+        r_sh = diff[0] + (loc[0] & jnp.int64((1 << l_minus_m) - 1))
+        rp_sh = diff[1] + (loc[1] & jnp.int64((1 << m) - 1))
+        b_sh = diff[2] + (loc[2] & jnp.int64(1))
+        a_p = x_share + (jnp.int64(1) << (l - 1))
+    else:
+        r_sh, rp_sh, b_sh = diff[0], diff[1], diff[2]
+        a_p = x_share
+    rpp = (jnp.int64(1) << m) * r_sh + rp_sh
+    enc_c_share = (jnp.int64(1) << (64 - l - 1)) * (a_p + (jnp.int64(1) << l) * b_sh + rpp)
+    return enc_c_share, r_sh, b_sh
 
 
 @functools.partial(
@@ -661,6 +757,46 @@ class TrustedFirstParty(TupleProvider):
             to_jax(a_sh, device=device, dtype=DATATYPE),
             to_jax(b_sh, device=device, dtype=DATATYPE),
             to_jax(c_sh, device=device, dtype=DATATYPE),
+        )
+
+    def generate_ltz_rng_and_pre(self, x_share, k_rounds=6):
+        s = tuple(x_share.shape)
+        is_rank0 = self.rank == 0
+        n = int(np.prod(s)) if len(s) > 0 else 1
+        n_a = k_rounds * n
+        n_b = k_rounds * 2 * n
+        tot_przs = 5 * n + n_a + 2 * n_b
+        tot_loc = (3 * n + n_a + n_b) if is_rank0 else 0
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(tot_przs, tot_loc)
+        return _tfp_ltz_rng_and_pre_jit(
+            x_share, c_loc, c0, c1, s_loc, sd0, sd1, s, k_rounds, is_rank0
+        )
+
+    def generate_mul_triple_and_pre(self, x_share, y_share):
+        shape = tuple(x_share.shape)
+        is_rank0 = self.rank == 0
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(3 * n, 2 * n if is_rank0 else 0)
+        return _tfp_mul_triple_and_pre_jit(
+            x_share, y_share, c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0
+        )
+
+    def square_and_pre(self, x_share):
+        shape = tuple(x_share.shape)
+        is_rank0 = self.rank == 0
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
+        return _tfp_square_and_pre_jit(
+            x_share, c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0
+        )
+
+    def egk_rng_and_pre(self, x_share, l, m):
+        shape = tuple(x_share.shape)
+        is_rank0 = self.rank == 0
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(3 * n, 3 * n if is_rank0 else 0)
+        return _tfp_egk_rng_and_pre_jit(
+            x_share, c_loc, c0, c1, s_loc, sd0, sd1, shape, int(l), int(m), is_rank0
         )
 
     def wrap_rng(self, size, device=None):

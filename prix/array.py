@@ -461,6 +461,25 @@ class Array:
         result = self if inplace else self.clone()
 
         if public:
+            if isinstance(y, (int, float, np.number)):
+                if additive_func:
+                    if result.rank == 0:
+                        y_int = int(round((1 << result.precision) * float(y)))
+                        if y_int != 0:
+                            result.share = _add_scalar_jit(
+                                result.share, y_int if op == "add" else -y_int
+                            )
+                    return result
+                if (
+                    op == "mul"
+                    and cfg.encoder.trunc_method.prod == "crypten"
+                    and comm.get().get_world_size() <= 2
+                ):
+                    y_int = int(round((1 << result.precision) * float(y)))
+                    trunc_div = (1 << result.precision) if self.precision > 0 else 1
+                    result.share = _mul_div_scalar_jit(result.share, y_int, trunc_div)
+                    return result
+
             if (
                 not additive_func
                 and cfg.encoder.trunc_method.prod == "fission"
@@ -486,7 +505,9 @@ class Array:
                 elif result.precision < y_copy.precision:
                     result.encode_as_(y_copy)
                 result.share = (
-                    result.share + y_copy.share if op == "add" else result.share - y_copy.share
+                    _add_jit(result.share, y_copy.share)
+                    if op == "add"
+                    else _sub_jit(result.share, y_copy.share)
                 )
             else:
                 y_arg = y
@@ -501,8 +522,20 @@ class Array:
                             62, y_arg.precision - cfg.encoder.precision_bits
                         )
                         y_arg.precision = cfg.encoder.precision_bits
-                beaver_out = _beaver_protocol(op, result, y_arg, *args, **kwargs)
+                do_local_trunc = (
+                    result.precision > 0
+                    and y.precision > 0
+                    and cfg.encoder.trunc_method.prod == "crypten"
+                    and comm.get().get_world_size() <= 2
+                    and op in ("mul", "matmul")
+                )
+                trunc_div = (1 << result.precision) if do_local_trunc else 1
+                beaver_out = _beaver_protocol(
+                    op, result, y_arg, *args, _trunc_div=trunc_div, **kwargs
+                )
                 result.share = beaver_out.share
+                if do_local_trunc:
+                    return result
 
         if not additive_func:
             if public:
@@ -637,6 +670,8 @@ class Array:
         ):
             if comm.get().get_world_size() > 2:
                 _truncate(self, y)
+            elif isinstance(y, (int, np.integer)):
+                self.share = _div_scalar_jit(self.share, int(y))
             else:
                 y_arr = jnp.asarray(y, dtype=DATATYPE)
                 self.share = jax.lax.div(self.share, y_arr)
@@ -670,16 +705,22 @@ class Array:
         return divisor, remainder
 
     def neg_(self):
-        self.share = -self.share
+        self.share = _neg_jit(self.share)
         return self
 
     def neg(self):
         return self.clone().neg_()
 
     def square_(self):
-        sq = _square(self)
-        if self.precision > 0:
-            method = cfg.encoder.trunc_method.prod
+        method = cfg.encoder.trunc_method.prod
+        do_local_trunc = (
+            self.precision > 0
+            and method != "egk"
+            and comm.get().get_world_size() <= 2
+        )
+        trunc_div = (1 << self.precision) if do_local_trunc else 1
+        sq = _square(self, trunc_div=trunc_div)
+        if self.precision > 0 and not do_local_trunc:
             if method == "egk":
                 sq = sq.egk_trunc_pr(62, self.precision)
             else:
@@ -719,6 +760,45 @@ class Array:
 
     def _ltz(self):
         """Returns 1 for elements that are < 0 and 0 otherwise (with precision=0)."""
+        if comm.get().get_world_size() == 2:
+            from prix import circuit
+
+            provider = get_default_provider()
+            if (
+                hasattr(provider, "generate_ltz_rng_and_pre")
+                and not provider.tracing
+                and len(provider.tuple_cache) == 0
+            ):
+                is_rank0 = self.rank == 0
+                (
+                    ed_share,
+                    a0_sh,
+                    b0_sh,
+                    c0_sh,
+                    a_all,
+                    b_all,
+                    c_all,
+                    rA_sh,
+                    rB_sh,
+                ) = provider.generate_ltz_rng_and_pre(self.share, k_rounds=6)
+                ed = comm.get().all_reduce(ed_share, op="bxor")
+                sp_share, ef_share = circuit._a2b_post_and_spk_round0_pre(
+                    self.share, c0_sh, ed, a0_sh, b0_sh, a_all, b_all, is_rank0
+                )
+                for i in range(5):
+                    ef = comm.get().all_reduce(ef_share, op="bxor")
+                    sp_share, ef_share = circuit._spk_step_fused(
+                        sp_share, ef, a_all, b_all, c_all, i, is_rank0
+                    )
+                ef_last = comm.get().all_reduce(ef_share, op="bxor")
+                z_share = circuit._spk_round_last_and_ltz_b2a_pre(
+                    sp_share, self.share, ef_last, a_all, b_all, c_all, rB_sh, is_rank0
+                )
+                z = comm.get().all_reduce(z_share, op="bxor")
+                out_share = _b2a_combine(rA_sh, z, is_rank0)
+                return Array.from_shares(
+                    out_share, precision=0, device=self.device, ptype=Ptype.arithmetic
+                )
         result = self._to_ptype(Ptype.binary)
         result.share = (result.share >> jnp.int64(63)) & jnp.int64(1)
         result = _b2a_single_bit(result)
@@ -1158,6 +1238,14 @@ class Array:
     __isub__ = sub_
 
     def __rsub__(self, other):
+        if isinstance(other, (int, float, np.number)) and self.ptype == Ptype.arithmetic:
+            result = self.clone()
+            if result.rank == 0:
+                y_int = int(round((1 << result.precision) * float(other)))
+                result.share = _rsub_scalar_jit(result.share, y_int)
+            else:
+                result.share = _neg_jit(result.share)
+            return result
         return (-self) + other
 
     __mul__ = mul
@@ -1175,6 +1263,44 @@ class Array:
     __mod__ = mod
 
 
+@jax.jit
+def _add_jit(x_share, y_share):
+    return x_share + y_share
+
+
+@jax.jit
+def _sub_jit(x_share, y_share):
+    return x_share - y_share
+
+
+@jax.jit
+def _neg_jit(x_share):
+    return -x_share
+
+
+@jax.jit
+def _add_scalar_jit(x_share, y_int):
+    return x_share + y_int
+
+
+@jax.jit
+def _rsub_scalar_jit(x_share, y_int):
+    return y_int - x_share
+
+
+@functools.partial(jax.jit, static_argnames=("trunc_div",))
+def _mul_div_scalar_jit(x_share, y_int, trunc_div: int):
+    res = x_share * y_int
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
+@jax.jit
+def _div_scalar_jit(x_share, y_int):
+    return jax.lax.div(x_share, y_int)
+
+
 @functools.partial(jax.jit, static_argnames=("is_rank0",))
 def _a2b_pre_and(x_share, a_share, b_share, is_rank0):
     e_s = (x_share ^ a_share) if is_rank0 else a_share
@@ -1188,14 +1314,47 @@ def _beaver_pre_same_shape(x_share, y_share, a_share, b_share):
 
 
 @jax.jit
-def _beaver_mul_combine(c_share, eps, delta, a_share, b_share, is_rank0):
-    b_eff = jnp.where(is_rank0, b_share + delta, b_share)
-    return c_share + eps * b_eff + a_share * delta
+def _beaver_pre_diff(x_share, y_share, a_share, b_share):
+    return x_share - a_share, y_share - b_share
 
 
-@jax.jit
-def _beaver_matmul_combine(c_share, eps, delta, a_share, b_share, is_rank0):
-    b_eff = jnp.where(is_rank0, b_share + delta, b_share)
+@functools.partial(jax.jit, static_argnames=("trunc_div", "is_rank0"))
+def _beaver_mul_combine_ed(c_share, ed, a_share, b_share, trunc_div: int, is_rank0: bool):
+    eps = ed[0]
+    delta = ed[1]
+    b_eff = (b_share + delta) if is_rank0 else b_share
+    res = c_share + eps * b_eff + a_share * delta
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
+@functools.partial(jax.jit, static_argnames=("trunc_div", "is_rank0"))
+def _beaver_mul_combine(c_share, eps, delta, a_share, b_share, trunc_div: int, is_rank0: bool):
+    b_eff = (b_share + delta) if is_rank0 else b_share
+    res = c_share + eps * b_eff + a_share * delta
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
+@functools.partial(jax.jit, static_argnames=("trunc_div", "is_rank0"))
+def _beaver_matmul_combine_ed(c_share, ed, a_share, b_share, trunc_div: int, is_rank0: bool):
+    eps = ed[0]
+    delta = ed[1]
+    b_eff = (b_share + delta) if is_rank0 else b_share
+    lhs = jnp.stack([eps, a_share], axis=0)
+    rhs = jnp.stack([b_eff, delta], axis=0)
+    prods = _int64_matmul(lhs, rhs)
+    res = c_share + prods[0] + prods[1]
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
+@functools.partial(jax.jit, static_argnames=("trunc_div", "is_rank0"))
+def _beaver_matmul_combine(c_share, eps, delta, a_share, b_share, trunc_div: int, is_rank0: bool):
+    b_eff = (b_share + delta) if is_rank0 else b_share
     if eps.ndim > b_eff.ndim:
         pad = (1,) * (eps.ndim - b_eff.ndim)
         b_eff = b_eff.reshape(pad + b_eff.shape)
@@ -1207,13 +1366,31 @@ def _beaver_matmul_combine(c_share, eps, delta, a_share, b_share, is_rank0):
     lhs = jnp.stack([eps, a_share], axis=0)
     rhs = jnp.stack([b_eff, delta], axis=0)
     prods = _int64_matmul(lhs, rhs)
-    return c_share + prods[0] + prods[1]
+    res = c_share + prods[0] + prods[1]
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
 
 
 # Protocol helper functions
-def _beaver_protocol(op, x, y, *args, **kwargs):
+def _beaver_protocol(op, x, y, *args, _trunc_div=1, **kwargs):
     """Performs Beaver protocol for additively secret-shared Arrays x and y."""
     provider = get_default_provider()
+    is_rank0 = comm.get().get_rank() == 0
+    if (
+        op == "mul"
+        and x.size() == y.size()
+        and jax.default_backend() == "gpu"
+        and hasattr(provider, "generate_mul_triple_and_pre")
+        and not provider.tracing
+        and len(provider.tuple_cache) == 0
+        and not getattr(cfg.mpc, "active_security", False)
+    ):
+        ed_share, a_sh, b_sh, c_sh = provider.generate_mul_triple_and_pre(x.share, y.share)
+        ed = comm.get().all_reduce(ed_share, op="sum")
+        out_share = _beaver_mul_combine_ed(c_sh, ed, a_sh, b_sh, _trunc_div, is_rank0)
+        return Array.from_shares(out_share, precision=0, device=x.device)
+
     a, b, c = provider.generate_additive_triple(
         x.size(), y.size(), op, device=x.device, *args, **kwargs
     )
@@ -1233,16 +1410,29 @@ def _beaver_protocol(op, x, y, *args, **kwargs):
     if x.size() == y.size():
         ed_share = _beaver_pre_same_shape(x.share, y.share, a.share, b.share)
         ed = comm.get().all_reduce(ed_share, op="sum")
+        if op == "mul":
+            c.share = _beaver_mul_combine_ed(
+                c.share, ed, a.share, b.share, _trunc_div, is_rank0
+            )
+            return c
+        elif op == "matmul":
+            c.share = _beaver_matmul_combine_ed(
+                c.share, ed, a.share, b.share, _trunc_div, is_rank0
+            )
+            return c
         epsilon, delta = ed[0], ed[1]
     else:
-        with IgnoreEncodings([a, b, x, y]):
-            epsilon, delta = Array.reveal_batch([x - a, y - b])
+        eps_s, delta_s = _beaver_pre_diff(x.share, y.share, a.share, b.share)
+        epsilon, delta = comm.get().all_reduce([eps_s, delta_s], op="sum", batched=True)
 
-    is_rank0 = comm.get().get_rank() == 0
     if op == "mul":
-        c.share = _beaver_mul_combine(c.share, epsilon, delta, a.share, b.share, is_rank0)
+        c.share = _beaver_mul_combine(
+            c.share, epsilon, delta, a.share, b.share, _trunc_div, is_rank0
+        )
     elif op == "matmul":
-        c.share = _beaver_matmul_combine(c.share, epsilon, delta, a.share, b.share, is_rank0)
+        c.share = _beaver_matmul_combine(
+            c.share, epsilon, delta, a.share, b.share, _trunc_div, is_rank0
+        )
     else:
         z = _eval_ring_op(op, epsilon, b.share, *args, **kwargs) + _eval_ring_op(
             op, a.share, delta, *args, **kwargs
@@ -1253,12 +1443,35 @@ def _beaver_protocol(op, x, y, *args, **kwargs):
     return c
 
 
-def _square(x):
+@functools.partial(jax.jit, static_argnames=("trunc_div", "is_rank0"))
+def _square_combine_jit(r_share, r2_share, eps, trunc_div: int, is_rank0: bool):
+    res = r2_share + jnp.int64(2) * r_share * eps
+    if is_rank0:
+        res = res + eps * eps
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
+def _square(x, trunc_div=1):
     provider = get_default_provider()
+    is_rank0 = comm.get().get_rank() == 0
+    if (
+        jax.default_backend() == "gpu"
+        and hasattr(provider, "square_and_pre")
+        and not provider.tracing
+        and len(provider.tuple_cache) == 0
+    ):
+        eps_share, r_sh, r2_sh = provider.square_and_pre(x.share)
+        epsilon = comm.get().all_reduce(eps_share, op="sum")
+        out_share = _square_combine_jit(r_sh, r2_sh, epsilon, trunc_div, is_rank0)
+        return Array.from_shares(out_share, precision=0, device=x.device)
+
     r, r2 = provider.square(x.size(), device=x.device)
-    with IgnoreEncodings([x, r, r2]):
-        epsilon = (x - r).reveal()
-        return r2 + 2 * r * epsilon + epsilon * epsilon
+    eps_share = _sub_jit(x.share, r.share)
+    epsilon = comm.get().all_reduce(eps_share, op="sum")
+    r2.share = _square_combine_jit(r.share, r2.share, epsilon, trunc_div, is_rank0)
+    return r2
 
 
 @jax.jit
@@ -1356,15 +1569,24 @@ def _egk_post_reveal(c, r_share, b_share, l: int, m: int, is_rank0: bool):
 def _egk_trunc_pr(x, l, m):
     """Probabilistic truncation by m bits using the [EGK+20] protocol."""
     provider = get_default_provider()
-    tensor_size = x.size()
     is_rank0 = comm.get().get_rank() == 0
+    if (
+        jax.default_backend() == "gpu"
+        and hasattr(provider, "egk_rng_and_pre")
+        and not provider.tracing
+        and len(provider.tuple_cache) == 0
+    ):
+        enc_c_share, r_sh, b_sh = provider.egk_rng_and_pre(x.share, l, m)
+        c = comm.get().all_reduce(enc_c_share, op="sum")
+        y_share = _egk_post_reveal(c, r_sh, b_sh, int(l), int(m), is_rank0)
+        return Array.from_shares(y_share, precision=x.precision, device=x.device)
 
+    tensor_size = x.size()
     r, r_p, b = provider.egk_trunc_pr_rng(tensor_size, l, m, device=x.device)
     enc_c_share = _egk_pre_reveal(
         x.share, r.share, r_p.share, b.share, int(l), int(m), is_rank0
     )
-    enc_c = Array.from_shares(enc_c_share, precision=0, device=x.device)
-    c = enc_c.reveal()
+    c = comm.get().all_reduce(enc_c_share, op="sum")
     y_share = _egk_post_reveal(c, r.share, b.share, int(l), int(m), is_rank0)
     return Array.from_shares(y_share, precision=x.precision, device=x.device)
 
