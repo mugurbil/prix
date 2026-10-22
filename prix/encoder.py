@@ -5,50 +5,122 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import jax
 import numpy as np
 from jax import numpy as jnp
 
+from prix.config import cfg
+
+jax.config.update("jax_enable_x64", True)
+
 PRECISION = 16
-DATATYPE = jnp.int32
+DATATYPE = jnp.int64
 
 
-def encode(x, precision, device=None):
-    """Helper function to wrap data if needed"""
+def resolve_device(device):
+    """Resolve a device specification (None, str, or jax.Device) to a jax.Device or None."""
+    if device is None:
+        return None
+    if isinstance(device, jax.Device):
+        return device
+    if isinstance(device, str):
+        dev_str = device.lower()
+        if ":" in dev_str:
+            backend, idx = dev_str.split(":", 1)
+            if backend == "cuda":
+                backend = "gpu"
+            return jax.devices(backend)[int(idx)]
+        if dev_str == "cuda":
+            dev_str = "gpu"
+        return jax.devices(dev_str)[0]
+    return device
 
-    scale = 2**precision
-    if isinstance(x, int) or isinstance(x, float):
-        # Squeeze in order to get a 0-dim array with value `x`
-        return jnp.array([scale * x], dtype=DATATYPE, device=device).squeeze()
-    elif isinstance(x, list):
-        return jnp.array(
-            jnp.array(x, dtype=jnp.float32, device=device) * scale,
-            dtype=DATATYPE,
-            device=device,
-        )
-    elif jnp.issubdtype(x.dtype, jnp.floating):
-        return jnp.array(scale * x, dtype=DATATYPE, device=device)
-    # For integer types cast to long prior to scaling to avoid overflow.
-    elif jnp.issubdtype(x.dtype, jnp.integer):
-        return scale * jnp.array(x, dtype=DATATYPE, device=device)
+
+def encode(x, precision=None, device=None):
+    """Helper function to encode plaintext data into fixed-point integer ring."""
+    if precision is None:
+        precision = cfg.encoder.precision_bits
+    dev = resolve_device(device)
+
+    # Already an encoded/encrypted Prix Array
+    if hasattr(x, "share"):
+        return x
+
+    scale = int(2**precision)
+    if isinstance(x, (int, float, np.number)):
+        arr = jnp.array(np.round(scale * x), dtype=DATATYPE)
+    elif isinstance(x, (list, tuple)):
+        arr = jnp.array(np.round(np.asarray(x, dtype=np.float64) * scale), dtype=DATATYPE)
     elif isinstance(x, np.ndarray):
-        return scale * jnp.array(x, dtype=DATATYPE, device=device)
+        if np.issubdtype(x.dtype, np.floating):
+            arr = jnp.array(np.round(x.astype(np.float64) * scale), dtype=DATATYPE)
+        else:
+            arr = jnp.array(x, dtype=DATATYPE) * scale
+    elif hasattr(x, "dtype"):
+        if x.dtype == DATATYPE and precision == 0:
+            arr = x
+        elif jnp.issubdtype(x.dtype, jnp.floating):
+            arr = jnp.round(x.astype(jnp.float64) * scale).astype(DATATYPE)
+        elif jnp.issubdtype(x.dtype, jnp.integer) or x.dtype == jnp.bool_:
+            arr = x.astype(DATATYPE) if scale == 1 else x.astype(DATATYPE) * scale
+        else:
+            raise TypeError(f"Unsupported array dtype: {x.dtype}.")
     else:
-        raise TypeError("Unknown array type: %s." % type(x))
+        raise TypeError(f"Unknown array type: {type(x)}.")
+
+    if dev is not None:
+        arr = jax.device_put(arr, dev)
+    return arr
 
 
-def decode(x, precision):
-    """Helper function that decodes from scaled array"""
+def decode(x, precision=None):
+    """Helper function that decodes from scaled fixed-point integer array."""
     if x is None:
         return None
+    if precision is None:
+        precision = cfg.encoder.precision_bits
 
-    assert jnp.issubdtype(x.dtype, DATATYPE), "input must be a int array"
+    assert jnp.issubdtype(x.dtype, jnp.integer), f"input must be an int array, got {x.dtype}"
+    x = x.astype(DATATYPE)
 
     if precision > 0:
-        scale = 2**precision
-        correction = jnp.array(x < 0, dtype=DATATYPE, device=x.device)
-        dividend = jnp.floor(x / (scale - correction))
-        remainder = x % scale
-        remainder += (remainder == 0).astype(DATATYPE) * scale * correction
-
-        x = dividend.astype(jnp.float32) + remainder.astype(jnp.float32) / scale
+        scale = int(2**precision)
+        dividend = x >> precision
+        remainder = x & (scale - 1)
+        return dividend.astype(jnp.float32) + remainder.astype(jnp.float32) / float(scale)
     return x
+
+
+class FixedPointEncoder:
+    """Encoder that encodes float/int arrays into scaled 64-bit fixed-point integers."""
+
+    def __init__(self, precision_bits=None):
+        if precision_bits is None:
+            precision_bits = cfg.encoder.precision_bits
+        self._precision_bits = int(precision_bits)
+
+    @property
+    def precision_bits(self):
+        return self._precision_bits
+
+    @precision_bits.setter
+    def precision_bits(self, value):
+        self._precision_bits = int(value)
+
+    @property
+    def scale(self):
+        return int(2**self._precision_bits)
+
+    @property
+    def _scale(self):
+        return int(2**self._precision_bits)
+
+    @_scale.setter
+    def _scale(self, value):
+        self._precision_bits = int(np.log2(value))
+
+    def encode(self, x, device=None):
+        return encode(x, precision=self._precision_bits, device=device)
+
+    def decode(self, tensor):
+        return decode(tensor, precision=self._precision_bits)

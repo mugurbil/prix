@@ -7,46 +7,79 @@
 
 import logging
 from .communicator import Communicator
-
-# from .distributed_communicator import DistributedCommunicator
+from .distributed_communicator import DistributedCommunicator
 from .process_communicator import InProcessCommunicator
+
+_use_distributed = False
+
+
+def _get_cls():
+    return DistributedCommunicator if _use_distributed else InProcessCommunicator
 
 
 def get():
-    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
-    cls = InProcessCommunicator
-
+    cls = _get_cls()
     if not cls.is_initialized():
         raise RuntimeError("Prix not initialized. Please call prix.init() first.")
-
     return cls.get()
 
 
-def _init(rank, world_size, evaluator_size, mailbox, barrier, init_ttp=False):
-    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
-    cls = InProcessCommunicator
+def _init(
+    rank=0,
+    world_size=1,
+    evaluator_size=0,
+    mailbox=None,
+    barrier=None,
+    init_ttp=False,
+    distributed=False,
+    use_distributed=False,
+    coordinator_address=None,
+    **kwargs,
+):
+    global _use_distributed
+    distributed = distributed or use_distributed
+    _use_distributed = distributed
+    cls = _get_cls()
 
     if cls.is_initialized():
-        logging.info(f"Communicator is initialized")
+        logging.info("Communicator is already initialized")
         return
 
-    cls.initialize(
-        rank, world_size, evaluator_size, mailbox, barrier, init_ttp=init_ttp
-    )
+    if distributed:
+        cls.initialize(
+            rank=rank,
+            world_size=world_size,
+            evaluator_size=evaluator_size,
+            coordinator_address=coordinator_address,
+            init_ttp=init_ttp,
+        )
+    else:
+        cls.initialize(
+            rank=rank,
+            world_size=world_size,
+            evaluator_size=evaluator_size,
+            mailbox=mailbox,
+            barrier=barrier,
+            init_ttp=init_ttp,
+        )
 
 
 def uninit():
-    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
-    cls = InProcessCommunicator
+    cls = _get_cls()
     cls.shutdown()
 
 
 def is_initialized():
-    # cls = InProcessCommunicator if __use_threads else DistributedCommunicator
-    cls = InProcessCommunicator
+    cls = _get_cls()
     return cls.is_initialized()
 
 
-# expose classes and functions in package:
-# __all__ = ["Communicator", "DistributedCommunicator", "get", "uninit", "is_initialized"]
-__all__ = ["Communicator", "get", "uninit", "is_initialized"]
+__all__ = [
+    "Communicator",
+    "InProcessCommunicator",
+    "DistributedCommunicator",
+    "get",
+    "_init",
+    "uninit",
+    "is_initialized",
+]

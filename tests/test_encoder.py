@@ -32,8 +32,7 @@ class TestCommon(unittest.TestCase):
         test_passed = jnp.all(array == reference).item() == 1
         self.assertTrue(test_passed, msg=msg)
 
-    def test_encode_decode(self) -> None:
-        """Tests array encoding and decoding."""
+    def _run_encode_decode(self) -> None:
         for floating in [False, True]:
             if floating:
                 precision = 16
@@ -53,6 +52,15 @@ class TestCommon(unittest.TestCase):
             array = jnp.array([12, 42, 32, 96, 48], dtype=dtype)
             decoded = decode(encode(array, precision), precision).astype(dtype)
             self._check(decoded, array, "Encoding/decoding a %s failed." % dtype)
+
+    def test_encode_decode(self) -> None:
+        """Tests array encoding and decoding in a child process to avoid initializing JAX before fork."""
+        import multiprocessing
+
+        proc = multiprocessing.Process(target=self._run_encode_decode)
+        proc.start()
+        proc.join()
+        self.assertEqual(proc.exitcode, 0)
 
 
 if __name__ == "__main__":

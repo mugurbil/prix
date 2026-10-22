@@ -59,7 +59,7 @@ def _run_experiment(args):
     inner = None
     if rank == 0:
         inner = [1.5, 2.75]
-    arr = prix.array(inner, precision=4, src=0)
+    arr = prix.array(inner, precision=4, src=0, broadcast_size=True)
     print(f"[Rank {rank}] My share: {arr.share}")
     reconstructed = arr.reconstruct(dst=0)
     print(f"[Rank {rank}] Reconstructed: {reconstructed}")

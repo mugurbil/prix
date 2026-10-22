@@ -1,0 +1,64 @@
+communicator:
+  verbose: False
+debug:
+  debug_mode: False
+  validation_mode: False
+encoder:
+  precision_bits: 16
+  trunc_method:
+    prod: "crypten"
+    lut: "crypten"
+functions:
+  max:
+    method: "log_reduction"
+  exp:
+    method: "limit"
+    iterations: 8
+    all_neg: False
+  log:
+    method: "iter"
+    iterations: 2
+    exp_iterations: 8
+    order: 8
+  reciprocal:
+    method: "NR"
+    nr_iters: 10
+    log_iters: 1
+    all_pos: True
+    initial: null
+  sqrt:
+    method: "NR"
+    nr_iters: 3
+    nr_initial: null
+  inv_sqrt:
+    method: "NR"
+  sigmoid_tanh:
+    method: "reciprocal"
+    terms: 32
+  trigonometry:
+    method: "NR"
+    iterations: 10
+  erf:
+    method: "Taylor"
+    iterations: 8
+  gelu:
+    method: "erf"
+  silu:
+    method: "sigmoid"
+  softmax:
+    method: "approximation"
+  log_softmax:
+    method: "approximation"
+  layernorm:
+    method: "approximation"
+mpc:
+  active_security: False
+  provider: "TFP"
+  protocol: "beaver"
+nn:
+  dpsmpc:
+    protocol: "layer_estimation"
+    skip_loss_forward: True
+    cache_pred_size: True
+  gradients:
+    layernorm: "normal"

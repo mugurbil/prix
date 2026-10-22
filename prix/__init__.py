@@ -5,87 +5,263 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
+import builtins
+import contextlib
 import logging
-import os
+from types import SimpleNamespace
 
 import jax
+import jax.numpy as jnp
+
+jax.config.update("jax_enable_x64", True)
+
 import prix.communicator as comm
-from prix.array import Array
+from prix.approximations import LookupTables, bernoulli, randn, where as _where_method
+from prix.array import Array, IgnoreEncodings, Ptype, ptype
+from prix.config import cfg
+from prix.evaluator import EvaluatorClient, EvaluatorServer
+from prix.provider import (
+    TTPClient,
+    TTPServer,
+    TrustedFirstParty,
+    TrustedThirdParty,
+    get_default_provider,
+    set_default_provider,
+)
+from prix.random import PRNGGenerator, generate_kbit_random_tensor
+
+generators = {}
 
 
-def init(rank, world_size, evaluator_size, mailbox, barrier, device=None):
+def _setup_prng():
     """
-    Initialize Prix. It will initialize communicator, setup party
-    name for file save / load, and setup seeds for Random Number Generation.
-    By default, the function will initialize a set of RNG generators on CPU.
-    If torch.cuda.is_available() returns True, it will initialize an additional
-    set of RNG generators on GPU. Users can specify the GPU device the generators are
-    initialized with device.
-
-    Args:
-        rank (int): party_name for file save and load, default is None
-        device (int, str, torch.device): Specify device for RNG generators on
-        GPU. Must be a GPU device.
+    Generate shared random seeds across parties to generate pseudo-random
+    sharings of zero (PRZS) without communication.
     """
-    # jax.config.update("jax_enable_x64", True)
+    global generators
+    rank = comm.get().get_rank()
+    world_size = comm.get().get_world_size()
 
-    # Return and raise warning if initialized
+    if world_size >= 2:
+        prev_rank = (rank - 1) % world_size
+        next_rank = (rank + 1) % world_size
+
+        #Deterministic shared seeds per adjacent party pair, or exchanged via comm
+        seed_prev = 100003 * (prev_rank + 1) + 1009 * (rank + 1)
+        seed_next = 100003 * (rank + 1) + 1009 * (next_rank + 1)
+    else:
+        seed_prev = 42
+        seed_next = 42
+
+    generators["prev"] = PRNGGenerator(seed=seed_prev)
+    generators["next"] = PRNGGenerator(seed=seed_next)
+    generators["local"] = PRNGGenerator(seed=7919 * (rank + 1))
+    generators["global"] = PRNGGenerator(seed=314159)
+
+
+def init(
+    rank=0,
+    world_size=1,
+    evaluator_size=0,
+    mailbox=None,
+    barrier=None,
+    device=None,
+    cfg_file=None,
+    use_distributed=False,
+    coordinator_address=None,
+):
+    """
+    Initialize PriX: loads config, initializes communicator, PRNG generators,
+    Wavelet LookupTables, TTPClient (if configured), and EvaluatorClient (if configured).
+    """
+    jax.config.update("jax_enable_x64", True)
+
+    if cfg_file is not None:
+        cfg.load_config(cfg_file)
+
     if comm.is_initialized():
-        logging.info(f"Comm is initialized for {rank}")
+        logging.info(f"Comm is already initialized for rank {rank}")
         return
 
-    # Initialize communicator
-    # os.environ["GLOO_SOCKET_IFNAME"] = "en0"
-
+    init_ttp = cfg.mpc.provider == "TTP"
     comm._init(
-        rank,
-        world_size,
-        evaluator_size,
-        mailbox,
-        barrier,
-        init_ttp=False,
+        rank=rank,
+        world_size=world_size,
+        evaluator_size=evaluator_size,
+        mailbox=mailbox,
+        barrier=barrier,
+        init_ttp=init_ttp,
+        use_distributed=use_distributed,
+        coordinator_address=coordinator_address,
     )
 
-    # if comm.get().get_evaluators_size() == 0:
-    #     for k, v in cfg.config.functions.items():
-    #         v = dict(v)
-    #         if v['method'] == 'fission':
-    #             logging.error(f"Fission needs at least one evaluator for {k}")
-    #             exit()
-
-    # Setup seeds for Random Number Generation
     rank = comm.get().get_rank()
-    # if comm.get().get_rank() < comm.get().get_world_size():
-    # _setup_prng(device)
-    # if cfg.mpc.provider == "TTP":
-    #     curl.mpc.provider.ttp_provider.TTPClient._init(device)
-
-    # if comm.get().get_evaluators_size() > 0:
-    #     prix.evaluator.EvaluatorClient._init()
+    if rank < comm.get().get_world_size():
+        _setup_prng()
+        LookupTables(device=device)
+        if init_ttp:
+            TTPClient._init(device=device)
+        if comm.get().get_evaluators_size() > 0:
+            EvaluatorClient._init()
 
 
 def init_thread(rank, world_size, evaluator_size=0, device="cpu"):
-    jax.config.update("jax_platforms", "cpu")
+    jax.config.update("jax_enable_x64", True)
     comm._init(
         use_threads=True,
         rank=rank,
         world_size=world_size,
         evaluator_size=evaluator_size,
     )
+    if rank < world_size:
+        _setup_prng()
+        LookupTables(device=device)
 
 
 def uninit():
-    return comm.uninit()
+    if comm.is_initialized():
+        if comm.get().get_rank() < comm.get().get_world_size():
+            TTPClient.uninit()
+            EvaluatorClient.uninit()
+        comm.uninit()
+
+
+def is_initialized():
+    return comm.is_initialized()
 
 
 def array(*args, **kwargs):
     return Array(*args, **kwargs)
 
 
+def cryptensor(*args, **kwargs):
+    return Array(*args, **kwargs)
+
+
+def is_encrypted_tensor(obj):
+    return isinstance(obj, Array)
+
+
+def cat(tensors, dim=0, axis=None):
+    return Array.cat(tensors, dim=dim, axis=axis)
+
+
+def stack(tensors, dim=0, axis=None):
+    return Array.stack(tensors, dim=dim, axis=axis)
+
+
+def where(condition, input_tensor, other):
+    if is_encrypted_tensor(input_tensor):
+        return input_tensor.where(condition, other)
+    elif is_encrypted_tensor(other):
+        return other.where(1 - condition, input_tensor)
+    elif is_encrypted_tensor(condition):
+        return condition * input_tensor + (1 - condition) * other
+    return jnp.where(condition, input_tensor, other)
+
+
+def rand(*sizes, device=None, ptype=Ptype.arithmetic):
+    return Array.rand(*sizes, device=device, ptype=ptype)
+
+
+@contextlib.contextmanager
+def no_grad():
+    yield
+
+
+def trace(tracing=True):
+    return get_default_provider().trace(tracing=tracing)
+
+
+def fill_cache():
+    return get_default_provider().fill_cache()
+
+
+def dump_cache(filename):
+    return get_default_provider().dump_cache(filename)
+
+
+def save_cache():
+    return get_default_provider().save_cache()
+
+
+def load_cache():
+    return get_default_provider().load_cache()
+
+
+def print(*args, in_order=False, dst=0, **kwargs):
+    """Prints from rank `dst` (default 0) or across all parties in rank order."""
+    if not comm.is_initialized():
+        builtins.print(*args, **kwargs)
+        return
+    if in_order:
+        for i in range(comm.get().get_world_size()):
+            if comm.get().get_rank() == i:
+                builtins.print(*args, **kwargs)
+            comm.get().barrier()
+    elif comm.get().get_rank() == dst:
+        builtins.print(*args, **kwargs)
+
+
+def log(*args, in_order=False, dst=0, level=logging.INFO):
+    if not comm.is_initialized():
+        logging.log(level, *args)
+        return
+    if in_order:
+        for i in range(comm.get().get_world_size()):
+            if comm.get().get_rank() == i:
+                logging.log(level, *args)
+            comm.get().barrier()
+    elif comm.get().get_rank() == dst:
+        logging.log(level, *args)
+
+
+mpc = SimpleNamespace(
+    get_default_provider=get_default_provider,
+    set_default_provider=set_default_provider,
+    TrustedFirstParty=TrustedFirstParty,
+    TrustedThirdParty=TrustedThirdParty,
+    TTPClient=TTPClient,
+    TTPServer=TTPServer,
+    ptype=ptype,
+    binary=Ptype.binary,
+    arithmetic=Ptype.arithmetic,
+)
+
+import prix.nn as nn  # noqa: E402
+
 __all__ = [
-    "init",
-    "uninit",
+    "Array",
+    "IgnoreEncodings",
+    "LookupTables",
+    "Ptype",
     "array",
+    "bernoulli",
+    "cat",
+    "cfg",
+    "comm",
+    "cryptensor",
+    "dump_cache",
+    "fill_cache",
+    "generators",
+    "init",
+    "init_thread",
+    "is_encrypted_tensor",
+    "is_initialized",
+    "load_cache",
+    "log",
+    "mpc",
+    "nn",
+    "no_grad",
+    "print",
+    "ptype",
+    "rand",
+    "randn",
+    "save_cache",
+    "stack",
+    "trace",
+    "uninit",
+    "where",
 ]

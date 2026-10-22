@@ -13,52 +13,55 @@ import threading
 import uuid
 
 import prix
+from prix.config import cfg
 from prix.evaluator import EvaluatorServer
+from prix.provider import TTPServer
 
 
 class MultiProcessLauncher:
+    """Launches MPC parties, optional TTP server, and optional Fission Evaluator servers."""
 
-    # run_process_fn will be run in subprocesses.
     def __init__(
         self,
         world_size,
-        evaluator_size,
-        run_process_fn,
+        evaluator_size=0,
+        run_process_fn=None,
         fn_args=None,
+        cfg_file=None,
     ):
-        multiprocessing.set_start_method("fork")
-        # if fn_args is None or 'device' not in fn_args:
-        #     device = torch.device(device="cpu")
-        # else:
-        #     device = torch.device(fn_args.device)
+        # Support both (world_size, evaluator_size, run_process_fn, fn_args)
+        # and (world_size, run_process_fn, fn_args, cfg_file) signatures
+        if callable(evaluator_size):
+            if cfg_file is None:
+                cfg_file = fn_args
+            fn_args = run_process_fn
+            run_process_fn = evaluator_size
+            evaluator_size = getattr(fn_args, "evaluator_size", 0) if fn_args is not None else 0
 
-        # Using multiple GPUs
-        # if fn_args is not None and 'multi_gpu' in fn_args and fn_args.multi_gpu:
-        #     assert (
-        #         fn_args.world_size <= torch.cuda.device_count()
-        #     ), f"Got {fn_args.world_size} parties, but only {torch.cuda.device_count()} GPUs found"
+        if cfg_file is not None:
+            cfg.load_config(cfg_file)
 
-        mailbox = [multiprocessing.Queue() for _ in range(world_size + evaluator_size)]
+        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        ctx = multiprocessing.get_context("fork")
 
-        # This prevents one thread from running ahead of the others and doing
-        # multiple puts that would show up in the get calls below
-        barrier = multiprocessing.Barrier(world_size)
+        init_ttp = cfg.mpc.provider == "TTP"
+        ttp_count = 1 if init_ttp else 0
+        total_ranks = world_size + ttp_count + evaluator_size
+
+        mailbox = [ctx.Queue() for _ in range(total_ranks)]
+        barrier = ctx.Barrier(world_size)
 
         self.processes = []
-        self.ttp_process = None  # Track the TTP process separately
+        self.ttp_process = None
         self.eval_processes = []
-        for rank in range(world_size):
-            if fn_args is not None and "multi_gpu" in fn_args and fn_args.multi_gpu:
-                # device = torch.device(f"cuda:{rank}")
-                new_args = copy.deepcopy(fn_args)
-                # new_args.device = device
-            else:
-                new_args = fn_args
-            device = None
-            print(f"Running party {rank} in {device}")
 
-            process_name = "process " + str(rank)
-            process = multiprocessing.Process(
+        for rank in range(world_size):
+            new_args = copy.deepcopy(fn_args) if fn_args is not None else None
+            if new_args is not None and getattr(new_args, "multi_gpu", False):
+                new_args.device = f"cuda:{rank}"
+            device = getattr(new_args, "device", None) if new_args is not None else None
+            process_name = f"process {rank}"
+            process = ctx.Process(
                 target=self.__class__._run_process,
                 name=process_name,
                 args=(
@@ -70,52 +73,33 @@ class MultiProcessLauncher:
                     run_process_fn,
                     new_args,
                     device,
+                    cfg_file,
                 ),
             )
             self.processes.append(process)
 
-        # if cfg.mpc.provider == "TTP":
-        #     if 'multi_gpu' in fn_args and fn_args.multi_gpu:
-        #         if fn_args.world_size < torch.cuda.device_count():
-        #             ttp_device = torch.device(f"cuda:{world_size}")
-        #         else:
-        #             # ttp_device = torch.device(f"cuda:0")
-        #             ttp_device = torch.device(f"cpu")
-        #     else:
-        #         ttp_device = device
+        if init_ttp:
+            ttp_rank = world_size
+            self.ttp_process = ctx.Process(
+                target=self.__class__._run_process,
+                name="TTP",
+                args=(
+                    ttp_rank,
+                    world_size,
+                    evaluator_size,
+                    mailbox,
+                    barrier,
+                    TTPServer,
+                    None,
+                    None,
+                    cfg_file,
+                ),
+            )
 
-        # ttp_device = None
-        # print(f'Running party {world_size} in {ttp_device}')
-        # self.ttp_process = multiprocessing.Process(
-        #     target=self.__class__._run_process,
-        #     name="TTP",
-        #     args=(
-        #         world_size,
-        #         world_size,
-        #         evaluator_size,
-        #         env,
-        #         curl.mpc.provider.TTPServer,
-        #         None,
-        #         cfg_file,
-        #         ttp_device,
-        #     ),
-        # )
-
-        print("Launching Evaluator")
-        for rank in range(evaluator_size):
-            evaluator_rank = world_size + rank
-            if self.ttp_process:
-                evaluator_rank += 1
-            # if fn_args is not None and "multi_gpu" in fn_args and fn_args.multi_gpu:
-            #     device = jax.device(f"cpu")
-            #     new_args = copy.deepcopy(fn_args)
-            #     new_args.device = device
-            # else:
-            #     new_args = fn_args
-            # print(f"Running party {evaluator_rank} in {device}")
-
-            process_name = "evaluator process " + str(evaluator_rank)
-            process = multiprocessing.Process(
+        for i in range(evaluator_size):
+            evaluator_rank = world_size + ttp_count + i
+            process_name = f"evaluator process {evaluator_rank}"
+            process = ctx.Process(
                 target=self.__class__._run_process,
                 name=process_name,
                 args=(
@@ -126,6 +110,8 @@ class MultiProcessLauncher:
                     barrier,
                     EvaluatorServer,
                     None,
+                    "cpu",
+                    cfg_file,
                 ),
             )
             self.eval_processes.append(process)
@@ -141,16 +127,28 @@ class MultiProcessLauncher:
         run_process_fn,
         fn_args,
         device=None,
+        cfg_file=None,
     ):
-        print(f"Creating process {rank}")
         orig_logging_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.INFO)
-        prix.init(rank, world_size, evaluator_size, mailbox, barrier, device=device)
+        prix.init(
+            rank,
+            world_size,
+            evaluator_size,
+            mailbox,
+            barrier,
+            device=device,
+            cfg_file=cfg_file,
+        )
         logging.getLogger().setLevel(orig_logging_level)
-        if fn_args is None:
-            run_process_fn()
-        else:
-            run_process_fn(fn_args)
+        try:
+            if fn_args is None:
+                run_process_fn()
+            else:
+                run_process_fn(fn_args)
+        finally:
+            if rank < world_size and prix.comm.is_initialized():
+                prix.uninit()
 
     def start(self):
         if self.ttp_process is not None:
@@ -164,20 +162,27 @@ class MultiProcessLauncher:
         for process in self.processes:
             process.join()
             if process.exitcode != 0:
-                print(f"{process.name} has non-zero exit code {process.exitcode}")
+                self.terminate()
+                raise RuntimeError(
+                    f"{process.name} exited with non-zero exit code {process.exitcode}"
+                )
+        if self.ttp_process is not None:
+            self.ttp_process.join(timeout=2.0)
+        for process in self.eval_processes:
+            process.join(timeout=2.0)
 
     def terminate(self):
         for process in self.processes:
-            process.terminate()
+            if process.is_alive():
+                process.terminate()
         if self.ttp_process is not None and self.ttp_process.is_alive():
             self.ttp_process.terminate()
         for process in self.eval_processes:
-            process.terminate()
+            if process.is_alive():
+                process.terminate()
 
 
 class MultiThreadLauncher:
-
-    # run_process_fn will be run in subprocesses.
     def __init__(
         self,
         world_size,
@@ -188,13 +193,10 @@ class MultiThreadLauncher:
         env = os.environ.copy()
         env["WORLD_SIZE"] = str(world_size)
         env["EVALUATOR_SIZE"] = str(evaluator_size)
-
-        # Use random file so multiple jobs can be run simultaneously
-        INIT_METHOD = "file:///tmp/crypten-rendezvous-{}".format(uuid.uuid1())
-        env["RENDEZVOUS"] = INIT_METHOD
+        env["RENDEZVOUS"] = f"file:///tmp/prix-rendezvous-{uuid.uuid1()}"
 
         self.processes = []
-        self.ttp_process = None  # Track the TTP process separately
+        self.ttp_process = None
         self.eval_processes = []
 
         if threading.current_thread() != threading.main_thread():
@@ -210,5 +212,4 @@ class MultiThreadLauncher:
 
     def _run(self, test_fn, rank, world_size, fn_args):
         prix.init_thread(rank, world_size)
-
         test_fn(fn_args)
