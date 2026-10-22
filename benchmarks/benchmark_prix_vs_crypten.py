@@ -387,6 +387,27 @@ def _install_shaft_into_curl():
     orig_sigmoid = approx_mod.sigmoid
     orig_erf = approx_mod.erf
     orig_softmax = approx_mod.softmax
+    orig_reciprocal = approx_mod.reciprocal
+    orig_inv_sqrt = approx_mod.inv_sqrt
+    orig_log = approx_mod.log
+
+    # PriX always seeds Newton-Raphson / Householder iterations (reciprocal, inv_sqrt, log)
+    # with the limit-approximation exp, regardless of functions.exp.method. Mirror that here
+    # so non-default exp methods (e.g. "poly") don't add extra comparisons to the CrypTen
+    # baseline only.
+    _limit_exp = {"functions.exp.method": "limit"}
+
+    def matched_reciprocal(self, *args, **kwargs):
+        with cfg.temp_override(_limit_exp):
+            return orig_reciprocal(self, *args, **kwargs)
+
+    def matched_inv_sqrt(self, *args, **kwargs):
+        with cfg.temp_override(_limit_exp):
+            return orig_inv_sqrt(self, *args, **kwargs)
+
+    def matched_log(self, *args, **kwargs):
+        with cfg.temp_override(_limit_exp):
+            return orig_log(self, *args, **kwargs)
 
     def shaft_exp(self):
         if cfg.functions.exp.method == "poly":
@@ -402,9 +423,14 @@ def _install_shaft_into_curl():
             is_neg, gt_neg5 = ltz_pair[0], ltz_pair[1]
             in_pos = 1 - is_neg
             in_neg = is_neg + gt_neg5 - 1
-            poly_pos = self.polynomial(pos_coeffs) + pos_c0
-            poly_neg = self.polynomial(neg_coeffs) + neg_c0
-            return in_pos * poly_pos + in_neg * poly_neg
+            # Shared power basis [x, x^2, x^3, x^4] (2 multiplication rounds), as in PriX.
+            x2 = self.square()
+            x34 = curl.stack([self, x2]) * x2
+            powers = [self, x2, x34[0], x34[1]]
+            poly_pos = pos_c0 + sum(p * c for p, c in zip(powers, pos_coeffs))
+            poly_neg = neg_c0 + sum(p * c for p, c in zip(powers, neg_coeffs))
+            both = curl.stack([in_pos, in_neg]) * curl.stack([poly_pos, poly_neg])
+            return both[0] + both[1]
         return orig_exp(self)
 
     def shaft_gelu(self):
@@ -503,6 +529,9 @@ def _install_shaft_into_curl():
         return orig_softmax(self, dim, **kwargs)
 
     approx_mod.exp = CrypTensor.exp = shaft_exp
+    approx_mod.reciprocal = CrypTensor.reciprocal = matched_reciprocal
+    approx_mod.inv_sqrt = CrypTensor.inv_sqrt = matched_inv_sqrt
+    approx_mod.log = CrypTensor.log = matched_log
     approx_mod.gelu = CrypTensor.gelu = shaft_gelu
     approx_mod.silu = CrypTensor.silu = shaft_silu
     approx_mod.tanh = CrypTensor.tanh = shaft_tanh
