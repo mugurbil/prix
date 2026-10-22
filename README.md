@@ -175,7 +175,7 @@ python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --m
 ## Benchmarks: PriX (JAX) vs. CrypTen (PyTorch)
 
 > [!NOTE]
-> **How to read these numbers.** Both frameworks run all parties as processes on **one host**. There is no network emulation, and communication volume isn't reported. CrypTen uses `gloo` over loopback TCP, and PriX uses a shared-memory ring buffer, so part of the speedup comes from the transport rather than from kernel fusion. Each primitive is the median of 5 timed runs (after 2 warmups), and each LLM block is the median of 3 timed runs (after 1 warmup). Differences of roughly 10% or less are within noise. Benchmarks measure latency only, not model accuracy. The `poly` and SHAFT baselines on the CrypTen side are one-to-one ports of PriX's algorithms; see [`benchmarks/benchmark_prix_vs_crypten.py`](benchmarks/benchmark_prix_vs_crypten.py).
+> **How to read these numbers.** Both frameworks run all parties as processes on **one host**. There is no network emulation. CrypTen uses `gloo` over loopback TCP, and PriX uses a shared-memory ring buffer, so part of the speedup comes from the transport. The [transport ablation](#where-does-the-speedup-come-from) below measures that part: about 20% of the Transformer-block speedup on CPU. Each primitive is the median of 5 timed runs (after 2 warmups), and each LLM block is the median of 3 timed runs (after 1 warmup). Differences of roughly 10% or less are within noise. Benchmarks measure latency only, not model accuracy. The `poly` and SHAFT baselines on the CrypTen side are one-to-one ports of PriX's algorithms; see [`benchmarks/benchmark_prix_vs_crypten.py`](benchmarks/benchmark_prix_vs_crypten.py).
 
 ### Charts
 
@@ -184,6 +184,23 @@ python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --m
 <p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/primitive_speedup.png" alt="Heatmap of PriX speedup over CrypTen on ten MPC primitives across five approximation modes, CPU and GPU" width="95%"/></p>
 
 The darkest **Fission** cells partly reflect CPU contention from the extra evaluator process on the CrypTen side (see the notes below). Regenerate the charts from the raw results in [`benchmarks/results/`](benchmarks/results) with `python benchmarks/plot_results.py`.
+
+### Where does the speedup come from?
+
+To separate PriX's compiled computation from its faster local transport, we reran PriX with its 2-party `all_reduce` routed through `torch.distributed`/`gloo` over loopback TCP, the same transport CrypTen uses. Nothing else in PriX changed, and the results are identical. All three configurations ran back to back on the CPU host below, in all five modes.
+
+<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/transport_ablation.png" alt="Transport ablation: GPT-2 block latency for CrypTen, PriX over gloo, and PriX over shared memory, plus geometric-mean speedups with and without the transport difference" width="95%"/></p>
+
+| Geometric mean (CPU) | Overall (CrypTen / PriX) | Same transport (CrypTen / PriX over gloo) | Transport alone | Transport's share (log scale) |
+|---|---:|---:|---:|---:|
+| Transformer blocks (25 configs) | **4.39x** | **3.24x** | 1.35x | 20% |
+| Primitives (50 configs) | **3.39x** | **2.06x** | 1.64x | 41% |
+
+- **Most of the speedup on Transformer blocks remains with an identical transport** (3.24x; 2.75x–4.11x across modes). The transport matters more for small, round-bound primitives.
+- **Fission mode barely depends on the transport** (1.05x–1.08x), because it uses very few rounds between the MPC parties.
+- **Both frameworks run the same protocols over the wire:** the same number of rounds and nearly the same bytes. For example, a GPT-2 block in `crypten` mode takes 176 rounds and sends 80.1 MB with CrypTen versus 79.7 MB with PriX.
+
+Reproduce with `--comm-stats` and `--prix-transport gloo`, then `python benchmarks/transport_ablation.py results.json --fig docs/figures/transport_ablation`. Per-workload results, including communication rounds and bytes, are in [`benchmarks/results/`](benchmarks/results). This ablation is CPU-only so far.
 
 ### 1. CPU Benchmarks
 

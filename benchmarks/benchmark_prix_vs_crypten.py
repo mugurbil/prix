@@ -42,7 +42,7 @@ MODES = [
 ]
 MODE_KEYS = [m[0] for m in MODES]
 
-FRAMEWORK_LABELS = {"crypten": "CrypTen (PyTorch)", "prix": "PriX (JAX)"}
+FRAMEWORK_LABELS = {"crypten": "CrypTen (PyTorch)", "prix": "PriX (JAX)", "prix_gloo": "PriX (JAX, gloo transport)"}
 
 
 class AttrDict(dict):
@@ -56,21 +56,36 @@ class AttrDict(dict):
         self[key] = value
 
 
-def _bench_fn(fn, warmup, repeats, sync_fn=None, barrier=None):
+def _bench_fn(fn, warmup, repeats, sync_fn=None, barrier=None, comm_get=None):
+    """
+    Median wall time (ms) over `repeats` runs. If `comm_get` is given, also returns the median
+    per-run communication statistics recorded by the communicator: time spent inside
+    communication calls (ms, includes waiting for the peer), rounds, and bytes sent.
+    """
     for _ in range(warmup):
         out = fn()
         if sync_fn is not None:
             sync_fn(out)
-    times = []
+    times, comm = [], []
     for _ in range(repeats):
         if barrier is not None:
             barrier()
+        if comm_get is not None:
+            comm_get().reset_communication_stats()
         t0 = time.perf_counter()
         out = fn()
         if sync_fn is not None:
             sync_fn(out)
         times.append((time.perf_counter() - t0) * 1000.0)  # ms
-    return float(np.median(times))
+        if comm_get is not None:
+            c = comm_get()
+            comm.append((c.comm_time * 1000.0, c.comm_rounds, c.comm_bytes))
+    if comm_get is None:
+        return float(np.median(times))
+    arr = np.array(comm, dtype=np.float64)
+    stats = {"comm_ms": float(np.median(arr[:, 0])), "rounds": float(np.median(arr[:, 1])),
+             "bytes": float(np.median(arr[:, 2]))}
+    return float(np.median(times)), stats
 
 
 def _save_part(path, data):
@@ -79,8 +94,17 @@ def _save_part(path, data):
 
 
 def _load_part(path):
+    if not os.path.exists(path):
+        raise RuntimeError(f"benchmark run produced no results ({path}); see the worker errors above")
     with open(path, "r") as f:
         return json.load(f)
+
+
+def _fresh_part(path):
+    """Removes a leftover part file so a crashed run can't be mistaken for a successful one."""
+    if os.path.exists(path):
+        os.remove(path)
+    return path
 
 
 def _deep_merge(base, override):
@@ -171,6 +195,13 @@ def _patch_crypten_repo(crypten_root):
             txt = open(cfg_p).read()
             if 'provider: "TTP"' in txt:
                 open(cfg_p, "w").write(txt.replace('provider: "TTP"', 'provider: "TFP"'))
+
+    comm_p = os.path.join(crypten_root, "curl/communicator/communicator.py")
+    if os.path.exists(comm_p):
+        txt = open(comm_p).read()
+        # Upstream bug: verbose-mode barrier logging passes an extra argument and crashes.
+        if "self._log_communication(0, 1)" in txt:
+            open(comm_p, "w").write(txt.replace("self._log_communication(0, 1)", "self._log_communication(0)"))
 
     launcher_p = os.path.join(crypten_root, "examples/multiprocess_launcher.py")
     if os.path.exists(launcher_p):
@@ -268,26 +299,37 @@ def _run_workload(a, fw, mod, comm, to_private, sync, no_grad):
     tag = f"[{FRAMEWORK_LABELS[fw]} | {a['mode']} | {a['device']}]"
     out = {"micro": {}, "llm": {}}
 
+    comm_get = None
+    if a.get("comm_stats"):
+        type(comm.get()).set_verbosity(True)
+        comm_get = comm.get
+        out["comm"] = {"micro": {}, "llm": {}}
+
+    def bench(section, name, fn, warmup, repeats):
+        res = _bench_fn(fn, warmup, repeats, sync, barrier, comm_get)
+        ms, stats = res if comm_get is not None else (res, None)
+        if rank == 0:
+            extra = ""
+            if stats is not None:
+                out["comm"][section][name] = stats
+                extra = f"  [comm {stats['comm_ms']:.2f} ms, {stats['rounds']:.0f} rounds, {stats['bytes'] / 1e6:.2f} MB]"
+            print(f"{tag} {name}: {ms:.2f} ms{extra}", flush=True)
+            out[section][name] = ms
+
     with no_grad():
         mod_luts = getattr(mod, "LookupTables", None) or mod.common.functions.approximations.LookupTables
         mod_luts(device=a["device"])
 
         t = {k: to_private(v) for k, v in _micro_inputs().items()}
         for name, fn in _micro_ops(t):
-            ms = _bench_fn(fn, a["warmup"], a["repeats"], sync, barrier)
-            if rank == 0:
-                print(f"{tag} {name}: {ms:.2f} ms", flush=True)
-                out["micro"][name] = ms
+            bench("micro", name, fn, a["warmup"], a["repeats"])
 
         for label, builder, shape in _llm_specs():
             m = builder().to(a["device"]).encrypt(src=0)
             m.eval()
             x_np = np.random.RandomState(123).uniform(-1.0, 1.0, size=shape).astype(np.float32)
             x = to_private(x_np)
-            ms = _bench_fn(lambda: m(x), a["llm_warmup"], a["llm_repeats"], sync, barrier)
-            if rank == 0:
-                print(f"{tag} {label}: {ms:.2f} ms", flush=True)
-                out["llm"][label] = ms
+            bench("llm", label, lambda: m(x), a["llm_warmup"], a["llm_repeats"])
 
     if rank == 0:
         _save_part(a["out_path"], out)
@@ -296,11 +338,56 @@ def _run_workload(a, fw, mod, comm, to_private, sync, no_grad):
 # ============================================================================
 # PriX
 # ============================================================================
+def _install_gloo_transport(rendezvous):
+    """
+    Transport ablation: route PriX's 2-party all_reduce through torch.distributed/gloo over
+    loopback TCP (the transport CrypTen uses) instead of the shared-memory ring buffer.
+    Everything else in PriX (compiled kernels, batching, host staging) is unchanged.
+    """
+    import torch
+    import torch.distributed as dist
+
+    import prix.communicator as pcomm
+    from prix.communicator.communicator import _logging
+    from prix.communicator.process_communicator import InProcessCommunicator
+
+    dist.init_process_group(
+        "gloo", init_method=f"file://{rendezvous}", rank=pcomm.get().get_rank(), world_size=2
+    )
+    raw_all_reduce = InProcessCommunicator.all_reduce.__wrapped__
+    ops = {"sum": dist.ReduceOp.SUM, "xor": dist.ReduceOp.BXOR, "bxor": dist.ReduceOp.BXOR}
+
+    @_logging
+    def all_reduce(self, array, op="sum", batched=False, async_op=False):
+        if op not in ops or async_op:
+            return raw_all_reduce(self, array, op=op, batched=batched, async_op=async_op)
+        payload = self._to_transport_batch(array) if batched else self._to_transport(array)
+        items = payload if batched else [payload]
+        if not all(isinstance(p, np.ndarray) and p.dtype == np.int64 for p in items):
+            return raw_all_reduce(self, array, op=op, batched=batched, async_op=async_op)
+        flat = np.concatenate([p.reshape(-1) for p in items])  # always a fresh, writable copy
+        tensor = torch.from_numpy(flat)
+        dist.all_reduce(tensor, op=ops[op])
+        res = tensor.numpy()
+        if not batched:
+            return self._from_transport(res.reshape(payload.shape), device=self._get_device(array))
+        dev = self._get_device(array[0]) if len(array) > 0 else None
+        out, offset = [], 0
+        for p in payload:
+            out.append(self._from_transport(res[offset : offset + p.size].reshape(p.shape), device=dev))
+            offset += p.size
+        return out
+
+    InProcessCommunicator.all_reduce = all_reduce
+
+
 def _prix_worker(a):
     import prix
     import prix.communicator as comm
 
     prix.cfg.load_config(a["config_path"])
+    if a.get("transport") == "gloo":
+        _install_gloo_transport(a["gloo_rendezvous"])
     device = a["device"]
 
     def sync(x):
@@ -309,13 +396,13 @@ def _prix_worker(a):
             x.share.block_until_ready()
 
     _run_workload(
-        a, "prix", prix, comm,
+        a, "prix_gloo" if a.get("transport") == "gloo" else "prix", prix, comm,
         to_private=lambda v: prix.cryptensor(v, device=device),
         sync=sync, no_grad=prix.no_grad,
     )
 
 
-def run_prix(prix_root, device, tmp_dir, modes, bench_args):
+def run_prix(prix_root, device, tmp_dir, modes, bench_args, transport="shm"):
     sys.path.insert(0, prix_root)
     from prix.launcher import MultiProcessLauncher
 
@@ -324,8 +411,10 @@ def run_prix(prix_root, device, tmp_dir, modes, bench_args):
         if key not in modes:
             continue
         cfg_path = _merged_config(prix_root, cfg_name, tmp_dir, "prix")
-        part = os.path.join(tmp_dir, f"_prix_{key}.json")
-        args = AttrDict(config_path=cfg_path, out_path=part, device=device, mode=key, **bench_args)
+        part = _fresh_part(os.path.join(tmp_dir, f"_prix_{transport}_{key}.json"))
+        args = AttrDict(config_path=cfg_path, out_path=part, device=device, mode=key, transport=transport,
+                        gloo_rendezvous=os.path.join(tmp_dir, f"_prix_gloo_{key}_{os.getpid()}_{time.time_ns()}"),
+                        **bench_args)
         launcher = MultiProcessLauncher(2, n_eval, _prix_worker, args, cfg_file=cfg_path)
         launcher.start()
         launcher.join()
@@ -574,7 +663,7 @@ def run_crypten(crypten_root, device, tmp_dir, modes, bench_args, prix_root=None
             continue
         cfg_path = _merged_config(crypten_root, cfg_name, tmp_dir, "crypten", fallback_root=prix_root)
         cfg.load_config(cfg_path)
-        part = os.path.join(tmp_dir, f"_crypten_{key}.json")
+        part = _fresh_part(os.path.join(tmp_dir, f"_crypten_{key}.json"))
         args = AttrDict(
             config_path=cfg_path, out_path=part, device=device, mode=key, multi_gpu=False, **bench_args
         )
@@ -649,6 +738,15 @@ if __name__ == "__main__":
     parser.add_argument("--llm-warmup", type=int, default=1)
     parser.add_argument("--llm-repeats", type=int, default=3)
     parser.add_argument("--out", default=os.path.join(tempfile.gettempdir(), "prix_vs_crypten_bench.json"))
+    parser.add_argument(
+        "--comm-stats", action="store_true",
+        help="Also record per-run communication time, rounds and bytes (communicator verbose mode)",
+    )
+    parser.add_argument(
+        "--prix-transport", choices=["shm", "gloo"], default="shm",
+        help="Transport ablation: run PriX's 2-party all_reduce over gloo/TCP like CrypTen "
+             "(results stored under 'prix_gloo')",
+    )
     args = parser.parse_args()
     if args.framework == "curl":
         args.framework = "crypten"
@@ -666,7 +764,9 @@ if __name__ == "__main__":
             "--llm-warmup", str(args.llm_warmup), "--llm-repeats", str(args.llm_repeats),
             "--out", args.out,
         ]
-        subprocess.run(cmd_base + ["--framework", "prix"], check=True)
+        if args.comm_stats:
+            cmd_base.append("--comm-stats")
+        subprocess.run(cmd_base + ["--framework", "prix", "--prix-transport", args.prix_transport], check=True)
         subprocess.run(cmd_base + ["--framework", "crypten"], check=True)
         subprocess.run(cmd_base + ["--framework", "report"], check=True)
         sys.exit(0)
@@ -677,17 +777,19 @@ if __name__ == "__main__":
         with open(args.out, "r") as f:
             data = json.load(f)
     bench_args = dict(
-        warmup=args.warmup, repeats=args.repeats, llm_warmup=args.llm_warmup, llm_repeats=args.llm_repeats
+        warmup=args.warmup, repeats=args.repeats, llm_warmup=args.llm_warmup, llm_repeats=args.llm_repeats,
+        comm_stats=args.comm_stats,
     )
 
     if args.framework in ("prix", "crypten"):
         if args.framework == "prix":
-            res = run_prix(args.prix_root, args.device, tmp_dir, modes, bench_args)
+            res = run_prix(args.prix_root, args.device, tmp_dir, modes, bench_args, transport=args.prix_transport)
         else:
             res = run_crypten(
                 args.crypten_root, args.device, tmp_dir, modes, bench_args, prix_root=args.prix_root
             )
-        data.setdefault(args.framework, {}).update(res)
+        key = "prix_gloo" if (args.framework == "prix" and args.prix_transport == "gloo") else args.framework
+        data.setdefault(key, {}).update(res)
         with open(args.out, "w") as f:
             json.dump(data, f, indent=2)
     elif args.framework == "report":
