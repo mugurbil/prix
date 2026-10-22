@@ -162,11 +162,30 @@ def _patch_crypten_repo(crypten_root):
             txt = txt.replace(target, replacement)
         open(init_p, "w").write(txt)
 
-    default_cfg_p = os.path.join(crypten_root, "configs/default.yaml")
-    if os.path.exists(default_cfg_p):
-        txt = open(default_cfg_p).read()
-        if 'provider: "TTP"' in txt:
-            open(default_cfg_p, "w").write(txt.replace('provider: "TTP"', 'provider: "TFP"'))
+    for cfg_rel in ["configs/default.yaml", "configs/fission.yaml"]:
+        cfg_p = os.path.join(crypten_root, cfg_rel)
+        if os.path.exists(cfg_p):
+            txt = open(cfg_p).read()
+            if 'provider: "TTP"' in txt:
+                open(cfg_p, "w").write(txt.replace('provider: "TTP"', 'provider: "TFP"'))
+
+    launcher_p = os.path.join(crypten_root, "examples/multiprocess_launcher.py")
+    if os.path.exists(launcher_p):
+        txt = open(launcher_p).read()
+        target = "        if curl.mpc.ttp_required():"
+        replacement = (
+            "        if cfg_file is not None:\n"
+            "            curl.cfg.load_config(cfg_file)\n"
+            "        if curl.mpc.ttp_required():"
+        )
+        if target in txt and "curl.cfg.load_config(cfg_file)" not in txt:
+            open(launcher_p, "w").write(txt.replace(target, replacement))
+
+    mod_p = os.path.join(crypten_root, "curl/nn/module.py")
+    if os.path.exists(mod_p):
+        txt = open(mod_p).read()
+        if r"\text{in\_features}" in txt and 'r"""' not in txt[:200]:
+            open(mod_p, "w").write(txt.replace(r"\text{in\_features}", r"\\text{in\\_features}"))
 
 
 # ============================================================================
