@@ -436,6 +436,33 @@ class TestPrix(unittest.TestCase):
         )
         _run_mpc(_worker_shaft_and_poly, cfg_file=shaft_cfg)
 
+    def test_11_launch_after_jax_initialized(self):
+        # Regression test: forking after the parent's XLA runtime has done real work can
+        # deadlock the children. 'auto' must detect this and fall back to 'spawn', and the
+        # spawn path must support closures and propagate the parent's config.
+        from prix.launcher import _resolve_start_method
+
+        x = jnp.ones((512, 512), dtype=jnp.float32)
+        (x @ x).block_until_ready()
+        self.assertEqual(_resolve_start_method("auto"), "spawn")
+        self.assertEqual(_resolve_start_method("fork"), "fork")
+        with self.assertRaises(ValueError):
+            _resolve_start_method("threads")
+
+        scale = 3.0
+
+        def closure(v):
+            a = prix.array(np.array([1.0, -2.0, 0.5], dtype=np.float32))
+            return (a * v * scale).relu().reconstruct()
+
+        out = prix.run(closure, 2.0, world_size=2, timeout=180)
+        np.testing.assert_allclose(out, [6.0, 0.0, 3.0], atol=1e-3)
+
+        with cfg.temp_override({"functions.gelu.method": "poly"}):
+            method = prix.run(lambda: prix.cfg.functions.gelu.method, world_size=2,
+                              start_method="spawn", timeout=180)
+        self.assertEqual(method, "poly")
+
     def test_10_researcher_ergonomics(self):
         for mode in ("crypten", "shaft", "lut", "fission"):
             prix.set_mode(mode)

@@ -12,6 +12,7 @@ import logging
 import multiprocessing
 import multiprocessing.connection
 import os
+import pickle
 import threading
 import time
 import uuid
@@ -39,6 +40,68 @@ def _to_host_return_value(val):
     return val
 
 
+_START_METHODS = ("auto", "fork", "spawn", "forkserver")
+_SPAWN_NOTICE_SHOWN = False
+
+
+def _jax_backend_initialized():
+    """True if this process has already initialized a JAX/XLA backend (or we can't tell)."""
+    try:
+        from jax._src import xla_bridge
+
+        return bool(xla_bridge.backends_are_initialized())
+    except Exception:
+        return True
+
+
+def _resolve_start_method(start_method):
+    """
+    Picks the multiprocessing start method for MPC parties.
+
+    'auto' (default) uses 'fork' (fast; works with functions defined in notebooks and
+    interactive sessions) unless this process has already initialized JAX. Forking a
+    process whose XLA runtime threads are live can deadlock the children, so in that
+    case 'auto' falls back to 'spawn'. Override with the `start_method` argument or the
+    PRIX_START_METHOD environment variable.
+    """
+    method = start_method or os.environ.get("PRIX_START_METHOD", "auto")
+    if method not in _START_METHODS:
+        raise ValueError(f"start_method must be one of {_START_METHODS}, got {method!r}")
+    if method == "auto":
+        if "fork" in multiprocessing.get_all_start_methods() and not _jax_backend_initialized():
+            return "fork"
+        global _SPAWN_NOTICE_SHOWN
+        if not _SPAWN_NOTICE_SHOWN:
+            _SPAWN_NOTICE_SHOWN = True
+            logging.info(
+                "PriX: JAX is already initialized in this process; starting MPC parties with "
+                "'spawn' to avoid fork-after-XLA deadlocks (adds ~2s of startup per run)."
+            )
+        return "spawn"
+    return method
+
+
+def _config_snapshot():
+    """Plain-dict copy of the active PriX config, so children see the parent's settings."""
+
+    def to_plain(node):
+        if isinstance(node, dict):
+            return {k: to_plain(v) for k, v in node.items()}
+        return copy.deepcopy(node)
+
+    return to_plain(cfg.config)
+
+
+def _dumps(obj):
+    """Serializes functions/args for non-fork children; cloudpickle handles notebook-defined code."""
+    try:
+        import cloudpickle
+
+        return cloudpickle.dumps(obj)
+    except ImportError:
+        return pickle.dumps(obj)
+
+
 class MultiProcessLauncher:
     """Launches MPC parties, optional TTP server, and optional Fission Evaluator servers."""
 
@@ -51,6 +114,7 @@ class MultiProcessLauncher:
         cfg_file=None,
         mode=None,
         device=None,
+        start_method=None,
     ):
         # Support both (world_size, evaluator_size, run_process_fn, fn_args)
         # and (world_size, run_process_fn, fn_args, cfg_file) signatures
@@ -71,7 +135,13 @@ class MultiProcessLauncher:
             evaluator_size = 1
 
         os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-        ctx = multiprocessing.get_context("fork")
+        self.start_method = _resolve_start_method(start_method)
+        ctx = multiprocessing.get_context(self.start_method)
+        cfg_snapshot = _config_snapshot()
+        # Non-fork children can't inherit objects, so the user function and arguments are
+        # serialized (cloudpickle supports functions defined in notebooks / __main__).
+        pack = (lambda obj: obj) if self.start_method == "fork" else _dumps
+        run_process_fn = pack(run_process_fn)
 
         init_ttp = cfg.mpc.provider == "TTP"
         ttp_count = 1 if init_ttp else 0
@@ -83,14 +153,16 @@ class MultiProcessLauncher:
         self.return_value = None
         if world_size == 2:
             shm_elems = InProcessCommunicator.SHM_SLOT_ELEMS
-            InProcessCommunicator.shm_buffers = [
-                ctx.RawArray(ctypes.c_int64, 4 * shm_elems) for _ in range(2)
-            ]
-            c0, c1 = ctx.Pipe(duplex=True)
-            InProcessCommunicator.peer_pipes = [c0, c1]
+            shm_buffers = [ctx.RawArray(ctypes.c_int64, 4 * shm_elems) for _ in range(2)]
+            peer_pipes = list(ctx.Pipe(duplex=True))
         else:
-            InProcessCommunicator.shm_buffers = None
-            InProcessCommunicator.peer_pipes = None
+            shm_buffers = peer_pipes = None
+        # Passed explicitly to every child (inherited state only exists under fork).
+        shared = (shm_buffers, peer_pipes, cfg_snapshot)
+        # Keep the IPC primitives alive in the parent: Process.start() drops its reference
+        # to `args`, and garbage-collecting a Queue/Barrier unlinks its named semaphores
+        # before 'spawn'/'forkserver' children have attached to them.
+        self._ipc_refs = (mailbox, barrier, shared)
 
         self.processes = []
         self.ttp_process = None
@@ -105,6 +177,7 @@ class MultiProcessLauncher:
                 if device is not None
                 else (getattr(new_args, "device", None) if new_args is not None else None)
             )
+            new_args = pack(new_args) if new_args is not None else None
             process_name = f"process {rank}"
             process = ctx.Process(
                 target=self.__class__._run_process,
@@ -120,6 +193,7 @@ class MultiProcessLauncher:
                     proc_device,
                     cfg_file,
                     self._result_queue if rank == 0 else None,
+                    shared,
                 ),
             )
             self.processes.append(process)
@@ -140,6 +214,7 @@ class MultiProcessLauncher:
                     None,
                     cfg_file,
                     None,
+                    shared,
                 ),
             )
 
@@ -160,6 +235,7 @@ class MultiProcessLauncher:
                     "cpu",
                     cfg_file,
                     None,
+                    shared,
                 ),
             )
             self.eval_processes.append(process)
@@ -177,7 +253,21 @@ class MultiProcessLauncher:
         device=None,
         cfg_file=None,
         result_queue=None,
+        shared=None,
     ):
+        if isinstance(run_process_fn, bytes):
+            run_process_fn = pickle.loads(run_process_fn)
+        if isinstance(fn_args, bytes):
+            fn_args = pickle.loads(fn_args)
+        if shared is not None:
+            shm_buffers, peer_pipes, cfg_snapshot = shared
+            InProcessCommunicator.shm_buffers = shm_buffers
+            InProcessCommunicator.peer_pipes = peer_pipes
+            if cfg_snapshot is not None:
+                # The parent already resolved cfg_file/mode; reuse its exact settings
+                # (including programmatic overrides) instead of re-reading the file.
+                cfg.set_config(cfg_snapshot)
+                cfg_file = None
         orig_logging_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.INFO)
         prix.init(
@@ -267,9 +357,15 @@ def run(
     device=None,
     cfg_file=None,
     timeout=None,
+    start_method=None,
     **kwargs,
 ):
-    """Runs `fn(*args, **kwargs)` across `world_size` MPC parties and returns rank 0's result."""
+    """
+    Runs `fn(*args, **kwargs)` across `world_size` MPC parties and returns rank 0's result.
+
+    `start_method` ('auto' by default, or 'fork' / 'spawn' / 'forkserver') controls how
+    parties are started; see `_resolve_start_method`.
+    """
     fn_args = ("__prix_call_args__", (args, kwargs)) if (args or kwargs) else None
     launcher = MultiProcessLauncher(
         world_size=world_size,
@@ -279,6 +375,7 @@ def run(
         cfg_file=cfg_file,
         mode=mode,
         device=device,
+        start_method=start_method,
     )
     launcher.start()
     return launcher.join(timeout=timeout)
@@ -290,6 +387,7 @@ def run_multiprocess(
     evaluator_size=0,
     device=None,
     cfg_file=None,
+    start_method=None,
 ):
     """
     CrypTen-compatible decorator to run a function across `world_size` MPC parties:
@@ -320,6 +418,7 @@ def run_multiprocess(
                 evaluator_size=evaluator_size,
                 device=device,
                 cfg_file=cfg_file,
+                start_method=start_method,
                 **kwargs,
             )
 
