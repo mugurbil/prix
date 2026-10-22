@@ -166,47 +166,50 @@ Table~\ref{tab:modes} summarizes the four approximation modes unified in PriX:
 
 \begin{figure}[t]
 \centering
+\resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
-    node distance=0.45cm,
-    layer/.style={rectangle, rounded corners=4pt, draw=black!75, thick, minimum width=13.8cm, minimum height=1.15cm, align=center, font=\small},
-    subbox/.style={rectangle, rounded corners=3pt, draw=black!60, fill=white, minimum height=0.75cm, inner sep=5pt, align=center, font=\footnotesize},
-    arrow/.style={-{Stealth[length=2.5mm]}, thick, draw=black!75}
+    node distance=0.55cm,
+    layer/.style={rectangle, rounded corners=4pt, draw=black!75, thick, minimum width=16.4cm, minimum height=1.85cm},
+    subbox/.style={rectangle, rounded corners=3pt, draw=black!60, fill=white, text width=3.55cm, minimum height=0.82cm, inner sep=4pt, align=center, font=\footnotesize},
+    subbox3/.style={rectangle, rounded corners=3pt, draw=black!60, fill=white, text width=4.85cm, minimum height=0.82cm, inner sep=4pt, align=center, font=\footnotesize},
+    arrow/.style={-{Stealth[length=2.8mm]}, thick, draw=black!75}
 ]
     % Layer 1: Researcher API
     \node[layer, fill=blue!8] (l1) {};
-    \node[anchor=north west, font=\footnotesize\bfseries, text=blue!60!black] at ($(l1.north west)+(0.15,-0.08)$) {1. Researcher API \& Model Layer (\texttt{prix}, \texttt{prix.nn})};
-    \node[subbox, minimum width=3.1cm] at ($(l1.center)+(-4.8,-0.15)$) {\texttt{prix.array} / \texttt{.reconstruct()}};
-    \node[subbox, minimum width=3.2cm] at ($(l1.center)+(-1.4,-0.15)$) {\texttt{@prix.mpc.run\_multiprocess}};
-    \node[subbox, minimum width=3.1cm] at ($(l1.center)+(2.0,-0.15)$) {\texttt{prix.set\_mode(mode)}};
-    \node[subbox, minimum width=2.8cm] at ($(l1.center)+(5.2,-0.15)$) {\texttt{prix.nn.Module}};
+    \node[anchor=north west, font=\small\bfseries, text=blue!60!black] at ($(l1.north west)+(0.25,-0.14)$) {1. Researcher API \& Model Layer (\texttt{prix}, \texttt{prix.nn})};
+    \node[subbox] at ($(l1.center)+(-5.85,-0.28)$) {\texttt{prix.array} /\\ \texttt{.reconstruct()}};
+    \node[subbox] at ($(l1.center)+(-1.95,-0.28)$) {\texttt{@prix.mpc.}\\ \texttt{run\_multiprocess}};
+    \node[subbox] at ($(l1.center)+(1.95,-0.28)$) {\texttt{prix.set\_mode}\\\texttt{(mode)}};
+    \node[subbox] at ($(l1.center)+(5.85,-0.28)$) {\texttt{prix.nn.Module}\\ \texttt{.encrypt()}};
 
     % Layer 2: Unified Dispatch
     \node[layer, fill=teal!8, below=of l1] (l2) {};
-    \node[anchor=north west, font=\footnotesize\bfseries, text=teal!60!black] at ($(l2.north west)+(0.15,-0.08)$) {2. Unified MPC Nonlinearity \& Truncation Engine (\texttt{prix/approximations.py})};
-    \node[subbox, minimum width=3.1cm] at ($(l2.center)+(-4.9,-0.15)$) {\textbf{CuRL}: Wavelet LUTs + EGK};
-    \node[subbox, minimum width=3.3cm] at ($(l2.center)+(-1.45,-0.15)$) {\textbf{SHAFT}: 1-Rd Fourier + ODE};
-    \node[subbox, minimum width=3.1cm] at ($(l2.center)+(2.0,-0.15)$) {\textbf{CrypTen}: Limit / NR / Taylor};
-    \node[subbox, minimum width=2.7cm] at ($(l2.center)+(5.15,-0.15)$) {\textbf{Fission}: Evaluator};
+    \node[anchor=north west, font=\small\bfseries, text=teal!60!black] at ($(l2.north west)+(0.25,-0.14)$) {2. Unified MPC Nonlinearity \& Truncation Engine (\texttt{prix/approximations.py})};
+    \node[subbox] at ($(l2.center)+(-5.85,-0.28)$) {\textbf{CuRL}: Wavelet\\ LUTs + EGK};
+    \node[subbox] at ($(l2.center)+(-1.95,-0.28)$) {\textbf{SHAFT}: 1-Round\\ Fourier + ODE};
+    \node[subbox] at ($(l2.center)+(1.95,-0.28)$) {\textbf{CrypTen}: Limit\\ / NR / Taylor};
+    \node[subbox] at ($(l2.center)+(5.85,-0.28)$) {\textbf{Fission}: Hybrid\\ Evaluator};
 
     % Layer 3: XLA Fused Kernels
     \node[layer, fill=orange!10, below=of l2] (l3) {};
-    \node[anchor=north west, font=\footnotesize\bfseries, text=orange!65!black] at ($(l3.north west)+(0.15,-0.08)$) {3. Whole-Graph \texttt{@jax.jit} XLA Cryptographic Kernels (\texttt{prix/provider.py}, \texttt{prix/circuit.py})};
-    \node[subbox, minimum width=3.3cm] at ($(l3.center)+(-4.8,-0.15)$) {10-Pair FP64 $\Zring$ MatMul};
-    \node[subbox, minimum width=3.2cm] at ($(l3.center)+(-1.3,-0.15)$) {Fused Kogge--Stone $(G,P)$};
-    \node[subbox, minimum width=3.1cm] at ($(l3.center)+(2.1,-0.15)$) {Fused Multi-LUT Gather};
-    \node[subbox, minimum width=2.7cm] at ($(l3.center)+(5.2,-0.15)$) {Vectorized SplitMix64};
+    \node[anchor=north west, font=\small\bfseries, text=orange!65!black] at ($(l3.north west)+(0.25,-0.14)$) {3. Whole-Graph \texttt{@jax.jit} XLA Cryptographic Kernels (\texttt{prix/provider.py}, \texttt{circuit.py})};
+    \node[subbox] at ($(l3.center)+(-5.85,-0.28)$) {10-Pair FP64\\ $\Zring$ MatMul};
+    \node[subbox] at ($(l3.center)+(-1.95,-0.28)$) {Fused Kogge--\\Stone $(G,P)$};
+    \node[subbox] at ($(l3.center)+(1.95,-0.28)$) {Fused Multi-\\LUT Gather};
+    \node[subbox] at ($(l3.center)+(5.85,-0.28)$) {Vectorized\\ SplitMix64};
 
     % Layer 4: Collectives & Hardware
     \node[layer, fill=purple!8, below=of l3] (l4) {};
-    \node[anchor=north west, font=\footnotesize\bfseries, text=purple!65!black] at ($(l4.north west)+(0.15,-0.08)$) {4. Collectives \& Accelerator Runtime (\texttt{prix/communicator/})};
-    \node[subbox, minimum width=4.2cm] at ($(l4.center)+(-4.3,-0.15)$) {4-Slot Lock-Free Shared-Memory All-Reduce};
-    \node[subbox, minimum width=4.3cm] at ($(l4.center)+(0.2,-0.15)$) {Batched Single-Round $(\epsilon, \delta)$ IPC};
-    \node[subbox, minimum width=3.8cm] at ($(l4.center)+(4.55,-0.15)$) {XLA CPU / CUDA GPU / TPU};
+    \node[anchor=north west, font=\small\bfseries, text=purple!65!black] at ($(l4.north west)+(0.25,-0.14)$) {4. Collectives \& Accelerator Runtime (\texttt{prix/communicator/})};
+    \node[subbox3] at ($(l4.center)+(-5.25,-0.28)$) {4-Slot Lock-Free\\ SHM All-Reduce};
+    \node[subbox3] at ($(l4.center)+(0.0,-0.28)$) {Batched Single-Round\\ $(\epsilon, \delta)$ IPC};
+    \node[subbox3] at ($(l4.center)+(5.25,-0.28)$) {XLA CPU / CUDA\\ GPU / TPU};
 
     \draw[arrow] (l1.south) -- (l2.north);
     \draw[arrow] (l2.south) -- (l3.north);
     \draw[arrow] (l3.south) -- (l4.north);
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{System architecture of \textbf{PriX}, illustrating the four-layer stack from the researcher-facing Python API down to fused XLA kernels and lock-free shared-memory collectives.}
 \label{fig:architecture}
 \end{figure}
@@ -317,8 +320,8 @@ We benchmark 10 core MPC primitives and nonlinearities ($\text{MatMul } 128\time
 \centering
 \caption{\textbf{CPU Private LLM Inference Latency (ms) and PriX Speedup} across all four MPC approximation modes ($N=2$ parties, sequence length $L=16$). Lower latency is better.}
 \label{tab:cpu_llm}
-\footnotesize
-\setlength{\tabcolsep}{4.2pt}
+\vspace{2pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lrrrrrrrr@{}}
 \toprule
 & \multicolumn{2}{c}{\textbf{CrypTen Approx.}} & \multicolumn{2}{c}{\textbf{SHAFT (Fourier+ODE)}} & \multicolumn{2}{c}{\textbf{CuRL Wavelet LUTs}} & \multicolumn{2}{c}{\textbf{Fission Evaluator}} \\
@@ -331,15 +334,16 @@ GPT2 (1-Blk)       & 2743.70 & \textbf{741.31 (3.70$\times$)} & 2435.16 & \textb
 Llama (1-Blk)      & 2072.30 & \textbf{579.57 (3.58$\times$)} & 1868.44 & \textbf{496.75 (3.76$\times$)} & 1924.62 & \textbf{498.19 (3.86$\times$)} & 1563.28 & \textbf{301.83 (5.18$\times$)} \\
 ModernBert (1-Blk) & 1617.38 & \textbf{602.25 (2.69$\times$)} & 1295.80 & \textbf{380.24 (3.41$\times$)} & 1481.51 & \textbf{423.62 (3.50$\times$)} & 1069.99 & \textbf{210.09 (5.09$\times$)} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[t]
 \centering
 \caption{\textbf{CPU MPC Primitives \& Nonlinearities Latency (ms, CrypTen / PriX)} and PriX speedup.}
 \label{tab:cpu_ops}
-\footnotesize
-\setlength{\tabcolsep}{4.8pt}
+\vspace{2pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
 \textbf{Operation (Shape)} & \textbf{CrypTen Approx.} & \textbf{SHAFT (Fourier+ODE)} & \textbf{CuRL Wavelet LUTs} & \textbf{Fission Evaluator} \\
@@ -355,7 +359,8 @@ SiLU ($32\times 64$)               & 75.68 / \textbf{57.32 (1.32$\times$)}  & 61
 Softmax ($4\times 32\times 32$)    & 310.40 / \textbf{233.34 (1.33$\times$)}& 254.24 / \textbf{114.91 (2.21$\times$)}& 297.92 / \textbf{195.87 (1.52$\times$)}& 10.67 / \textbf{2.08 (5.12$\times$)} \\
 LayerNorm ($4\times 32\times 64$)  & 59.27 / \textbf{34.58 (1.71$\times$)}  & 54.89 / \textbf{33.22 (1.65$\times$)}  & 42.68 / \textbf{13.58 (3.14$\times$)}  & 12.69 / \textbf{2.59 (4.90$\times$)} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 Tables~\ref{tab:cpu_llm} and~\ref{tab:cpu_ops} report the CPU benchmark results. Across all 20 LLM configurations and all 40 primitive configurations on CPU, PriX outperforms CrypTen:
@@ -370,8 +375,8 @@ Tables~\ref{tab:cpu_llm} and~\ref{tab:cpu_ops} report the CPU benchmark results.
 \centering
 \caption{\textbf{GPU (NVIDIA Tesla T4) Private LLM Inference Latency (ms) and PriX Speedup} across all four MPC approximation modes ($N=2$ parties, sequence length $L=16$).}
 \label{tab:gpu_llm}
-\footnotesize
-\setlength{\tabcolsep}{4.2pt}
+\vspace{2pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lrrrrrrrr@{}}
 \toprule
 & \multicolumn{2}{c}{\textbf{CrypTen Approx.}} & \multicolumn{2}{c}{\textbf{SHAFT (Fourier+ODE)}} & \multicolumn{2}{c}{\textbf{CuRL Wavelet LUTs}} & \multicolumn{2}{c}{\textbf{Fission Evaluator}} \\
@@ -384,15 +389,16 @@ GPT2 (1-Blk)       & 1648.83 & \textbf{780.20 (2.11$\times$)} & 1284.63 & \textb
 Llama (1-Blk)      & 1596.48 & \textbf{628.52 (2.54$\times$)} & 1284.00 & \textbf{488.35 (2.63$\times$)} & 1681.80 & \textbf{554.73 (3.03$\times$)} & 978.78 & \textbf{354.19 (2.76$\times$)} \\
 ModernBert (1-Blk) & 1439.01 & \textbf{552.47 (2.60$\times$)} & 1094.72 & \textbf{415.51 (2.63$\times$)} & 1438.62 & \textbf{466.32 (3.09$\times$)} & 705.92 & \textbf{239.02 (2.95$\times$)} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[t]
 \centering
 \caption{\textbf{GPU (NVIDIA Tesla T4) MPC Primitives \& Nonlinearities Latency (ms, CrypTen / PriX)} and PriX speedup.}
 \label{tab:gpu_ops}
-\footnotesize
-\setlength{\tabcolsep}{4.8pt}
+\vspace{2pt}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lrrrr@{}}
 \toprule
 \textbf{Operation (Shape)} & \textbf{CrypTen Approx.} & \textbf{SHAFT (Fourier+ODE)} & \textbf{CuRL Wavelet LUTs} & \textbf{Fission Evaluator} \\
@@ -408,7 +414,8 @@ SiLU ($32\times 64$)               & 124.01 / \textbf{46.51 (2.67$\times$)}  & 9
 Softmax ($4\times 32\times 32$)    & 543.45 / \textbf{221.37 (2.45$\times$)} & 225.10 / \textbf{93.67 (2.40$\times$)} & 491.56 / \textbf{190.68 (2.58$\times$)} & 7.40 / \textbf{1.59 (4.65$\times$)} \\
 LayerNorm ($4\times 32\times 64$)  & 92.08 / \textbf{42.26 (2.18$\times$)}   & 96.84 / \textbf{45.36 (2.14$\times$)}  & 149.84 / \textbf{24.11 (6.22$\times$)}  & 9.34 / \textbf{3.40 (2.75$\times$)} \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 Tables~\ref{tab:gpu_llm} and~\ref{tab:gpu_ops} report the GPU benchmark results on an NVIDIA Tesla T4. Once again, PriX outperforms the PyTorch CrypTen baseline on \textbf{100\% of benchmarks (20/20 LLM benchmarks and 40/40 primitive benchmarks)}:
