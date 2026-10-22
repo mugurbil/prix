@@ -347,6 +347,26 @@ def _worker_nn_and_llms():
     assert y_llama.shape == (1, 4, 8)
 
 
+def _worker_ergonomics(scale):
+    z = prix.zeros(2, 3)
+    o = prix.ones(2, 3)
+    f = prix.full((2, 3), scale)
+    a = prix.arange(3)
+    e = prix.eye(3)
+    np.testing.assert_allclose(z.get_plain_text(), np.zeros((2, 3)), atol=1e-3)
+    np.testing.assert_allclose(o.get_plain_text(), np.ones((2, 3)), atol=1e-3)
+    np.testing.assert_allclose(f.get_plain_text(), np.full((2, 3), scale), atol=1e-3)
+    np.testing.assert_allclose(a.get_plain_text(), np.arange(3, dtype=np.float32), atol=1e-3)
+    np.testing.assert_allclose(e.get_plain_text(), np.eye(3, dtype=np.float32), atol=1e-3)
+    return (o + f).gelu().get_plain_text()
+
+
+@prix.mpc.run_multiprocess(world_size=2, mode="shaft")
+def _decorated_shaft_worker():
+    x = prix.cryptensor([-1.0, 0.0, 1.0])
+    return x.gelu().get_plain_text()
+
+
 class TestPrix(unittest.TestCase):
     def test_01_encoder_and_random(self):
         _run_mpc(_worker_encoder_and_random)
@@ -401,6 +421,24 @@ class TestPrix(unittest.TestCase):
             os.path.dirname(prix.__file__), "..", "configs", "shaft.yaml"
         )
         _run_mpc(_worker_shaft_and_poly, cfg_file=shaft_cfg)
+
+    def test_10_researcher_ergonomics(self):
+        for mode in ("crypten", "shaft", "lut", "fission"):
+            prix.set_mode(mode)
+        prix.set_mode("default")
+
+        out_dec = _decorated_shaft_worker()
+        # Verify prix.run with args and auto-evaluator in fission mode
+        out_fission = prix.run(_worker_ergonomics, 2.5, world_size=2, mode="fission")
+        prix.set_mode("default")
+
+        # Compare against NumPy/erf reference without initializing JAX in the parent process
+        def _np_gelu(x):
+            x = np.asarray(x, dtype=np.float64)
+            return 0.5 * x * (1.0 + np.vectorize(math.erf)(x / math.sqrt(2.0)))
+
+        np.testing.assert_allclose(out_dec, _np_gelu([-1.0, 0.0, 1.0]), atol=5e-2)
+        np.testing.assert_allclose(out_fission, _np_gelu(np.full((2, 3), 3.5)), atol=5e-2)
 
 
 if __name__ == "__main__":

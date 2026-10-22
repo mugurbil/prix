@@ -4,15 +4,30 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prix-jax"
-version = "0.1.0"
-description = "PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX"
+version = "0.2.0"
+description = "PriX: A Modern, High-Performance JAX/XLA Alternative to CrypTen for Private Machine Learning & LLMs"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
     {name = "Mehmet Ugurbil", email = "mugurbil@gmail.com"}
 ]
-keywords = ["mpc", "privacy", "jax", "transformers", "llm", "cryptography", "wavelets"]
+keywords = [
+    "mpc",
+    "crypten",
+    "privacy",
+    "private-machine-learning",
+    "secure-multiparty-computation",
+    "secret-sharing",
+    "jax",
+    "xla",
+    "transformers",
+    "llm",
+    "cryptography",
+    "wavelets",
+    "shaft",
+    "curl",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -32,8 +47,6 @@ dependencies = [
     "scipy>=1.10.0",
     "PyWavelets>=1.4.1",
     "pyyaml>=6.0",
-    "omegaconf>=2.1.0",
-    "pandas>=1.5.0",
 ]
 
 [project.urls]

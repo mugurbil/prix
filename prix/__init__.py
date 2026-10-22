@@ -5,7 +5,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import builtins
 import contextlib
@@ -82,6 +82,20 @@ def _setup_prng():
     generators["global"] = PRNGGenerator(seed=seed_global)
 
 
+def set_mode(mode, device=None):
+    """
+    Switch PriX's MPC approximation backend in one line:
+      - 'lut' / 'default': CuRL Wavelet Look-Up Tables + EGK truncation
+      - 'shaft': SHAFT 1-round Fourier activations + constant-round ODE Softmax
+      - 'crypten': Classic CrypTen polynomial / Newton-Raphson / limit approximations
+      - 'fission': Fission hybrid plaintext evaluator
+    """
+    cfg.set_mode(mode)
+    if comm.is_initialized() and comm.get().get_rank() < comm.get().get_world_size():
+        LookupTables(device=device)
+    return cfg
+
+
 def init(
     rank=0,
     world_size=1,
@@ -90,6 +104,7 @@ def init(
     barrier=None,
     device=None,
     cfg_file=None,
+    mode=None,
     use_distributed=False,
     coordinator_address=None,
 ):
@@ -98,6 +113,9 @@ def init(
     Wavelet LookupTables, TTPClient (if configured), and EvaluatorClient (if configured).
     """
     jax.config.update("jax_enable_x64", True)
+
+    if mode is not None and cfg_file is None:
+        cfg_file = mode
 
     if cfg_file is not None:
         cfg.load_config(cfg_file)
@@ -187,6 +205,32 @@ def rand(*sizes, device=None, ptype=Ptype.arithmetic):
     return Array.rand(*sizes, device=device, ptype=ptype)
 
 
+def zeros(*sizes, device=None, ptype=Ptype.arithmetic):
+    if len(sizes) == 1 and isinstance(sizes[0], (tuple, list)):
+        sizes = tuple(sizes[0])
+    return Array(jnp.zeros(sizes, dtype=jnp.float32), src=0, device=device, ptype=ptype)
+
+
+def ones(*sizes, device=None, ptype=Ptype.arithmetic):
+    if len(sizes) == 1 and isinstance(sizes[0], (tuple, list)):
+        sizes = tuple(sizes[0])
+    return Array(jnp.ones(sizes, dtype=jnp.float32), src=0, device=device, ptype=ptype)
+
+
+def full(size, fill_value, device=None, ptype=Ptype.arithmetic):
+    if isinstance(size, int):
+        size = (size,)
+    return Array(jnp.full(tuple(size), fill_value, dtype=jnp.float32), src=0, device=device, ptype=ptype)
+
+
+def arange(*args, device=None, ptype=Ptype.arithmetic):
+    return Array(jnp.arange(*args, dtype=jnp.float32), src=0, device=device, ptype=ptype)
+
+
+def eye(n, m=None, device=None, ptype=Ptype.arithmetic):
+    return Array(jnp.eye(n, M=m, dtype=jnp.float32), src=0, device=device, ptype=ptype)
+
+
 @contextlib.contextmanager
 def no_grad():
     yield
@@ -239,6 +283,9 @@ def log(*args, in_order=False, dst=0, level=logging.INFO):
         logging.log(level, *args)
 
 
+from prix.launcher import MultiProcessLauncher, run, run_multiprocess  # noqa: E402
+import prix.nn as nn  # noqa: E402
+
 mpc = SimpleNamespace(
     get_default_provider=get_default_provider,
     set_default_provider=set_default_provider,
@@ -249,15 +296,16 @@ mpc = SimpleNamespace(
     ptype=ptype,
     binary=Ptype.binary,
     arithmetic=Ptype.arithmetic,
+    run_multiprocess=run_multiprocess,
 )
-
-import prix.nn as nn  # noqa: E402
 
 __all__ = [
     "Array",
     "IgnoreEncodings",
     "LookupTables",
+    "MultiProcessLauncher",
     "Ptype",
+    "arange",
     "array",
     "bernoulli",
     "cat",
@@ -265,7 +313,9 @@ __all__ = [
     "comm",
     "cryptensor",
     "dump_cache",
+    "eye",
     "fill_cache",
+    "full",
     "generators",
     "init",
     "init_thread",
@@ -276,13 +326,18 @@ __all__ = [
     "mpc",
     "nn",
     "no_grad",
+    "ones",
     "print",
     "ptype",
     "rand",
     "randn",
+    "run",
+    "run_multiprocess",
     "save_cache",
+    "set_mode",
     "stack",
     "trace",
     "uninit",
     "where",
+    "zeros",
 ]

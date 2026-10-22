@@ -46,18 +46,39 @@ class ConfigNode(dict):
             self[name] = self._wrap(value)
 
 
+def _deep_merge(base, override):
+    """Recursively merges `override` dict into a copy of `base` dict."""
+    result = copy.deepcopy(base)
+    for k, v in (override or {}).items():
+        if isinstance(v, dict) and isinstance(result.get(k), dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = copy.deepcopy(v)
+    return result
+
+
 class PrixConfig:
     """Configuration object used to store configurable parameters for PriX."""
 
-    _REPO_CONFIG_PATH = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "../../configs/default.yaml")
+    _REPO_CONFIG_DIR = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "../../configs")
     )
-    _PKG_CONFIG_PATH = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "default.yaml")
-    )
+    _PKG_CONFIG_DIR = os.path.normpath(os.path.dirname(__file__))
+    _REPO_CONFIG_PATH = os.path.join(_REPO_CONFIG_DIR, "default.yaml")
+    _PKG_CONFIG_PATH = os.path.join(_PKG_CONFIG_DIR, "default.yaml")
     _DEFAULT_CONFIG_PATH = (
         _REPO_CONFIG_PATH if os.path.exists(_REPO_CONFIG_PATH) else _PKG_CONFIG_PATH
     )
+
+    _PRESET_FILES = {
+        "default": "default.yaml",
+        "lut": "default.yaml",
+        "curl": "default.yaml",
+        "shaft": "shaft.yaml",
+        "crypten": "approximations.yaml",
+        "approximations": "approximations.yaml",
+        "fission": "fission.yaml",
+    }
 
     def __init__(self, config_file=None):
         object.__setattr__(self, "config", ConfigNode())
@@ -67,14 +88,39 @@ class PrixConfig:
     def get_default_config_path(cls):
         return cls._DEFAULT_CONFIG_PATH
 
-    def load_config(self, config_file=None):
-        """Loads config from a yaml file."""
+    @classmethod
+    def resolve_config_path(cls, config_file=None):
+        """Resolves a preset name ('lut', 'shaft', 'crypten', 'fission') or file path."""
         if config_file is None:
-            config_file = PrixConfig._DEFAULT_CONFIG_PATH
+            return cls._DEFAULT_CONFIG_PATH
+        key = str(config_file).strip().lower()
+        if key.endswith(".yaml") and not os.path.exists(config_file):
+            key = os.path.basename(key)[:-5]
+        if key in cls._PRESET_FILES:
+            fname = cls._PRESET_FILES[key]
+            repo_candidate = os.path.join(cls._REPO_CONFIG_DIR, fname)
+            if os.path.exists(repo_candidate):
+                return repo_candidate
+            return os.path.join(cls._PKG_CONFIG_DIR, fname)
+        return config_file
 
-        with open(config_file, "r", encoding="utf-8") as stream:
-            config_dict = yaml.safe_load(stream)
+    def load_config(self, config_file=None):
+        """Loads config from a preset name ('lut', 'shaft', 'crypten', 'fission') or yaml path."""
+        resolved = self.resolve_config_path(config_file)
+        with open(self._DEFAULT_CONFIG_PATH, "r", encoding="utf-8") as stream:
+            base_dict = yaml.safe_load(stream)
+        if os.path.abspath(resolved) != os.path.abspath(self._DEFAULT_CONFIG_PATH):
+            with open(resolved, "r", encoding="utf-8") as stream:
+                override_dict = yaml.safe_load(stream)
+            config_dict = _deep_merge(base_dict, override_dict)
+        else:
+            config_dict = base_dict
         object.__setattr__(self, "config", ConfigNode(config_dict))
+        return self
+
+    def set_mode(self, mode):
+        """Switches PriX's MPC approximation backend ('lut', 'shaft', 'crypten', 'fission')."""
+        return self.load_config(mode)
 
     def set_config(self, config):
         if isinstance(config, PrixConfig):
@@ -85,7 +131,15 @@ class PrixConfig:
             object.__setattr__(self, "config", config)
 
     def __getattribute__(self, name):
-        if name in ("config", "load_config", "set_config", "get_default_config_path", "temp_override"):
+        if name in (
+            "config",
+            "load_config",
+            "set_mode",
+            "set_config",
+            "get_default_config_path",
+            "resolve_config_path",
+            "temp_override",
+        ):
             return object.__getattribute__(self, name)
         try:
             return object.__getattribute__(self, name)

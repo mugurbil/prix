@@ -7,6 +7,7 @@
 
 import copy
 import ctypes
+import functools
 import logging
 import multiprocessing
 import multiprocessing.connection
@@ -15,11 +16,27 @@ import threading
 import time
 import uuid
 
+import numpy as np
+
 import prix
 from prix.communicator.process_communicator import InProcessCommunicator
 from prix.config import cfg
 from prix.evaluator import EvaluatorServer
 from prix.provider import TTPServer
+
+
+def _to_host_return_value(val):
+    """Converts JAX / PriX arrays inside a return value to host NumPy arrays for IPC."""
+    if val is None:
+        return None
+    if hasattr(val, "__jax_array__") or type(val).__module__.startswith("jax"):
+        return np.asarray(val)
+    if isinstance(val, (tuple, list)):
+        converted = [_to_host_return_value(x) for x in val]
+        return tuple(converted) if isinstance(val, tuple) else converted
+    if isinstance(val, dict):
+        return {k: _to_host_return_value(v) for k, v in val.items()}
+    return val
 
 
 class MultiProcessLauncher:
@@ -32,6 +49,8 @@ class MultiProcessLauncher:
         run_process_fn=None,
         fn_args=None,
         cfg_file=None,
+        mode=None,
+        device=None,
     ):
         # Support both (world_size, evaluator_size, run_process_fn, fn_args)
         # and (world_size, run_process_fn, fn_args, cfg_file) signatures
@@ -42,8 +61,14 @@ class MultiProcessLauncher:
             run_process_fn = evaluator_size
             evaluator_size = getattr(fn_args, "evaluator_size", 0) if fn_args is not None else 0
 
+        if mode is not None and cfg_file is None:
+            cfg_file = mode
+
         if cfg_file is not None:
             cfg.load_config(cfg_file)
+
+        if evaluator_size == 0 and getattr(cfg.encoder.trunc_method, "prod", None) == "fission":
+            evaluator_size = 1
 
         os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
         ctx = multiprocessing.get_context("fork")
@@ -54,6 +79,8 @@ class MultiProcessLauncher:
 
         mailbox = [ctx.Queue() for _ in range(total_ranks)]
         barrier = ctx.Barrier(world_size)
+        self._result_queue = ctx.Queue()
+        self.return_value = None
         if world_size == 2:
             shm_elems = InProcessCommunicator.SHM_SLOT_ELEMS
             InProcessCommunicator.shm_buffers = [
@@ -73,7 +100,11 @@ class MultiProcessLauncher:
             new_args = copy.deepcopy(fn_args) if fn_args is not None else None
             if new_args is not None and getattr(new_args, "multi_gpu", False):
                 new_args.device = f"cuda:{rank}"
-            device = getattr(new_args, "device", None) if new_args is not None else None
+            proc_device = (
+                device
+                if device is not None
+                else (getattr(new_args, "device", None) if new_args is not None else None)
+            )
             process_name = f"process {rank}"
             process = ctx.Process(
                 target=self.__class__._run_process,
@@ -86,8 +117,9 @@ class MultiProcessLauncher:
                     barrier,
                     run_process_fn,
                     new_args,
-                    device,
+                    proc_device,
                     cfg_file,
+                    self._result_queue if rank == 0 else None,
                 ),
             )
             self.processes.append(process)
@@ -107,6 +139,7 @@ class MultiProcessLauncher:
                     None,
                     None,
                     cfg_file,
+                    None,
                 ),
             )
 
@@ -126,6 +159,7 @@ class MultiProcessLauncher:
                     None,
                     "cpu",
                     cfg_file,
+                    None,
                 ),
             )
             self.eval_processes.append(process)
@@ -142,6 +176,7 @@ class MultiProcessLauncher:
         fn_args,
         device=None,
         cfg_file=None,
+        result_queue=None,
     ):
         orig_logging_level = logging.getLogger().level
         logging.getLogger().setLevel(logging.INFO)
@@ -157,9 +192,17 @@ class MultiProcessLauncher:
         logging.getLogger().setLevel(orig_logging_level)
         try:
             if fn_args is None:
-                run_process_fn()
+                ret = run_process_fn()
+            elif isinstance(fn_args, tuple) and len(fn_args) == 2 and fn_args[0] == "__prix_call_args__":
+                call_args, call_kwargs = fn_args[1]
+                ret = run_process_fn(*call_args, **call_kwargs)
             else:
-                run_process_fn(fn_args)
+                ret = run_process_fn(fn_args)
+            if result_queue is not None and ret is not None:
+                try:
+                    result_queue.put(_to_host_return_value(ret))
+                except Exception:
+                    pass
         finally:
             if rank < world_size and prix.comm.is_initialized():
                 prix.uninit()
@@ -197,6 +240,12 @@ class MultiProcessLauncher:
         for process in self.eval_processes:
             process.join(timeout=2.0)
         self.terminate()
+        try:
+            if not self._result_queue.empty():
+                self.return_value = self._result_queue.get_nowait()
+        except Exception:
+            pass
+        return self.return_value
 
     def terminate(self):
         for process in self.processes:
@@ -207,6 +256,76 @@ class MultiProcessLauncher:
         for process in self.eval_processes:
             if process.is_alive():
                 process.terminate()
+
+
+def run(
+    fn,
+    *args,
+    world_size=2,
+    mode=None,
+    evaluator_size=0,
+    device=None,
+    cfg_file=None,
+    timeout=None,
+    **kwargs,
+):
+    """Runs `fn(*args, **kwargs)` across `world_size` MPC parties and returns rank 0's result."""
+    fn_args = ("__prix_call_args__", (args, kwargs)) if (args or kwargs) else None
+    launcher = MultiProcessLauncher(
+        world_size=world_size,
+        evaluator_size=evaluator_size,
+        run_process_fn=fn,
+        fn_args=fn_args,
+        cfg_file=cfg_file,
+        mode=mode,
+        device=device,
+    )
+    launcher.start()
+    return launcher.join(timeout=timeout)
+
+
+def run_multiprocess(
+    world_size=2,
+    mode=None,
+    evaluator_size=0,
+    device=None,
+    cfg_file=None,
+):
+    """
+    CrypTen-compatible decorator to run a function across `world_size` MPC parties:
+
+        @prix.mpc.run_multiprocess(world_size=2, mode="shaft")
+        def demo():
+            x = prix.cryptensor([1.0, 2.0, 3.0])
+            return (x * 2).get_plain_text()
+    """
+    # Support bare `@prix.mpc.run_multiprocess` without parentheses
+    if callable(world_size):
+        fn = world_size
+
+        @functools.wraps(fn)
+        def _bare_wrapper(*args, **kwargs):
+            return run(fn, *args, world_size=2, **kwargs)
+
+        return _bare_wrapper
+
+    def _decorator(fn):
+        @functools.wraps(fn)
+        def _wrapper(*args, **kwargs):
+            return run(
+                fn,
+                *args,
+                world_size=world_size,
+                mode=mode,
+                evaluator_size=evaluator_size,
+                device=device,
+                cfg_file=cfg_file,
+                **kwargs,
+            )
+
+        return _wrapper
+
+    return _decorator
 
 
 class MultiThreadLauncher:

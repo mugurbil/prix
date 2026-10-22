@@ -1,10 +1,15 @@
-<p align="center"><img width="70%" src="https://github.com/mugurbil/prix/blob/main/prix.png" alt="PriX logo" /></p>
+<p align="center"><img width="35%" src="https://github.com/mugurbil/prix/blob/main/prix.png" alt="PriX logo" /></p>
 
+[![PyPI version](https://img.shields.io/pypi/v/prix-jax.svg)](https://pypi.org/project/prix-jax/)
+[![Tests](https://github.com/mugurbil/prix/actions/workflows/tests.yml/badge.svg)](https://github.com/mugurbil/prix/actions/workflows/tests.yml)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/prix_vs_curl_gpu_colab.ipynb)
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/mugurbil/prix/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mugurbil/prix/blob/main/CONTRIBUTING.md)
 --------------------------------------------------------------------------------
 
-**PriX** is a JAX/XLA framework for **Private Accelerated Transformers** via Secure Multi-Party Computation (MPC), implementing Wavelet-encoded Look-Up Tables (Haar and Biorthogonal 2.2), SHAFT constant-round Fourier-series activations and ODE softmax, `[EGK+20]` probabilistic truncation, and Fission hybrid plaintext evaluators.
+**PriX** is a **modern, high-performance JAX/XLA drop-in alternative to [CrypTen (NeurIPS 2021)](https://proceedings.neurips.cc/paper/2021/hash/2754518221cfbc8d25c13a06a4cb8421-Abstract.html)** built for **Private Machine Learning and Private LLM / Transformer Research** via Secure Multi-Party Computation (MPC).
+
+Write familiar CrypTen-style Python (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (CPU, CUDA GPU, TPU)**—and switch between four state-of-the-art MPC approximation paradigms ([**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045), [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="lut" | "shaft" | "crypten" | "fission"`).
 
 > [!WARNING]
 > **Research prototype — not yet suitable for protecting real secrets.**
@@ -12,7 +17,23 @@
 > - The default `TFP` (Trusted First Party) provider lets party 0 generate all correlated randomness, so **party 0 can learn every secret** (as in CrypTen). Use it for benchmarking only; `TTP` assumes a non-colluding dealer.
 > - Security is semi-honest (honest-but-curious) only.
 
-## Installation & Quickstart
+---
+
+## Why PriX over CrypTen?
+
+Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) pioneered ML-friendly MPC in PyTorch, but has been archived since 2023 and is pinned to legacy Python/PyTorch versions, while recent MPC breakthroughs—[CuRL (CAMLIS 2024)](https://eprint.iacr.org/2024/1045), [SHAFT (NDSS 2025)](https://eprint.iacr.org/2024/1965), and [Fission (IEEE CNS 2025)](https://eprint.iacr.org/2025/653)—live in separate PyTorch forks ([jimouris/curl](https://github.com/jimouris/curl), [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT)). **PriX** unifies all four in a single, actively maintained JAX/XLA package:
+
+| Feature | CrypTen (PyTorch) | **PriX (JAX/XLA)** |
+|---|---|---|
+| **Python & Accelerator Support** | Legacy Python / `torch==1.9` | **Python 3.10–3.13**, modern **CPU, CUDA GPU, & TPU** via `pip install prix-jax` |
+| **API Ergonomics** | `crypten.cryptensor`, `@run_multiprocess`, `crypten.nn` | **Drop-in CrypTen-compatible API** (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn`) |
+| **Nonlinear Approximation Backends** | Polynomial / NR / limit only (or separate forks) | **4 built-in backends in 1 line** (`mode="lut" \| "shaft" \| "crypten" \| "fission"`) |
+| **Kernel Execution** | Eager PyTorch op-by-op launches | **Whole-graph `@jax.jit` XLA fusion** (fused Kogge-Stone adder, LUT gather, Fourier & ODE steps) |
+| **Performance (CPU & GPU)** | Baseline (`1.0x`) | **1.5x–6.3x faster on CPU**, **2.0x–10.3x faster on GPU** across all 60 benchmarks |
+
+---
+
+## Installation
 
 Install from PyPI:
 ```bash
@@ -21,8 +42,93 @@ pip install prix-jax
 
 Or install from source:
 ```bash
+git clone https://github.com/mugurbil/prix.git
+cd prix
 pip install -e .
 ```
+
+---
+
+## 30-Second Quickstart for Researchers
+
+### 1. Secret Sharing & Multi-Party Computation (CrypTen-Style API)
+
+If you know CrypTen, you already know PriX. Decorate any function with `@prix.mpc.run_multiprocess` (or call `prix.run(fn, ...)`):
+
+```python
+import prix
+
+@prix.mpc.run_multiprocess(world_size=2, mode="shaft")
+def private_inference_demo():
+    # Party 0 encrypts input x; Party 1 encrypts weights w
+    x = prix.cryptensor([[1.0, -0.5, 2.0]], src=0)
+    w = prix.cryptensor([[0.5, 1.0], [-1.0, 0.25], [0.8, -0.5]], src=1)
+
+    # Private matrix multiplication + nonlinear activations under MPC
+    logits = (x @ w).gelu()
+    probs = logits.softmax(dim=-1)
+
+    # Reconstruct plaintext result
+    return probs.get_plain_text()
+
+print("Decrypted probabilities:", private_inference_demo())
+```
+
+### 2. One-Line Ablations Across MPC Approximation Paradigms
+
+Running ablation studies for a paper? Switch between all four MPC nonlinear approximation backends using `mode=` (or `prix.set_mode(...)`) without touching your model code:
+
+```python
+import prix
+
+def eval_gelu():
+    x = prix.cryptensor([-2.0, -0.5, 0.0, 0.5, 2.0])
+    return x.gelu().get_plain_text()
+
+for mode in ["crypten", "shaft", "lut", "fission"]:
+    out = prix.run(eval_gelu, world_size=2, mode=mode)
+    print(f"[{mode:>7}] GeLU:", out.round(4))
+```
+
+| `mode` | Nonlinearities & Truncation | Paper & Reference Code |
+|---|---|---|
+| **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045) · [jimouris/curl](https://github.com/jimouris/curl) |
+| **`"shaft"`** | 1-round trigonometric-triple Fourier-series GeLU / SiLU / Erf / Tanh / Sigmoid + constant-round Forward-Euler ODE Softmax (`configs/shaft.yaml`) | [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965) · [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT) |
+| **`"crypten"`** | Classic limit `exp`, Newton–Raphson `reciprocal` / `inv_sqrt`, Taylor `erf`, sigmoid-based `silu`, CrypTen truncation (`configs/approximations.yaml`) | [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984) · [facebookresearch/CrypTen](https://github.com/facebookresearch/CrypTen) |
+| **`"fission"`** | Hybrid permute-and-reveal to a non-colluding plaintext evaluator party, auto-spawned by `prix.run` (`configs/fission.yaml`) | [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653) · [jimouris/curl](https://github.com/jimouris/curl) |
+
+### 3. Private Neural Networks & Transformers (`prix.nn`)
+
+Build models with `prix.nn.Module` (`Linear`, `LayerNorm`, `MultiheadAttention`, `GeLU`, `SiLU`, `Softmax`, `Sequential`, etc.), call `.encrypt()`, and run private forward passes:
+
+```python
+import prix
+import prix.nn as nn
+
+class TinyMLP(nn.Module):
+    def __init__(self, d_model=16, d_ff=64):
+        super().__init__()
+        self.norm = nn.LayerNorm(d_model)
+        self.fc1 = nn.Linear(d_model, d_ff)
+        self.act = nn.GELU()
+        self.fc2 = nn.Linear(d_ff, d_model)
+
+    def forward(self, x):
+        return x + self.fc2(self.act(self.fc1(self.norm(x))))
+
+@prix.mpc.run_multiprocess(world_size=2, mode="lut")
+def run_private_mlp():
+    model = TinyMLP(d_model=16, d_ff=64).encrypt(src=0)
+    x = prix.randn(2, 8, 16)  # secret-shared random input (batch=2, seq=8, d=16)
+    y = model(x)
+    return y.get_plain_text().shape
+
+print("Output shape:", run_private_mlp())
+```
+
+---
+
+## Running Tests & Reproducing Benchmarks
 
 To run the unit test suite on CPU:
 ```bash
@@ -30,7 +136,7 @@ JAX_PLATFORMS=cpu python3 -m unittest discover -s tests -q
 ```
 
 To run the head-to-head benchmark suite against the PyTorch **CrypTen** baseline
-([jimouris/curl](https://github.com/jimouris/curl), the CrypTen-based reference implementation of CuRL and Fission, augmented with [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT)):
+([jimouris/curl](https://github.com/jimouris/curl), the CrypTen-based reference implementation of [CuRL (CAMLIS 2024)](https://eprint.iacr.org/2024/1045) and [Fission (IEEE CNS 2025)](https://eprint.iacr.org/2025/653), augmented with [SHAFT (NDSS 2025)](https://github.com/andeskyl/SHAFT)):
 ```bash
 # On CPU (all four approximation modes, both frameworks, then a markdown report)
 JAX_PLATFORMS=cpu python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --device cpu
@@ -41,15 +147,6 @@ python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --d
 # Subset of modes / more repetitions
 python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --modes crypten,shaft,lut --llm-repeats 5
 ```
-
-Each framework is benchmarked in four approximation modes, with identical inputs and the `TFP` provider:
-
-| Mode | Nonlinearities | Config |
-|---|---|---|
-| **CrypTen approximations** | CrypTen's original methods: limit exp, Newton–Raphson reciprocal / inv-sqrt, Taylor erf, sigmoid-based SiLU, CrypTen truncation | `configs/approximations.yaml` |
-| **SHAFT (Fourier + ODE)** | [SHAFT (NDSS 2025)](https://github.com/andeskyl/SHAFT): 1-round trigonometric-triple Fourier-series GeLU / SiLU / Erf / Tanh / Sigmoid and constant-round Forward-Euler ODE Softmax | `configs/shaft.yaml` |
-| **CuRL wavelet LUTs** | Haar / Biorthogonal-2.2 wavelet look-up tables, EGK truncation | `configs/default.yaml` |
-| **Fission evaluator** | Permute-and-reveal to a plaintext evaluator party | `configs/fission.yaml` |
 
 ---
 
@@ -124,6 +221,17 @@ Each framework is benchmarked in four approximation modes, with identical inputs
 | SiLU (32x64) | 124.01 / 46.51 (**2.67x**) | 92.20 / 27.90 (**3.30x**) | 25.96 / 12.99 (**2.00x**) | 7.58 / 1.60 (**4.74x**) |
 | Softmax (4x32x32) | 543.45 / 221.37 (**2.45x**) | 225.10 / 93.67 (**2.40x**) | 491.56 / 190.68 (**2.58x**) | 7.40 / 1.59 (**4.65x**) |
 | LayerNorm (4x32x64) | 92.08 / 42.26 (**2.18x**) | 96.84 / 45.36 (**2.14x**) | 149.84 / 24.11 (**6.22x**) | 9.34 / 3.40 (**2.75x**) |
+
+---
+
+## References
+
+PriX implements and accelerates the protocols and nonlinear approximations introduced in the following works:
+
+- **CrypTen (`mode="crypten"`)** — Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim, and Laurens van der Maaten. *"CrypTen: Secure Multi-Party Computation Meets Machine Learning."* **NeurIPS 2021** ([Paper](https://arxiv.org/abs/2109.00984) · [Code](https://github.com/facebookresearch/CrypTen)).
+- **CuRL (`mode="lut"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1045](https://eprint.iacr.org/2024/1045) · [Code](https://github.com/jimouris/curl)).
+- **SHAFT (`mode="shaft"`)** — Andes Y. L. Kei and Sherman S. M. Chow. *"SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference."* **NDSS 2025** ([ePrint 2024/1965](https://eprint.iacr.org/2024/1965) · [Code](https://github.com/andeskyl/SHAFT)).
+- **Fission (`mode="fission"`)** — Mehmet Ugurbil, Dimitris Mouris, Manuel B. Santos, José Cabrero-Holgueras, Miguel de Vega, and Shubho Sengupta. *"Fission: Distributed Privacy-Preserving Large Language Model Inference."* **IEEE CNS 2025** ([ePrint 2025/653](https://eprint.iacr.org/2025/653) · [Code](https://github.com/jimouris/curl)).
 
 ---
 
