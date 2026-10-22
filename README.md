@@ -29,23 +29,74 @@ To run the unit test suite on CPU:
 JAX_PLATFORMS=cpu python3 -m unittest discover -s tests -q
 ```
 
-To run the head-to-head benchmark suite against [CuRL](https://github.com/jimouris/curl):
+To run the head-to-head benchmark suite against the PyTorch **CrypTen** baseline
+([jimouris/curl](https://github.com/jimouris/curl), the CrypTen-based reference implementation of CuRL and Fission):
 ```bash
-# On CPU
-JAX_PLATFORMS=cpu python3 benchmarks/benchmark_prix_vs_curl.py --curl-root /path/to/curl --device cpu
+# On CPU (all three approximation modes, both frameworks, then a markdown report)
+JAX_PLATFORMS=cpu python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --device cpu
 
 # On GPU (CUDA)
-python3 benchmarks/benchmark_prix_vs_curl.py --curl-root /path/to/curl --device cuda
+python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --device cuda
+
+# Subset of modes / more repetitions
+python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --modes crypten,lut --llm-repeats 5
 ```
+
+Each framework is benchmarked in three approximation modes, with identical inputs and the `TFP` provider:
+
+| Mode | Nonlinearities | Config |
+|---|---|---|
+| **CrypTen approximations** | CrypTen's original methods: limit exp, Newton–Raphson reciprocal / inv-sqrt, Taylor erf, sigmoid-based SiLU, CrypTen truncation | `configs/approximations.yaml` |
+| **CuRL wavelet LUTs** | Haar / Biorthogonal-2.2 wavelet look-up tables, EGK truncation | `configs/default.yaml` |
+| **Fission evaluator** | Permute-and-reveal to a plaintext evaluator party | `configs/fission.yaml` |
 
 ---
 
-## Benchmarks: PriX (JAX) vs. CuRL (PyTorch/CrypTen)
+## Benchmarks: PriX (JAX) vs. CrypTen (PyTorch)
 
-### 1. GPU Benchmarks (NVIDIA Tesla T4, CUDA 13.0)
+### 1. CPU Benchmarks
 
-#### Private LLM Inference — Wavelet LUT Mode (ms)
-| Model | CuRL (PyTorch, ms) | PriX (JAX, ms) | Speedup (CuRL / PriX) |
+#### Private LLM Inference — all modes (ms)
+| Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · CuRL LUTs | PriX · CuRL LUTs | CrypTen · Fission | PriX · Fission |
+|---|---:|---:|---:|---:|---:|---:|
+| BertTiny (2-Block, seq=16) | 1169.60 | 793.09 | 906.21 | 468.34 | 259.57 | 95.84 |
+| BertBase (1-Block, seq=16) | 2205.78 | 765.83 | 2126.69 | 581.06 | 1565.40 | 358.95 |
+| GPT2 (1-Block, seq=16) | 2743.70 | 741.31 | 2372.77 | 522.81 | 2043.39 | 326.48 |
+| Llama (1-Block, d=768, seq=16) | 2072.30 | 579.57 | 1924.62 | 498.19 | 1563.28 | 301.83 |
+| ModernBert (1-Block, seq=16) | 1617.38 | 602.25 | 1481.51 | 423.62 | 1069.99 | 210.09 |
+
+#### PriX speedup over CrypTen — LLM inference
+| Model | CrypTen approx. | CuRL LUTs | Fission |
+|---|---:|---:|---:|
+| BertTiny (2-Block, seq=16) | **1.47x** | **1.93x** | **2.71x** |
+| BertBase (1-Block, seq=16) | **2.88x** | **3.66x** | **4.36x** |
+| GPT2 (1-Block, seq=16) | **3.70x** | **4.54x** | **6.26x** |
+| Llama (1-Block, d=768, seq=16) | **3.58x** | **3.86x** | **5.18x** |
+| ModernBert (1-Block, seq=16) | **2.69x** | **3.50x** | **5.09x** |
+
+#### MPC Primitives & Nonlinearities on CPU (ms, CrypTen / PriX)
+| Benchmark | CrypTen approx. | CuRL LUTs | Fission |
+|---|---:|---:|---:|
+| Private MatMul (128x128) | 23.17 / 7.43 (**3.12x**) | 27.32 / 7.50 (**3.64x**) | 23.93 / 6.31 (**3.79x**) |
+| Private Mul (128x128) | 5.54 / 4.03 (**1.38x**) | 8.24 / 6.64 (**1.24x**) | 4.79 / 3.36 (**1.42x**) |
+| Comparison / ReLU (32x64) | 26.15 / 18.61 (**1.41x**) | 30.14 / 19.58 (**1.54x**) | 26.53 / 16.93 (**1.57x**) |
+| Exp (32x64) | 15.72 / 14.41 (**1.09x**) | 52.30 / 25.51 (**2.05x**) | 7.75 / 1.34 (**5.78x**) |
+| Reciprocal (32x64) | 76.36 / 61.07 (**1.25x**) | 35.11 / 11.48 (**3.06x**) | 6.22 / 2.11 (**2.95x**) |
+| InvSqrt (32x64) | 53.73 / 34.28 (**1.57x**) | 96.14 / 16.45 (**5.84x**) | 7.20 / 1.32 (**5.44x**) |
+| GeLU (32x64) | 89.22 / 74.00 (**1.21x**) | 29.60 / 8.49 (**3.49x**) | 6.55 / 1.51 (**4.34x**) |
+| SiLU (32x64) | 75.68 / 57.32 (**1.32x**) | 34.97 / 6.46 (**5.41x**) | 5.38 / 1.87 (**2.88x**) |
+| Softmax (4x32x32) | 310.40 / 233.34 (**1.33x**) | 297.92 / 195.87 (**1.52x**) | 10.67 / 2.08 (**5.12x**) |
+| LayerNorm (4x32x64) | 59.27 / 34.58 (**1.71x**) | 42.68 / 13.58 (**3.14x**) | 12.69 / 2.59 (**4.90x**) |
+
+---
+
+### 2. GPU Benchmarks (NVIDIA Tesla T4, CUDA 13.0)
+
+> [!NOTE]
+> These GPU numbers were measured with the previous benchmark script (CuRL LUT and Fission modes only, before the security fixes). They will be refreshed with `benchmark_prix_vs_crypten.py` including the CrypTen-approximations mode.
+
+#### Private LLM Inference — CuRL Wavelet LUT Mode (ms)
+| Model | CrypTen (PyTorch, ms) | PriX (JAX, ms) | Speedup (CrypTen / PriX) |
 |---|---:|---:|---:|
 | BertTiny (2-Block, seq=16) | 1857.90 | 1469.43 | **1.26x** |
 | BertBase (1-Block, seq=16) | 1678.74 | 1089.91 | **1.54x** |
@@ -54,7 +105,7 @@ python3 benchmarks/benchmark_prix_vs_curl.py --curl-root /path/to/curl --device 
 | ModernBert (1-Block, seq=16) | 1438.15 | 954.41 | **1.51x** |
 
 #### Private LLM Inference — Fission Evaluator Mode (ms)
-| Model | CuRL (PyTorch, ms) | PriX (JAX, ms) | Speedup (CuRL / PriX) |
+| Model | CrypTen (PyTorch, ms) | PriX (JAX, ms) | Speedup (CrypTen / PriX) |
 |---|---:|---:|---:|
 | BertTiny (2-Block, seq=16) | 395.51 | 152.61 | **2.59x** |
 | BertBase (1-Block, seq=16) | 927.31 | 487.84 | **1.90x** |
@@ -62,8 +113,8 @@ python3 benchmarks/benchmark_prix_vs_curl.py --curl-root /path/to/curl --device 
 | Llama (1-Block, d=768, seq=16) | 949.89 | 372.28 | **2.55x** |
 | ModernBert (1-Block, seq=16) | 683.50 | 259.99 | **2.63x** |
 
-#### MPC Primitives & Wavelet LUT Microbenchmarks on GPU (ms)
-| Benchmark | CuRL (PyTorch, ms) | PriX (JAX, ms) | Speedup (CuRL / PriX) |
+#### MPC Primitives & CuRL Wavelet LUT Microbenchmarks on GPU (ms)
+| Benchmark | CrypTen (PyTorch, ms) | PriX (JAX, ms) | Speedup (CrypTen / PriX) |
 |---|---:|---:|---:|
 | Private MatMul (128x128) | 17.92 | 8.82 | **2.03x** |
 | Private Mul (128x128) | 10.17 | 7.77 | **1.31x** |
@@ -76,43 +127,6 @@ python3 benchmarks/benchmark_prix_vs_curl.py --curl-root /path/to/curl --device 
 | SiLU [Haar LUT] (32x64) | 23.92 | 16.58 | **1.44x** |
 | Softmax [LUT] (4x32x32) | 480.23 | 657.41 | **0.73x** |
 | LayerNorm [LUT] (4x32x64) | 145.50 | 31.51 | **4.62x** |
-
----
-
-### 2. CPU Benchmarks
-
-#### Private LLM Inference — Wavelet LUT Mode (ms)
-| Model | CuRL (PyTorch, ms) | PriX (JAX, ms) | Speedup (CuRL / PriX) |
-|---|---:|---:|---:|
-| BertTiny (2-Block, seq=16) | 991.20 | 548.53 | **1.81x** |
-| BertBase (1-Block, seq=16) | 2402.88 | 677.29 | **3.55x** |
-| GPT2 (1-Block, seq=16) | 2344.71 | 575.77 | **4.07x** |
-| Llama (1-Block, d=768, seq=16) | 1797.25 | 578.70 | **3.11x** |
-| ModernBert (1-Block, seq=16) | 1308.25 | 438.92 | **2.98x** |
-
-#### Private LLM Inference — Fission Evaluator Mode (ms)
-| Model | CuRL (PyTorch, ms) | PriX (JAX, ms) | Speedup (CuRL / PriX) |
-|---|---:|---:|---:|
-| BertTiny (2-Block, seq=16) | 253.73 | 118.94 | **2.13x** |
-| BertBase (1-Block, seq=16) | 1594.26 | 398.84 | **4.00x** |
-| GPT2 (1-Block, seq=16) | 2142.77 | 379.05 | **5.65x** |
-| Llama (1-Block, d=768, seq=16) | 1573.41 | 326.26 | **4.82x** |
-| ModernBert (1-Block, seq=16) | 1048.27 | 239.21 | **4.38x** |
-
-#### MPC Primitives & Wavelet LUT Microbenchmarks on CPU (ms)
-| Benchmark | CuRL (PyTorch, ms) | PriX (JAX, ms) | Speedup (CuRL / PriX) |
-|---|---:|---:|---:|
-| Private MatMul (128x128) | 28.12 | 7.90 | **3.56x** |
-| Private Mul (128x128) | 8.35 | 7.20 | **1.16x** |
-| EGK TruncPr (128x128) | 3.94 | 3.63 | **1.08x** |
-| Comparison / ReLU (32x64) | 26.90 | 19.22 | **1.40x** |
-| Exp [Haar LUT] (32x64) | 62.06 | 27.29 | **2.27x** |
-| Reciprocal [Haar LUT] (32x64) | 41.72 | 10.56 | **3.95x** |
-| InvSqrt [Haar LUT] (32x64) | 124.84 | 18.90 | **6.61x** |
-| GeLU [Haar LUT] (32x64) | 26.80 | 6.10 | **4.39x** |
-| SiLU [Haar LUT] (32x64) | 32.54 | 9.01 | **3.61x** |
-| Softmax [LUT] (4x32x32) | 276.64 | 205.43 | **1.35x** |
-| LayerNorm [LUT] (4x32x64) | 44.89 | 16.94 | **2.65x** |
 
 ---
 
