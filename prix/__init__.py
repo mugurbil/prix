@@ -12,6 +12,8 @@ import contextlib
 import logging
 from types import SimpleNamespace
 
+logging.getLogger("jax._src.xla_bridge").setLevel(logging.CRITICAL)
+
 import jax
 import jax.numpy as jnp
 

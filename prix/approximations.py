@@ -8,11 +8,17 @@
 import builtins
 import logging
 import math
+import os
+import tempfile
 
 import jax
 import jax.numpy as jnp
 import numpy as np
 import pywt
+try:
+    from scipy.special import erf as _scipy_erf
+except ImportError:
+    _scipy_erf = None
 
 import prix
 import prix.communicator as comm
@@ -111,21 +117,41 @@ class LookupTables:
         pass
 
     @classmethod
-    def _to_jax_lut(cls, arr, device=None):
+    def _to_int64_np(cls, arr):
         arr_np = np.nan_to_num(
             np.asarray(arr, dtype=np.float64),
             nan=0.0,
             posinf=float(2**62 - 1),
             neginf=float(-(2**62)),
         )
-        arr_np = np.clip(arr_np, float(-(2**62)), float(2**62 - 1))
-        arr_i64 = jnp.asarray(arr_np.astype(np.int64), dtype=DATATYPE)
+        return np.clip(arr_np, float(-(2**62)), float(2**62 - 1)).astype(np.int64)
+
+    @classmethod
+    def _to_jax_lut(cls, arr, device=None):
+        arr_i64 = jnp.asarray(cls._to_int64_np(arr), dtype=DATATYPE)
         if device is not None:
             arr_i64 = jax.device_put(arr_i64, resolve_device(device))
         return arr_i64
 
     @classmethod
+    def _cache_path(cls, kind, name, max_bits, lut_bits, negative_values):
+        cache_dir = os.path.join(tempfile.gettempdir(), "prix_lut_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        fname = f"{kind}_{name}_p{cfg.encoder.precision_bits}_m{max_bits}_l{lut_bits}_n{int(negative_values)}.npy"
+        return os.path.join(cache_dir, fname)
+
+    @classmethod
     def generate_haar(cls, max_bits, lut_bits, function, name, negative_values=False, device=None):
+        cpath = cls._cache_path("haar", name, max_bits, lut_bits, negative_values)
+        if os.path.exists(cpath):
+            try:
+                arr_i64 = jnp.asarray(np.load(cpath), dtype=DATATYPE)
+                if device is not None:
+                    arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+                dict.__setitem__(cls.LUTs, name, arr_i64)
+                return
+            except Exception:
+                pass
         scale = 2 ** cfg.encoder.precision_bits
         max_element = 2 ** max_bits
         depth = max_bits + cfg.encoder.precision_bits - lut_bits
@@ -135,14 +161,30 @@ class LookupTables:
             xs = np.linspace(1.0 / scale, max_element, int(max_element * scale))
         full = function(xs)
         coeffs, *_ = pywt.wavedec(full, "haar", level=depth)
-        dict.__setitem__(
-            cls.LUTs,
-            name,
-            cls._to_jax_lut(coeffs * (2 ** (-depth / 2.0)) * scale, device=device),
-        )
+        arr_np = cls._to_int64_np(coeffs * (2 ** (-depth / 2.0)) * scale)
+        try:
+            tmp_p = f"{cpath}.{os.getpid()}.tmp.npy"
+            np.save(tmp_p, arr_np)
+            os.replace(tmp_p, cpath)
+        except Exception:
+            pass
+        arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
+        if device is not None:
+            arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+        dict.__setitem__(cls.LUTs, name, arr_i64)
 
     @classmethod
     def generate_bior(cls, max_bits, lut_bits, function, name, negative_values=False, device=None):
+        cpath = cls._cache_path("bior", name, max_bits, lut_bits, negative_values)
+        if os.path.exists(cpath):
+            try:
+                arr_i64 = jnp.asarray(np.load(cpath), dtype=DATATYPE)
+                if device is not None:
+                    arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+                dict.__setitem__(cls.LUTs, name, arr_i64)
+                return
+            except Exception:
+                pass
         scale = 2 ** cfg.encoder.precision_bits
         max_element = 2 ** max_bits
         depth = max_bits + cfg.encoder.precision_bits - lut_bits
@@ -166,11 +208,17 @@ class LookupTables:
                     np.roll(coeffs, -3)[: 2 ** lut_bits],
                 ]
             )
-        dict.__setitem__(
-            cls.LUTs,
-            name,
-            cls._to_jax_lut((coeffs * scale) * (2 ** (depth * 0.5)), device=device),
-        )
+        arr_np = cls._to_int64_np((coeffs * scale) * (2 ** (depth * 0.5)))
+        try:
+            tmp_p = f"{cpath}.{os.getpid()}.tmp.npy"
+            np.save(tmp_p, arr_np)
+            os.replace(tmp_p, cpath)
+        except Exception:
+            pass
+        arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
+        if device is not None:
+            arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+        dict.__setitem__(cls.LUTs, name, arr_i64)
 
     @classmethod
     def get_lut(cls, name, device=None):
@@ -186,50 +234,55 @@ class LookupTables:
         scale = 2 ** cfg.encoder.precision_bits
         sigmoid_fn = lambda x: 1.0 / (1.0 + np.exp(-x))
         relu_fn = lambda x: x * (x > 0)
-        erf_fn = lambda x: jax.scipy.special.erf(jnp.asarray(x, dtype=jnp.float64)).__array__()
+        erf_fn = (
+            _scipy_erf
+            if _scipy_erf is not None
+            else (lambda x: jax.scipy.special.erf(jnp.asarray(x, dtype=jnp.float64)).__array__())
+        )
         gelu_fn = lambda x: x * (1.0 + erf_fn(x / math.sqrt(2.0))) / 2.0
         silu_fn = lambda x: x * sigmoid_fn(x)
 
-        if name in ("exp_haar", "exp_bior", "nexp_low", "nexp_high", "nexp_haar", "nexp_bior"):
-            max_bits = cfg.functions.exp.lut_max_bits
+        if name == "exp_haar":
             cls.generate_haar(
-                max_bits,
+                cfg.functions.exp.lut_max_bits,
                 cfg.functions.exp.haar_size_bits,
                 np.exp,
                 "exp_haar",
                 negative_values=True,
                 device=device,
             )
+        elif name == "exp_bior":
             cls.generate_bior(
-                max_bits,
+                cfg.functions.exp.lut_max_bits,
                 cfg.functions.exp.bior_size_bits,
                 np.exp,
                 "exp_bior",
                 negative_values=True,
                 device=device,
             )
-
+        elif name in ("nexp_low", "nexp_high"):
             size = cfg.functions.exp.neg_lut_size
             full_low = np.exp(-np.linspace(1.0 / size, 1.0 / (2**4), size))
-            cls.LUTs["nexp_low"] = cls._to_jax_lut(full_low * scale, device=device)
+            dict.__setitem__(cls.LUTs, "nexp_low", cls._to_jax_lut(full_low * scale, device=device))
             full_high = np.exp(-np.linspace(1.0 * (2**4) / size, 2**4, size))
-            cls.LUTs["nexp_high"] = cls._to_jax_lut(full_high * scale, device=device)
-
+            dict.__setitem__(cls.LUTs, "nexp_high", cls._to_jax_lut(full_high * scale, device=device))
+        elif name == "nexp_haar":
             cls.generate_haar(
-                max_bits,
+                cfg.functions.exp.lut_max_bits,
                 cfg.functions.exp.haar_size_bits,
                 lambda x: np.exp(-x),
                 "nexp_haar",
                 device=device,
             )
+        elif name == "nexp_bior":
             cls.generate_bior(
-                max_bits,
+                cfg.functions.exp.lut_max_bits,
                 cfg.functions.exp.bior_size_bits,
                 lambda x: np.exp(-x),
                 "nexp_bior",
                 device=device,
             )
-        elif name in ("log_haar", "log_bior"):
+        elif name == "log_haar":
             cls.generate_haar(
                 cfg.functions.log.lut_max_bits,
                 cfg.functions.log.haar_size_bits,
@@ -237,6 +290,7 @@ class LookupTables:
                 "log_haar",
                 device=device,
             )
+        elif name == "log_bior":
             cls.generate_bior(
                 cfg.functions.log.lut_max_bits,
                 cfg.functions.log.bior_size_bits,
@@ -244,7 +298,7 @@ class LookupTables:
                 "log_bior",
                 device=device,
             )
-        elif name in ("reciprocal_haar", "reciprocal_bior"):
+        elif name == "reciprocal_haar":
             cls.generate_haar(
                 cfg.functions.reciprocal.lut_max_bits,
                 cfg.functions.reciprocal.haar_size_bits,
@@ -252,6 +306,7 @@ class LookupTables:
                 "reciprocal_haar",
                 device=device,
             )
+        elif name == "reciprocal_bior":
             cls.generate_bior(
                 cfg.functions.reciprocal.lut_max_bits,
                 cfg.functions.reciprocal.bior_size_bits,
@@ -259,7 +314,7 @@ class LookupTables:
                 "reciprocal_bior",
                 device=device,
             )
-        elif name in ("sqrt_haar", "sqrt_bior"):
+        elif name == "sqrt_haar":
             cls.generate_haar(
                 cfg.functions.sqrt.lut_max_bits,
                 cfg.functions.sqrt.haar_size_bits,
@@ -267,6 +322,7 @@ class LookupTables:
                 "sqrt_haar",
                 device=device,
             )
+        elif name == "sqrt_bior":
             cls.generate_bior(
                 cfg.functions.sqrt.lut_max_bits,
                 cfg.functions.sqrt.bior_size_bits,
@@ -282,7 +338,7 @@ class LookupTables:
                 "inv_sqrt_haar",
                 device=device,
             )
-        elif name in ("inv_sqrt_tailored_haar_0", "inv_sqrt_tailored_haar_1"):
+        elif name == "inv_sqrt_tailored_haar_0":
             cls.generate_haar(
                 cfg.functions.inv_sqrt.tailored_0_lut_max_bits,
                 cfg.functions.inv_sqrt.tailored_0_haar_size_bits,
@@ -290,6 +346,7 @@ class LookupTables:
                 "inv_sqrt_tailored_haar_0",
                 device=device,
             )
+        elif name == "inv_sqrt_tailored_haar_1":
             cls.generate_haar(
                 cfg.functions.inv_sqrt.tailored_1_lut_max_bits,
                 cfg.functions.inv_sqrt.tailored_1_haar_size_bits,
@@ -305,7 +362,7 @@ class LookupTables:
                 "inv_sqrt_bior",
                 device=device,
             )
-        elif name.startswith("sin_") or name.startswith("cos_"):
+        elif name == "sin_haar":
             cls.generate_haar(
                 0,
                 cfg.functions.trigonometry.haar_size_bits,
@@ -313,6 +370,7 @@ class LookupTables:
                 "sin_haar",
                 device=device,
             )
+        elif name == "sin_bior":
             cls.generate_bior(
                 0,
                 cfg.functions.trigonometry.bior_size_bits,
@@ -320,6 +378,7 @@ class LookupTables:
                 "sin_bior",
                 device=device,
             )
+        elif name == "sin_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.trigonometry.lut_max_bits,
                 cfg.functions.trigonometry.haar_size_bits,
@@ -328,6 +387,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "sin_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.trigonometry.lut_max_bits,
                 cfg.functions.trigonometry.bior_size_bits,
@@ -336,6 +396,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "cos_haar":
             cls.generate_haar(
                 0,
                 cfg.functions.trigonometry.haar_size_bits,
@@ -343,6 +404,7 @@ class LookupTables:
                 "cos_haar",
                 device=device,
             )
+        elif name == "cos_bior":
             cls.generate_bior(
                 0,
                 cfg.functions.trigonometry.bior_size_bits,
@@ -350,6 +412,7 @@ class LookupTables:
                 "cos_bior",
                 device=device,
             )
+        elif name == "cos_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.trigonometry.lut_max_bits,
                 cfg.functions.trigonometry.haar_size_bits,
@@ -358,6 +421,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "cos_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.trigonometry.lut_max_bits,
                 cfg.functions.trigonometry.bior_size_bits,
@@ -366,7 +430,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
-        elif name.startswith("sigmoid_") or name.startswith("tanh_"):
+        elif name == "sigmoid_haar":
             cls.generate_haar(
                 cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits,
                 cfg.functions.sigmoid_tanh.haar_size_bits,
@@ -374,6 +438,7 @@ class LookupTables:
                 "sigmoid_haar",
                 device=device,
             )
+        elif name == "sigmoid_bior":
             cls.generate_bior(
                 cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits,
                 cfg.functions.sigmoid_tanh.bior_size_bits,
@@ -381,6 +446,7 @@ class LookupTables:
                 "sigmoid_bior",
                 device=device,
             )
+        elif name == "sigmoid_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits,
                 cfg.functions.sigmoid_tanh.haar_size_bits,
@@ -389,6 +455,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "sigmoid_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits,
                 cfg.functions.sigmoid_tanh.bior_size_bits,
@@ -397,6 +464,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "tanh_haar":
             cls.generate_haar(
                 cfg.functions.sigmoid_tanh.tanh_lut_max_bits,
                 cfg.functions.sigmoid_tanh.haar_size_bits,
@@ -404,6 +472,7 @@ class LookupTables:
                 "tanh_haar",
                 device=device,
             )
+        elif name == "tanh_bior":
             cls.generate_bior(
                 cfg.functions.sigmoid_tanh.tanh_lut_max_bits,
                 cfg.functions.sigmoid_tanh.bior_size_bits,
@@ -411,6 +480,7 @@ class LookupTables:
                 "tanh_bior",
                 device=device,
             )
+        elif name == "tanh_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.sigmoid_tanh.tanh_lut_max_bits,
                 cfg.functions.sigmoid_tanh.haar_size_bits,
@@ -419,6 +489,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "tanh_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.sigmoid_tanh.tanh_lut_max_bits,
                 cfg.functions.sigmoid_tanh.bior_size_bits,
@@ -427,7 +498,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
-        elif name.startswith("erf_"):
+        elif name == "erf_haar":
             cls.generate_haar(
                 cfg.functions.erf.lut_max_bits,
                 cfg.functions.erf.haar_size_bits,
@@ -435,6 +506,7 @@ class LookupTables:
                 "erf_haar",
                 device=device,
             )
+        elif name == "erf_bior":
             cls.generate_bior(
                 cfg.functions.erf.lut_max_bits,
                 cfg.functions.erf.bior_size_bits,
@@ -442,6 +514,7 @@ class LookupTables:
                 "erf_bior",
                 device=device,
             )
+        elif name == "erf_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.erf.lut_max_bits,
                 cfg.functions.erf.haar_size_bits,
@@ -450,6 +523,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "erf_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.erf.lut_max_bits,
                 cfg.functions.erf.bior_size_bits,
@@ -458,7 +532,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
-        elif name.startswith("gelu_"):
+        elif name == "gelu_haar":
             cls.generate_haar(
                 cfg.functions.gelu.lut_max_bits,
                 cfg.functions.gelu.haar_size_bits,
@@ -466,6 +540,7 @@ class LookupTables:
                 "gelu_haar",
                 device=device,
             )
+        elif name == "gelu_bior":
             cls.generate_bior(
                 cfg.functions.gelu.lut_max_bits,
                 cfg.functions.gelu.bior_size_bits,
@@ -473,6 +548,7 @@ class LookupTables:
                 "gelu_bior",
                 device=device,
             )
+        elif name == "gelu_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.gelu.lut_max_bits,
                 cfg.functions.gelu.haar_size_bits,
@@ -481,6 +557,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "gelu_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.gelu.lut_max_bits,
                 cfg.functions.gelu.bior_size_bits,
@@ -489,7 +566,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
-        elif name.startswith("silu_"):
+        elif name == "silu_haar":
             cls.generate_haar(
                 cfg.functions.silu.lut_max_bits,
                 cfg.functions.silu.haar_size_bits,
@@ -497,6 +574,7 @@ class LookupTables:
                 "silu_haar",
                 device=device,
             )
+        elif name == "silu_bior":
             cls.generate_bior(
                 cfg.functions.silu.lut_max_bits,
                 cfg.functions.silu.bior_size_bits,
@@ -504,6 +582,7 @@ class LookupTables:
                 "silu_bior",
                 device=device,
             )
+        elif name == "silu_haar_lut_only":
             cls.generate_haar(
                 cfg.functions.silu.lut_max_bits,
                 cfg.functions.silu.haar_size_bits,
@@ -512,6 +591,7 @@ class LookupTables:
                 negative_values=True,
                 device=device,
             )
+        elif name == "silu_bior_lut_only":
             cls.generate_bior(
                 cfg.functions.silu.lut_max_bits,
                 cfg.functions.silu.bior_size_bits,

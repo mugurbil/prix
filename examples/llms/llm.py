@@ -93,6 +93,8 @@ class LLMs:
             output = model(x)
         for _ in range(kv_cache):
             output = model(x[:, :1, :])
+        if hasattr(output, "share"):
+            output.share.block_until_ready()
         return output
 
     def get_runtimes(self):
@@ -108,6 +110,10 @@ class LLMs:
             x_enc = prix.cryptensor(x, device=self.device)
 
             llm.eval()
+
+            # Warmup XLA JIT & lazy LUTs
+            _ = LLMs.time_llm(x_enc, llm, kv_cache=0)
+            comm.get().barrier()
 
             runtime_enc, _ = LLMs.time_llm(x_enc, llm, kv_cache=self.kv_cache)
             runtimes_enc.append(runtime_enc)

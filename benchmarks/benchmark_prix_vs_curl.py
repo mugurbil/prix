@@ -96,6 +96,8 @@ def _patch_curl_repo(curl_root):
     init_p = os.path.join(curl_root, "curl/__init__.py")
     if os.path.exists(init_p):
         txt = open(init_p).read()
+        if 'logging.getLogger("jax._src.xla_bridge")' not in txt:
+            txt = 'import logging\nlogging.getLogger("jax._src.xla_bridge").setLevel(logging.CRITICAL)\n' + txt
         target = '            generators[key][device] = torch.Generator(device=torch.device(device))'
         replacement = (
             '            gen = torch.Generator(device=torch.device(device))\n'
@@ -104,7 +106,8 @@ def _patch_curl_repo(curl_root):
             '            generators[key][torch.device("cuda", 0)] = gen'
         )
         if target in txt and 'generators[key][torch.device("cuda", 0)]' not in txt:
-            open(init_p, "w").write(txt.replace(target, replacement))
+            txt = txt.replace(target, replacement)
+        open(init_p, "w").write(txt)
 
 
 # ============================================================================
@@ -157,6 +160,7 @@ def _prix_micro_worker(args_dict):
         comm.get().barrier()
         med_ms, _ = _bench_fn(fn, warmup=2, repeats=5, sync_fn=sync)
         if rank == 0:
+            print(f"[PriX ({device}) Micro] {name}: {med_ms:.2f} ms", flush=True)
             out_dict[name] = med_ms
     if rank == 0:
         _save_part(out_path, out_dict)
@@ -341,6 +345,7 @@ def _curl_micro_worker(args_dict):
             comm.get().barrier()
             med_ms, _ = _bench_fn(fn, warmup=2, repeats=5, sync_fn=sync)
             if rank == 0:
+                print(f"[CuRL ({device}) Micro] {name}: {med_ms:.2f} ms", flush=True)
                 out_dict[name] = med_ms
     if rank == 0:
         _save_part(out_path, out_dict)
