@@ -31,6 +31,9 @@ Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) p
 | **Kernel Execution** | Eager PyTorch op-by-op launches | **`@jax.jit`-compiled local protocol steps** (fused carry-lookahead rounds, LUT gather, limb matmul, Fourier combination) |
 | **Performance (single host, CPU & GPU)** | Baseline (`1.0x`) | Lower latency in every configuration measured. LLM blocks: **2.8x–9.2x faster on CPU**, **2.0x–3.2x faster on GPU**. Primitives: 1.8x–20.8x on CPU, 1.4x–16.2x on GPU ([details](#benchmarks-prix-jax-vs-crypten-pytorch)) |
 
+
+<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/llm_latency.png" alt="End-to-end private inference latency of a GPT-2 block, CrypTen vs PriX, on CPU and GPU across five approximation modes" width="95%"/></p>
+
 ---
 
 ## Installation
@@ -174,9 +177,20 @@ python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --m
 > [!NOTE]
 > **How to read these numbers.** Both frameworks run all parties as processes on **one host**. There is no network emulation, and communication volume isn't reported. CrypTen uses `gloo` over loopback TCP, and PriX uses a shared-memory ring buffer, so part of the speedup comes from the transport rather than from kernel fusion. Each primitive is the median of 5 timed runs (after 2 warmups), and each LLM block is the median of 3 timed runs (after 1 warmup). Differences of roughly 10% or less are within noise. Benchmarks measure latency only, not model accuracy. The `poly` and SHAFT baselines on the CrypTen side are one-to-one ports of PriX's algorithms; see [`benchmarks/benchmark_prix_vs_crypten.py`](benchmarks/benchmark_prix_vs_crypten.py).
 
+### Charts
+
+<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/llm_speedup.png" alt="Heatmap of PriX speedup over CrypTen on five Transformer blocks across five approximation modes, CPU and GPU" width="95%"/></p>
+
+<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/primitive_speedup.png" alt="Heatmap of PriX speedup over CrypTen on ten MPC primitives across five approximation modes, CPU and GPU" width="95%"/></p>
+
+The darkest **Fission** cells partly reflect CPU contention from the extra evaluator process on the CrypTen side (see the notes below). Regenerate the charts from the raw results in [`benchmarks/results/`](benchmarks/results) with `python benchmarks/plot_results.py`.
+
 ### 1. CPU Benchmarks
 
 AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). All five modes were measured in one session.
+
+<details>
+<summary><b>CPU tables: LLM latency, speedups, and primitives (click to expand)</b></summary>
 
 #### Private LLM Inference — all modes (ms)
 | Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · CuRL LUTs | PriX · CuRL LUTs | CrypTen · Fission | PriX · Fission |
@@ -210,6 +224,8 @@ AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). 
 | Softmax (4x32x32) | 293.28 / 103.93 (**2.82x**) | 333.74 / 100.37 (**3.33x**) | 136.18 / 55.29 (**2.46x**) | 284.79 / 82.01 (**3.47x**) | 14.64 / 1.58 (**9.28x**) |
 | LayerNorm (4x32x64) | 55.72 / 22.91 (**2.43x**) | 54.56 / 18.13 (**3.01x**) | 56.83 / 17.13 (**3.32x**) | 50.91 / 14.32 (**3.55x**) | 16.36 / 2.89 (**5.66x**) |
 
+</details>
+
 > [!NOTE]
 > In this session CrypTen's `fission`-mode numbers are inflated even for ReLU, whose protocol is identical in every mode: 53 ms there versus 23–27 ms in the other modes. The extra evaluator process competes for the same CPU, so treat the very large `fission` primitive speedups with caution.
 
@@ -218,6 +234,9 @@ AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). 
 ### 2. GPU Benchmarks (NVIDIA Tesla T4, CUDA)
 
 Google Colab, one Tesla T4. All five modes were measured in one session.
+
+<details>
+<summary><b>GPU tables: LLM latency, speedups, and primitives (click to expand)</b></summary>
 
 #### Private LLM Inference — all modes (ms)
 | Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · CuRL LUTs | PriX · CuRL LUTs | CrypTen · Fission | PriX · Fission |
@@ -250,6 +269,13 @@ Google Colab, one Tesla T4. All five modes were measured in one session.
 | SiLU (32x64) | 148.35 / 57.28 (**2.59x**) | 71.20 / 32.45 (**2.19x**) | 94.54 / 29.58 (**3.20x**) | 27.53 / 12.71 (**2.17x**) | 7.10 / 1.62 (**4.38x**) |
 | Softmax (4x32x32) | 586.17 / 256.97 (**2.28x**) | 593.94 / 226.88 (**2.62x**) | 215.84 / 93.65 (**2.30x**) | 564.97 / 191.22 (**2.95x**) | 8.29 / 1.48 (**5.60x**) |
 | LayerNorm (4x32x64) | 104.48 / 46.18 (**2.26x**) | 107.81 / 42.79 (**2.52x**) | 104.40 / 47.23 (**2.21x**) | 184.10 / 24.14 (**7.63x**) | 8.85 / 2.17 (**4.08x**) |
+
+</details>
+
+> [!NOTE]
+> As on CPU, CrypTen's `fission`-mode ReLU (73 ms) is slower than in the other modes (45–54 ms), even though the protocol is identical. PriX's MatMul is slower in `lut` mode (12.2 ms vs. 3.6–4.9 ms), where products use probabilistic truncation.
+
+
 
 ---
 

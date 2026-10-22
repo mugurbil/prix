@@ -1,0 +1,216 @@
+{
+ "prix": {
+  "crypten": {
+   "micro": {
+    "Private MatMul (128x128)": 4.94,
+    "Private Mul (128x128)": 2.55,
+    "Comparison / ReLU (32x64)": 14.04,
+    "Exp (32x64)": 18.03,
+    "Reciprocal (32x64)": 64.81,
+    "InvSqrt (32x64)": 43.79,
+    "GeLU (32x64)": 76.06,
+    "SiLU (32x64)": 57.28,
+    "Softmax (4x32x32)": 256.97,
+    "LayerNorm (4x32x64)": 46.18
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 908.87,
+    "BertBase (1-Block, seq=16)": 773.28,
+    "GPT2 (1-Block, seq=16)": 802.8,
+    "Llama (1-Block, d=768, seq=16)": 638.33,
+    "ModernBert (1-Block, seq=16)": 572.18
+   }
+  },
+  "poly": {
+   "micro": {
+    "Private MatMul (128x128)": 4.2,
+    "Private Mul (128x128)": 2.49,
+    "Comparison / ReLU (32x64)": 13.82,
+    "Exp (32x64)": 29.61,
+    "Reciprocal (32x64)": 65.19,
+    "InvSqrt (32x64)": 39.39,
+    "GeLU (32x64)": 32.44,
+    "SiLU (32x64)": 32.45,
+    "Softmax (4x32x32)": 226.88,
+    "LayerNorm (4x32x64)": 42.79
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 773.85,
+    "BertBase (1-Block, seq=16)": 765.6,
+    "GPT2 (1-Block, seq=16)": 760.49,
+    "Llama (1-Block, d=768, seq=16)": 640.89,
+    "ModernBert (1-Block, seq=16)": 547.52
+   }
+  },
+  "shaft": {
+   "micro": {
+    "Private MatMul (128x128)": 4.15,
+    "Private Mul (128x128)": 2.76,
+    "Comparison / ReLU (32x64)": 13.98,
+    "Exp (32x64)": 18.02,
+    "Reciprocal (32x64)": 62.27,
+    "InvSqrt (32x64)": 41.59,
+    "GeLU (32x64)": 25.45,
+    "SiLU (32x64)": 29.58,
+    "Softmax (4x32x32)": 93.65,
+    "LayerNorm (4x32x64)": 47.23
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 492.68,
+    "BertBase (1-Block, seq=16)": 657.27,
+    "GPT2 (1-Block, seq=16)": 629.89,
+    "Llama (1-Block, d=768, seq=16)": 501.02,
+    "ModernBert (1-Block, seq=16)": 407.0
+   }
+  },
+  "lut": {
+   "micro": {
+    "Private MatMul (128x128)": 12.22,
+    "Private Mul (128x128)": 5.62,
+    "Comparison / ReLU (32x64)": 13.73,
+    "Exp (32x64)": 25.49,
+    "Reciprocal (32x64)": 11.96,
+    "InvSqrt (32x64)": 12.08,
+    "GeLU (32x64)": 12.88,
+    "SiLU (32x64)": 12.71,
+    "Softmax (4x32x32)": 191.22,
+    "LayerNorm (4x32x64)": 24.14
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 660.26,
+    "BertBase (1-Block, seq=16)": 670.65,
+    "GPT2 (1-Block, seq=16)": 670.36,
+    "Llama (1-Block, d=768, seq=16)": 559.14,
+    "ModernBert (1-Block, seq=16)": 484.17
+   }
+  },
+  "fission": {
+   "micro": {
+    "Private MatMul (128x128)": 3.57,
+    "Private Mul (128x128)": 2.68,
+    "Comparison / ReLU (32x64)": 13.67,
+    "Exp (32x64)": 1.73,
+    "Reciprocal (32x64)": 1.81,
+    "InvSqrt (32x64)": 1.75,
+    "GeLU (32x64)": 1.88,
+    "SiLU (32x64)": 1.62,
+    "Softmax (4x32x32)": 1.48,
+    "LayerNorm (4x32x64)": 2.17
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 155.49,
+    "BertBase (1-Block, seq=16)": 423.73,
+    "GPT2 (1-Block, seq=16)": 437.04,
+    "Llama (1-Block, d=768, seq=16)": 350.65,
+    "ModernBert (1-Block, seq=16)": 240.73
+   }
+  }
+ },
+ "crypten": {
+  "crypten": {
+   "micro": {
+    "Private MatMul (128x128)": 14.21,
+    "Private Mul (128x128)": 4.6,
+    "Comparison / ReLU (32x64)": 50.83,
+    "Exp (32x64)": 32.79,
+    "Reciprocal (32x64)": 141.59,
+    "InvSqrt (32x64)": 89.88,
+    "GeLU (32x64)": 152.44,
+    "SiLU (32x64)": 148.35,
+    "Softmax (4x32x32)": 586.17,
+    "LayerNorm (4x32x64)": 104.48
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 2059.81,
+    "BertBase (1-Block, seq=16)": 1729.39,
+    "GPT2 (1-Block, seq=16)": 1715.69,
+    "Llama (1-Block, d=768, seq=16)": 1684.07,
+    "ModernBert (1-Block, seq=16)": 1538.26
+   }
+  },
+  "poly": {
+   "micro": {
+    "Private MatMul (128x128)": 13.32,
+    "Private Mul (128x128)": 5.4,
+    "Comparison / ReLU (32x64)": 54.01,
+    "Exp (32x64)": 84.77,
+    "Reciprocal (32x64)": 141.5,
+    "InvSqrt (32x64)": 96.3,
+    "GeLU (32x64)": 70.33,
+    "SiLU (32x64)": 71.2,
+    "Softmax (4x32x32)": 593.94,
+    "LayerNorm (4x32x64)": 107.81
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 2002.88,
+    "BertBase (1-Block, seq=16)": 1682.48,
+    "GPT2 (1-Block, seq=16)": 1662.84,
+    "Llama (1-Block, d=768, seq=16)": 1673.81,
+    "ModernBert (1-Block, seq=16)": 1433.7
+   }
+  },
+  "shaft": {
+   "micro": {
+    "Private MatMul (128x128)": 11.26,
+    "Private Mul (128x128)": 4.69,
+    "Comparison / ReLU (32x64)": 45.08,
+    "Exp (32x64)": 33.4,
+    "Reciprocal (32x64)": 147.21,
+    "InvSqrt (32x64)": 91.43,
+    "GeLU (32x64)": 96.21,
+    "SiLU (32x64)": 94.54,
+    "Softmax (4x32x32)": 215.84,
+    "LayerNorm (4x32x64)": 104.4
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 1306.09,
+    "BertBase (1-Block, seq=16)": 1372.0,
+    "GPT2 (1-Block, seq=16)": 1335.14,
+    "Llama (1-Block, d=768, seq=16)": 1316.48,
+    "ModernBert (1-Block, seq=16)": 1121.48
+   }
+  },
+  "lut": {
+   "micro": {
+    "Private MatMul (128x128)": 17.66,
+    "Private Mul (128x128)": 9.77,
+    "Comparison / ReLU (32x64)": 44.58,
+    "Exp (32x64)": 70.83,
+    "Reciprocal (32x64)": 46.67,
+    "InvSqrt (32x64)": 195.46,
+    "GeLU (32x64)": 26.97,
+    "SiLU (32x64)": 27.53,
+    "Softmax (4x32x32)": 564.97,
+    "LayerNorm (4x32x64)": 184.1
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 2102.56,
+    "BertBase (1-Block, seq=16)": 1776.27,
+    "GPT2 (1-Block, seq=16)": 1690.98,
+    "Llama (1-Block, d=768, seq=16)": 1735.99,
+    "ModernBert (1-Block, seq=16)": 1503.04
+   }
+  },
+  "fission": {
+   "micro": {
+    "Private MatMul (128x128)": 16.6,
+    "Private Mul (128x128)": 8.56,
+    "Comparison / ReLU (32x64)": 73.41,
+    "Exp (32x64)": 7.41,
+    "Reciprocal (32x64)": 18.67,
+    "InvSqrt (32x64)": 19.51,
+    "GeLU (32x64)": 7.83,
+    "SiLU (32x64)": 7.1,
+    "Softmax (4x32x32)": 8.29,
+    "LayerNorm (4x32x64)": 8.85
+   },
+   "llm": {
+    "BertTiny (2-Block, seq=16)": 415.48,
+    "BertBase (1-Block, seq=16)": 932.96,
+    "GPT2 (1-Block, seq=16)": 863.79,
+    "Llama (1-Block, d=768, seq=16)": 1016.31,
+    "ModernBert (1-Block, seq=16)": 704.84
+   }
+  }
+ }
+}

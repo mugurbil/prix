@@ -321,6 +321,29 @@ We benchmark 10 MPC primitives and nonlinearities ($\text{MatMul } 128\times 128
 
 \paragraph{Methodology.} All parties run as separate processes on one host and communicate through each framework's own local transport (Section~\ref{sec:collectives}); no network latency or bandwidth limit is emulated, and we do not report communication volume. Each primitive is run 2 times untimed (to exclude JIT compilation and cache warmup) and then timed 5 times; each Transformer block is warmed up once and timed 3 times. Parties synchronize with a barrier before every timed run, device work is synchronized before the timer stops, and we report the median. Within a platform, all five modes of both frameworks were measured in a single session. CPU experiments use the host listed in Table~\ref{tab:cpu_llm}'s caption. GPU experiments use a Google Colab instance with one NVIDIA Tesla T4. With so few repetitions, differences of roughly 10\% or less between the two frameworks should be treated as within run-to-run noise.
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/llm_latency.pdf}
+\caption{End-to-end latency of one GPT-2 block ($d=768$, $L=16$, 2 parties) for CrypTen and PriX under each approximation mode, on CPU (left) and GPU (right). Labels give the PriX speedup.}
+\label{fig:llm_latency}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/llm_speedup.pdf}
+\caption{PriX speedup over CrypTen on all five Transformer blocks and all five approximation modes, on CPU and GPU (log color scale). The CrypTen \texttt{fission} column on CPU is affected by contention from the evaluator process (Section~\ref{sec:evaluation}).}
+\label{fig:llm_speedup}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\textwidth]{figures/primitive_speedup.pdf}
+\caption{PriX speedup over CrypTen on the 10 MPC primitives and nonlinearities, on CPU and GPU (log color scale).}
+\label{fig:primitive_speedup}
+\end{figure}
+
+Figures~\ref{fig:llm_latency}--\ref{fig:primitive_speedup} summarize the results; Tables~\ref{tab:cpu_llm}--\ref{tab:gpu_ops} give the underlying numbers.
+
 \subsection{CPU Benchmarks}
 
 \begin{table}[t]
