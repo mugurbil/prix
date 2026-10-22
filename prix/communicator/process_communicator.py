@@ -172,7 +172,7 @@ class InProcessCommunicator(Communicator):
     def recv(self, array=None, src=None):
         """Receives an array from an (optional) source src."""
         _, result = self._get_from_mailbox(src=src)
-        return self._from_transport(result)
+        return self._from_transport(result, device=self._get_device(array))
 
     def isend(self, array, dst):
         """Asynchronously sends the specified array to the destination dst."""

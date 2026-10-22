@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import builtins
+import functools
 import logging
 import math
 import os
@@ -23,9 +24,9 @@ except ImportError:
 import prix
 import prix.communicator as comm
 from prix.config import cfg
-from prix.encoder import DATATYPE, resolve_device
+from prix.encoder import DATATYPE, resolve_device, to_jax
 from prix.evaluator import EvaluatorClient
-from prix.random import chebyshev_series
+from prix.random import PRNGGenerator, chebyshev_series
 
 __all__ = [
     "LookupTables",
@@ -635,9 +636,46 @@ class LookupTables:
             cls._build_lut_by_name("silu_haar", device=device)
 
 
+@functools.lru_cache(maxsize=64)
+def _cached_perm_np(n):
+    gen = PRNGGenerator(seed=0)
+    perm = gen.next_permutation(int(n))
+    inv_perm = np.argsort(perm).astype(np.int64)
+    return perm, inv_perm
+
+
 def permute_reveal_evaluate_share(self, func):
     """Applies the permute and split reveal technique via Fission EvaluatorClient."""
     shape = self.size()
+    communicator = comm.get()
+    if (
+        communicator.get_evaluators_size() == 1
+        and hasattr(communicator, "_put_to_mailbox")
+        and cfg.mpc.provider == "TFP"
+    ):
+        arr_np = np.asarray(self.share)
+        if func in ("layernorm", "softmax", "log_softmax") and arr_np.ndim > 1:
+            flat_np = arr_np.reshape(-1, arr_np.shape[-1])
+        else:
+            flat_np = arr_np.reshape(-1)
+        perm_np, inv_perm_np = _cached_perm_np(flat_np.shape[0])
+        shuffled_np = flat_np[perm_np]
+
+        eval_rank = communicator.get_world_size() + (1 if communicator.ttp_initialized else 0)
+        if communicator.get_rank() == 0:
+            communicator.send_obj(
+                {"function": func, "scale": self.scale, "array_size": shuffled_np.shape},
+                eval_rank,
+                EvaluatorClient.get().eval_comm_group,
+            )
+        communicator._put_to_mailbox(eval_rank, shuffled_np)
+        _, recv_np = communicator._get_from_mailbox(src=eval_rank)
+        out_np = recv_np[inv_perm_np].reshape(shape)
+        out = self.shallow_copy()
+        out.share = to_jax(out_np, device=self.device, dtype=DATATYPE)
+        out.precision = cfg.encoder.precision_bits
+        return out
+
     if func in ("layernorm", "softmax", "log_softmax") and self.dim() > 1:
         result = self.flatten(0, -2)
     else:
