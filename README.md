@@ -92,7 +92,7 @@ for mode in ["crypten", "shaft", "lut", "fission"]:
 
 | `mode` | Nonlinearities & Truncation | Paper & Reference Code |
 |---|---|---|
-| **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045) · [jimouris/curl](https://github.com/jimouris/curl) |
+| **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045) · [**Wave Hello (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083) · [**Ripple (ISC 2024)**](https://eprint.iacr.org/2024/866) · [jimouris/curl](https://github.com/jimouris/curl) |
 | **`"shaft"`** | 1-round trigonometric-triple Fourier-series GeLU / SiLU / Erf / Tanh / Sigmoid + constant-round Forward-Euler ODE Softmax (`configs/shaft.yaml`) | [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965) · [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT) |
 | **`"crypten"`** | Classic limit `exp`, Newton–Raphson `reciprocal` / `inv_sqrt`, Taylor `erf`, sigmoid-based `silu`, CrypTen truncation (`configs/approximations.yaml`) | [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984) · [facebookresearch/CrypTen](https://github.com/facebookresearch/CrypTen) |
 | **`"fission"`** | Hybrid permute-and-reveal to a non-colluding plaintext evaluator party, auto-spawned by `prix.run` (`configs/fission.yaml`) | [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653) · [jimouris/curl](https://github.com/jimouris/curl) |
@@ -248,6 +248,8 @@ PriX implements and accelerates the protocols and nonlinear approximations intro
 
 - **CrypTen (`mode="crypten"`)** — Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim, and Laurens van der Maaten. *"CrypTen: Secure Multi-Party Computation Meets Machine Learning."* **NeurIPS 2021** ([Paper](https://arxiv.org/abs/2109.00984) · [Code](https://github.com/facebookresearch/CrypTen)).
 - **CuRL (`mode="lut"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1045](https://eprint.iacr.org/2024/1045) · [Code](https://github.com/jimouris/curl)).
+- **Wave Hello to Privacy (`mode="lut"`)** — José Reis, Mehmet Ugurbil, Sameer Wagh, Ryan Henry, and Miguel de Vega. *"Wave Hello to Privacy: Efficient Mixed-Mode MPC using Wavelet Transforms."* **PoPETs 2025** ([Paper](https://doi.org/10.56553/popets-2025-0083)).
+- **Ripple (`mode="lut"`)** — Charles Gouert, Mehmet Ugurbil, Dimitris Mouris, Miguel de Vega, and Nektarios G. Tsoutsos. *"Ripple: Accelerating Programmable Bootstraps for FHE with Wavelet Approximations."* **ISC 2024** ([ePrint 2024/866](https://eprint.iacr.org/2024/866)).
 - **SHAFT (`mode="shaft"`)** — Andes Y. L. Kei and Sherman S. M. Chow. *"SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference."* **NDSS 2025** ([ePrint 2024/1965](https://eprint.iacr.org/2024/1965) · [Code](https://github.com/andeskyl/SHAFT)).
 - **Fission (`mode="fission"`)** — Mehmet Ugurbil, Dimitris Mouris, Manuel B. Santos, José Cabrero-Holgueras, Miguel de Vega, and Shubho Sengupta. *"Fission: Distributed Privacy-Preserving Large Language Model Inference."* **IEEE CNS 2025** ([ePrint 2025/653](https://eprint.iacr.org/2025/653) · [Code](https://github.com/jimouris/curl)).
 

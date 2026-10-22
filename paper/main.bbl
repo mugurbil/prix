@@ -20,6 +20,17 @@ Daniel Escudero, Satrajit Ghosh, Marcel Keller, Rahul Rachuri, and Peter
 \newblock In {\em Advances in Cryptology -- CRYPTO 2020}, volume 12171 of {\em
   Lecture Notes in Computer Science}, pages 823--852. Springer, 2020.
 
+\bibitem{gouert2024ripple}
+Charles Gouert, Mehmet Ugurbil, Dimitris Mouris, Miguel de~Vega, and
+  Nektarios~G. Tsoutsos.
+\newblock Ripple: Accelerating programmable bootstraps for {FHE} with wavelet
+  approximations.
+\newblock In {\em Information Security -- 27th International Conference (ISC
+  2024)}, volume 15155 of {\em Lecture Notes in Computer Science}, pages
+  273--293. Springer, 2024.
+\newblock Cryptology ePrint Archive, Paper 2024/866,
+  \url{https://eprint.iacr.org/2024/866}.
+
 \bibitem{hao2022iron}
 Meng Hao, Hongwei Li, Hanxiao Chen, Pengzhi Xing, Guowen Xu, and Tianwei Zhang.
 \newblock Iron: Private inference on transformers.
@@ -60,6 +71,14 @@ Deevashwer Rathee, Mayank Rathee, Nishant Kumar, Nishanth Chandran, Divya
 \newblock {CrypTFlow2}: Practical 2-party secure inference.
 \newblock In {\em ACM SIGSAC Conference on Computer and Communications Security
   (CCS)}, pages 325--342, 2020.
+
+\bibitem{reis2025wave}
+Jos{\'e} Reis, Mehmet Ugurbil, Sameer Wagh, Ryan Henry, and Miguel de~Vega.
+\newblock Wave hello to privacy: Efficient mixed-mode {MPC} using wavelet
+  transforms.
+\newblock {\em Proceedings on Privacy Enhancing Technologies (PoPETs)},
+  2025(2):697--718, 2025.
+\newblock \url{https://doi.org/10.56553/popets-2025-0083}.
 
 \bibitem{santos2024curl}
 Manuel~B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, Jos{\'e}
