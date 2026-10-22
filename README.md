@@ -139,6 +139,7 @@ print("Output shape:", run_private_mlp())
 | [**04 · GPU Benchmark Suite (PriX vs. CrypTen)**](examples/prix_vs_curl_gpu_colab.ipynb) | End-to-end reproducible GPU benchmark comparing PriX vs. CrypTen across all 4 modes and 5 LLM architectures | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/prix_vs_curl_gpu_colab.ipynb) |
 
 ### Guides & Reference Docs
+- [**PriX Technical Report / Paper (PDF)**](paper/prix_arxiv.pdf) ([LaTeX source](paper/main.tex)) — *"PriX: Compiling Private Transformers via Whole-Graph XLA Fusion in Secure Multi-Party Computation"*.
 - [**Quickstart & CrypTen Migration Guide**](docs/quickstart.md) — Side-by-side CrypTen-to-PriX cheat sheet, arithmetic vs. binary secret sharing, and `TFP` vs. `TTP` providers.
 - [**MPC Approximation Modes & Configuration Reference**](docs/modes_and_configuration.md) — Deep dive into `"lut"`, `"shaft"`, `"crypten"`, and `"fission"` modes and how to mix-and-match methods via `prix.cfg`.
 - [**API Reference**](docs/api_reference.md) — Complete reference for top-level `prix` functions, `prix.Array` methods, and `prix.nn` neural network layers.
@@ -249,6 +250,20 @@ PriX implements and accelerates the protocols and nonlinear approximations intro
 - **CuRL (`mode="lut"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1045](https://eprint.iacr.org/2024/1045) · [Code](https://github.com/jimouris/curl)).
 - **SHAFT (`mode="shaft"`)** — Andes Y. L. Kei and Sherman S. M. Chow. *"SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference."* **NDSS 2025** ([ePrint 2024/1965](https://eprint.iacr.org/2024/1965) · [Code](https://github.com/andeskyl/SHAFT)).
 - **Fission (`mode="fission"`)** — Mehmet Ugurbil, Dimitris Mouris, Manuel B. Santos, José Cabrero-Holgueras, Miguel de Vega, and Shubho Sengupta. *"Fission: Distributed Privacy-Preserving Large Language Model Inference."* **IEEE CNS 2025** ([ePrint 2025/653](https://eprint.iacr.org/2025/653) · [Code](https://github.com/jimouris/curl)).
+
+### Citing PriX
+
+If you use **PriX** in your research, please cite our technical report ([`paper/prix_arxiv.pdf`](paper/prix_arxiv.pdf)):
+
+```bibtex
+@article{ugurbil2026prix,
+  author  = {Mehmet Ugurbil},
+  title   = {{PriX}: Compiling Private Transformers via Whole-Graph {XLA} Fusion in Secure Multi-Party Computation},
+  journal = {arXiv preprint},
+  year    = {2026},
+  url     = {https://github.com/mugurbil/prix}
+}
+```
 
 ---
 

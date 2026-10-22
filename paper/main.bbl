@@ -1,0 +1,90 @@
+\begin{thebibliography}{10}
+
+\bibitem{beaver1991efficient}
+Donald Beaver.
+\newblock Efficient multiparty protocols using circuit randomization.
+\newblock In {\em Advances in Cryptology -- CRYPTO '91}, pages 420--432.
+  Springer, 1991.
+
+\bibitem{bradbury2018jax}
+James Bradbury, Roy Frostig, Peter Hawkins, Matthew~James Johnson, Chris Leary,
+  Dougal Maclaurin, George Necula, Adam Paszke, Jake Vander{P}las, Skye
+  Wanderman-{M}ilne, and Qiao Zhang.
+\newblock {JAX}: Composable transformations of {P}ython+{N}um{P}y programs.
+\newblock \url{http://github.com/jax-ml/jax}, 2018.
+
+\bibitem{escudero2020improved}
+Daniel Escudero, Satrajit Ghosh, Marcel Keller, Rahul Rachuri, and Peter
+  Scholl.
+\newblock Improved primitives for {MPC} over mixed arithmetic-binary circuits.
+\newblock In {\em Advances in Cryptology -- CRYPTO 2020}, volume 12171 of {\em
+  Lecture Notes in Computer Science}, pages 823--852. Springer, 2020.
+
+\bibitem{hao2022iron}
+Meng Hao, Hongwei Li, Hanxiao Chen, Pengzhi Xing, Guowen Xu, and Tianwei Zhang.
+\newblock Iron: Private inference on transformers.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  volume~35, pages 15718--15731, 2022.
+
+\bibitem{kei2025shaft}
+Andes Y.~L. Kei and Sherman S.~M. Chow.
+\newblock {SHAFT}: Secure, handy, accurate, and fast transformer inference.
+\newblock In {\em Network and Distributed System Security Symposium (NDSS)},
+  2025.
+\newblock Cryptology ePrint Archive, Paper 2024/1965,
+  \url{https://eprint.iacr.org/2024/1965}.
+
+\bibitem{knott2021crypten}
+Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim,
+  and Laurens van~der Maaten.
+\newblock {CrypTen}: Secure multi-party computation meets machine learning.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  volume~34, pages 4963--4975, 2021.
+
+\bibitem{kogge1973parallel}
+Peter~M. Kogge and Harold~S. Stone.
+\newblock A parallel algorithm for the efficient solution of a general class of
+  recurrence equations.
+\newblock {\em IEEE Transactions on Computers}, C-22(8):786--793, 1973.
+
+\bibitem{mohassel2017secureml}
+Payman Mohassel and Yupeng Zhang.
+\newblock {SecureML}: A system for scalable privacy-preserving machine
+  learning.
+\newblock In {\em IEEE Symposium on Security and Privacy (S\&P)}, pages 19--38,
+  2017.
+
+\bibitem{rathee2020cryptflow2}
+Deevashwer Rathee, Mayank Rathee, Nishant Kumar, Nishanth Chandran, Divya
+  Gupta, Aseem Rastogi, and Rahul Sharma.
+\newblock {CrypTFlow2}: Practical 2-party secure inference.
+\newblock In {\em ACM SIGSAC Conference on Computer and Communications Security
+  (CCS)}, pages 325--342, 2020.
+
+\bibitem{santos2024curl}
+Manuel~B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, Jos{\'e}
+  Reis, Shubho Sengupta, and Miguel de~Vega.
+\newblock {Curl}: Private {LLMs} through wavelet-encoded look-up tables.
+\newblock In {\em Proceedings of the Conference on Applied Machine Learning in
+  Information Security (CAMLIS)}, pages 1--31, 2024.
+\newblock Cryptology ePrint Archive, Paper 2024/1045,
+  \url{https://eprint.iacr.org/2024/1045}.
+
+\bibitem{ugurbil2025fission}
+Mehmet Ugurbil, Dimitris Mouris, Manuel~B. Santos, Jos{\'e} Cabrero-Holgueras,
+  Miguel de~Vega, and Shubho Sengupta.
+\newblock Fission: Distributed privacy-preserving large language model
+  inference.
+\newblock In {\em IEEE Conference on Communications and Network Security
+  (CNS)}, pages 1--9, 2025.
+\newblock Cryptology ePrint Archive, Paper 2025/653,
+  \url{https://eprint.iacr.org/2025/653}.
+
+\bibitem{vaswani2017attention}
+Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
+  Aidan~N. Gomez, {\L}ukasz Kaiser, and Illia Polosukhin.
+\newblock Attention is all you need.
+\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
+  volume~30, 2017.
+
+\end{thebibliography}
