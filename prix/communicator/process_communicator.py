@@ -103,14 +103,19 @@ class InProcessCommunicator(Communicator):
             self._pending.append((sender_rank, payload))
 
     @staticmethod
-    def _get_device(array):
+    @functools.lru_cache(maxsize=None)
+    def _default_device():
+        return jax.devices()[0]
+
+    @classmethod
+    def _get_device(cls, array):
         if hasattr(array, "share"):
             array = array.share
         if isinstance(array, jnp.ndarray):
             devs = array.devices()
             if len(devs) == 1:
                 dev = next(iter(devs))
-                if dev.platform != "cpu" or dev.id != 0:
+                if dev != cls._default_device():
                     return dev
         return None
 
@@ -121,6 +126,11 @@ class InProcessCommunicator(Communicator):
         if isinstance(array, (np.ndarray, jnp.ndarray)):
             return np.asarray(array)
         return array
+
+    @staticmethod
+    def _to_transport_batch(arrays):
+        raw = [a.share if hasattr(a, "share") else a for a in arrays]
+        return [np.asarray(x) for x in jax.device_get(raw)]
 
     @staticmethod
     def _from_transport(payload, device=None):
@@ -236,7 +246,7 @@ class InProcessCommunicator(Communicator):
             raise NotImplementedError()
 
         if batched:
-            payload = [self._to_transport(a) for a in array]
+            payload = self._to_transport_batch(array)
         else:
             payload = self._to_transport(array)
 
@@ -278,7 +288,7 @@ class InProcessCommunicator(Communicator):
             raise NotImplementedError()
 
         if batched:
-            payload = [self._to_transport(a) for a in array]
+            payload = self._to_transport_batch(array)
         else:
             payload = self._to_transport(array)
 

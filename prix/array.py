@@ -14,7 +14,7 @@ import numpy as np
 
 import prix.communicator as comm
 from prix.config import cfg
-from prix.encoder import DATATYPE, FixedPointEncoder, decode, encode, resolve_device
+from prix.encoder import DATATYPE, FixedPointEncoder, decode, encode, resolve_device, to_jax
 from prix.provider import _eval_ring_op, _int64_matmul, get_default_provider
 from prix.random import (
     count_wraps,
@@ -180,10 +180,7 @@ class Array:
     @staticmethod
     def from_shares(share, precision=None, src=0, device=None, ptype=Ptype.arithmetic):
         result = Array(src=SENTINEL, precision=precision, device=device, ptype=ptype)
-        arr = jnp.asarray(share, dtype=DATATYPE)
-        if device is not None:
-            arr = jax.device_put(arr, resolve_device(device))
-        result.share = arr
+        result.share = to_jax(share, device=device, dtype=DATATYPE)
         return result
 
     @staticmethod
@@ -200,9 +197,7 @@ class Array:
             u0 = g0.next_uint64(size)
             u1 = g1.next_uint64(size)
             diff = (u0 ^ u1) if ptype == Ptype.binary else (u0 - u1)
-            arr = jnp.asarray(diff.view(np.int64), dtype=DATATYPE)
-            dev = resolve_device(device)
-            result.share = jax.device_put(arr, dev) if dev is not None else arr
+            result.share = to_jax(diff.view(np.int64), device=device, dtype=DATATYPE)
         elif ptype == Ptype.binary:
             s0 = generate_kbit_random_tensor(size, bitlength=64, generator=g0, device=device)
             s1 = generate_kbit_random_tensor(size, bitlength=64, generator=g1, device=device)
@@ -390,23 +385,22 @@ class Array:
         if world_size == 2:
             from prix import circuit
 
-            z = jnp.zeros_like(self.share)
-            x0 = Array.from_shares(
-                self.share if self.rank == 0 else z,
-                precision=0,
-                device=self.device,
-                ptype=Ptype.binary,
-            )
-            x1 = Array.from_shares(
-                self.share if self.rank == 1 else z,
-                precision=0,
-                device=self.device,
-                ptype=Ptype.binary,
-            )
-            S = x0 & x1
+            provider = get_default_provider()
+            s_shape = self.size()
+            a, b, c = provider.generate_binary_triple(s_shape, s_shape, device=self.device)
+            is_rank0 = self.rank == 0
+            if is_rank0:
+                eps_share = self.share ^ a.share
+                delta_share = b.share
+            else:
+                eps_share = a.share
+                delta_share = self.share ^ b.share
+            eps, delta = comm.get().all_reduce([eps_share, delta_share], op="bxor", batched=True)
+            c.share = _binary_and_combine(c.share, eps, delta, a.share, b.share, is_rank0)
             P = Array.from_shares(self.share, precision=0, device=self.device, ptype=Ptype.binary)
-            carry, _ = circuit._spk_circuit(S, P)
-            binary_tensor = P ^ (carry << 1)
+            carry, _ = circuit._spk_circuit(c, P)
+            binary_tensor = P.shallow_copy()
+            binary_tensor.share = _a2b_finalize(P.share, carry.share)
         else:
             shares = [
                 Array(self.share, src=i, precision=0, device=self.device, ptype=Ptype.binary)
@@ -1298,8 +1292,14 @@ def _egk_trunc_pr(x, l, m):
 
 
 @jax.jit
-def _lut_gather_dot(one_hot_share, shift_amount, lut):
+def _a2b_finalize(p_share, carry_share):
+    return p_share ^ (carry_share << jnp.int64(1))
+
+
+@jax.jit
+def _lut_gather_dot(one_hot_share, z_revealed, lut):
     size = lut.shape[0]
+    shift_amount = z_revealed % size
     arange = jnp.arange(size, dtype=DATATYPE)
     indices = (arange[None, :] - shift_amount[:, None]) % size
     gathered = jnp.take_along_axis(one_hot_share, indices, axis=1)
@@ -1307,8 +1307,9 @@ def _lut_gather_dot(one_hot_share, shift_amount, lut):
 
 
 @jax.jit
-def _bior_lut_gather_dot(one_hot_share, shift_amount, luts):
+def _bior_lut_gather_dot(one_hot_share, z_revealed, luts):
     size = luts.shape[1]
+    shift_amount = z_revealed % size
     arange = jnp.arange(size, dtype=DATATYPE)
     indices = (arange[None, :] - shift_amount[:, None]) % size
     gathered = jnp.take_along_axis(one_hot_share, indices, axis=1)
@@ -1318,7 +1319,7 @@ def _bior_lut_gather_dot(one_hot_share, shift_amount, luts):
 def _evaluate_lut(x, lut):
     """Evaluates a 1D Wavelet Look-Up Table (Haar) on secret-shared Array x."""
     provider = get_default_provider()
-    lut = jnp.asarray(lut, dtype=DATATYPE)
+    lut = to_jax(lut, device=x.device, dtype=DATATYPE)
     size = lut.shape[0]
     shape = x.size()
     x_flat = x.flatten()
@@ -1327,12 +1328,13 @@ def _evaluate_lut(x, lut):
 
     with IgnoreEncodings([x_flat, r]):
         z = x_flat - r
-        shift_amount = z.reveal() % size
+        z_revealed = z.reveal()
 
-    if shift_amount.ndim > 0 and shift_amount.size > 0:
-        res_share = _lut_gather_dot(one_hot_r.share, shift_amount, lut)
+    if z_revealed.ndim > 0 and z_revealed.size > 0:
+        res_share = _lut_gather_dot(one_hot_r.share, z_revealed, lut)
         result = Array.from_shares(res_share, precision=one_hot_r.precision, device=x.device)
     else:
+        shift_amount = z_revealed % size
         one_hot_r = one_hot_r.roll(int(shift_amount.item()))
         lookup = one_hot_r * lut
         result = lookup.sum()
@@ -1342,7 +1344,7 @@ def _evaluate_lut(x, lut):
 def _evaluate_bior_lut(x, luts, scale, bias):
     """Evaluates a Bior2.2 Wavelet Look-Up Table on secret-shared Array x."""
     provider = get_default_provider()
-    luts = jnp.asarray(luts, dtype=DATATYPE)
+    luts = to_jax(luts, device=x.device, dtype=DATATYPE)
     size = luts[0].shape[0]
     shape = x.size()
     x_flat = x.flatten()
@@ -1351,13 +1353,14 @@ def _evaluate_bior_lut(x, luts, scale, bias):
 
     with IgnoreEncodings([x_flat, r]):
         z = x_flat - r
-        shift_amount = z.reveal() % size
+        z_revealed = z.reveal()
 
-    if shift_amount.ndim > 0 and shift_amount.size > 0:
-        s0, s1 = _bior_lut_gather_dot(one_hot_r.share, shift_amount, luts)
+    if z_revealed.ndim > 0 and z_revealed.size > 0:
+        s0, s1 = _bior_lut_gather_dot(one_hot_r.share, z_revealed, luts)
         lut0 = Array.from_shares(s0, precision=one_hot_r.precision, device=x.device)
         lut1 = Array.from_shares(s1, precision=one_hot_r.precision, device=x.device)
     else:
+        shift_amount = z_revealed % size
         one_hot_r = one_hot_r.roll(int(shift_amount.item()))
         lut0 = (one_hot_r * luts[0]).sum()
         lut1 = (one_hot_r * luts[1]).sum()

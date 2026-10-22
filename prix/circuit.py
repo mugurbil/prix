@@ -43,14 +43,16 @@ def _spk_circuit_constants():
 
 
 @jax.jit
-def _spk_pre_step(sp_share, in_mask, out_mask, multiplier):
+def _spk_pre_and_mask(sp_share, a_share, b_share, in_mask, out_mask, multiplier):
     p0_share = sp_share[1] & out_mask
     s1p1_share = (sp_share & in_mask) * multiplier
-    return p0_share, s1p1_share
+    return p0_share ^ a_share, s1p1_share ^ b_share
 
 
 @jax.jit
-def _spk_post_step(sp_share, update_share, out_mask):
+def _spk_combine_and_post(sp_share, c_share, eps, delta, a_share, b_share, out_mask, is_rank0):
+    b_eff = jnp.where(is_rank0, b_share ^ delta, b_share)
+    update_share = c_share ^ (b_eff & eps) ^ (a_share & delta)
     not_out_mask = out_mask ^ jnp.int64(-1)
     sp_share = sp_share.at[1].set(sp_share[1] & not_out_mask)
     return sp_share ^ update_share
@@ -64,23 +66,27 @@ def _spk_circuit(S, P):
     See section 6.3 of Damgard et al., "Unconditionally Secure Constant-Rounds
     Multi-Party Computation for Equality, Comparison, Bits and Exponentiation".
     """
+    import prix.communicator as comm
     from prix.array import Array
+    from prix.provider import get_default_provider
 
     # Vectorize private AND calls to reduce rounds:
     SP = Array.stack([S, P])
     masks, out_masks, multipliers = _spk_circuit_constants()
+    provider = get_default_provider()
+    s_shape = S.size()
+    sp_shape = SP.size()
+    is_rank0 = comm.get().get_rank() == 0
 
     for i in range(__LOG_BITS):
-        p0_share, s1p1_share = _spk_pre_step(
-            SP.share, masks[i], out_masks[i], multipliers[i]
+        a, b, c = provider.generate_binary_triple(s_shape, sp_shape, device=S.device)
+        eps_share, delta_share = _spk_pre_and_mask(
+            SP.share, a.share, b.share, masks[i], out_masks[i], multipliers[i]
         )
-        P0 = S.shallow_copy()
-        P0.share = p0_share
-        S1P1 = SP.shallow_copy()
-        S1P1.share = s1p1_share
-
-        update = P0 & S1P1
-        SP.share = _spk_post_step(SP.share, update.share, out_masks[i])
+        eps, delta = comm.get().all_reduce([eps_share, delta_share], op="bxor", batched=True)
+        SP.share = _spk_combine_and_post(
+            SP.share, c.share, eps, delta, a.share, b.share, out_masks[i], is_rank0
+        )
 
     return SP[0], SP[1]
 

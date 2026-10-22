@@ -5,6 +5,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import functools
 import jax
 import numpy as np
 from jax import numpy as jnp
@@ -17,6 +18,12 @@ PRECISION = 16
 DATATYPE = jnp.int64
 
 
+@functools.lru_cache(maxsize=None)
+def _default_device():
+    return jax.devices()[0]
+
+
+@functools.lru_cache(maxsize=64)
 def resolve_device(device):
     """Resolve a device specification (None, str, or jax.Device) to a jax.Device or None."""
     if device is None:
@@ -36,11 +43,27 @@ def resolve_device(device):
     return device
 
 
+def to_jax(arr, device=None, dtype=DATATYPE):
+    """Convert an array to a JAX array on `device` without redundant device_put calls."""
+    if isinstance(arr, jnp.ndarray):
+        if arr.dtype != dtype:
+            arr = arr.astype(dtype)
+        if device is not None:
+            dev = resolve_device(device)
+            if dev is not None and dev != _default_device():
+                arr = jax.device_put(arr, dev)
+        return arr
+    if device is not None:
+        dev = resolve_device(device)
+        if dev is not None and dev != _default_device():
+            return jax.device_put(np.asarray(arr, dtype=dtype), dev)
+    return jnp.asarray(arr, dtype=dtype)
+
+
 def encode(x, precision=None, device=None):
     """Helper function to encode plaintext data into fixed-point integer ring."""
     if precision is None:
         precision = cfg.encoder.precision_bits
-    dev = resolve_device(device)
 
     # Already an encoded/encrypted Prix Array
     if hasattr(x, "share"):
@@ -48,14 +71,14 @@ def encode(x, precision=None, device=None):
 
     scale = int(2**precision)
     if isinstance(x, (int, float, np.number)):
-        arr = jnp.array(np.round(scale * x), dtype=DATATYPE)
+        return to_jax(np.round(scale * x), device=device, dtype=DATATYPE)
     elif isinstance(x, (list, tuple)):
-        arr = jnp.array(np.round(np.asarray(x, dtype=np.float64) * scale), dtype=DATATYPE)
+        return to_jax(np.round(np.asarray(x, dtype=np.float64) * scale), device=device, dtype=DATATYPE)
     elif isinstance(x, np.ndarray):
         if np.issubdtype(x.dtype, np.floating):
-            arr = jnp.array(np.round(x.astype(np.float64) * scale), dtype=DATATYPE)
+            return to_jax(np.round(x.astype(np.float64) * scale), device=device, dtype=DATATYPE)
         else:
-            arr = jnp.array(x, dtype=DATATYPE) * scale
+            return to_jax(x.astype(np.int64) * scale, device=device, dtype=DATATYPE)
     elif hasattr(x, "dtype"):
         if x.dtype == DATATYPE and precision == 0:
             arr = x
@@ -65,12 +88,9 @@ def encode(x, precision=None, device=None):
             arr = x.astype(DATATYPE) if scale == 1 else x.astype(DATATYPE) * scale
         else:
             raise TypeError(f"Unsupported array dtype: {x.dtype}.")
+        return to_jax(arr, device=device, dtype=DATATYPE)
     else:
         raise TypeError(f"Unknown array type: {type(x)}.")
-
-    if dev is not None:
-        arr = jax.device_put(arr, dev)
-    return arr
 
 
 def decode(x, precision=None):

@@ -10,7 +10,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from prix.encoder import DATATYPE, resolve_device
+from prix.encoder import DATATYPE, resolve_device, to_jax
 
 
 class PRNGGenerator:
@@ -50,11 +50,7 @@ def random(seed, shape, device=None):
     else:
         gen = PRNGGenerator(seed=seed, device=device)
     bits = gen.next_uint64(tuple(shape))
-    res = jnp.asarray(bits.view(np.int64), dtype=DATATYPE)
-    dev = resolve_device(device)
-    if dev is not None:
-        res = jax.device_put(res, dev)
-    return res
+    return to_jax(bits.view(np.int64), device=device, dtype=DATATYPE)
 
 
 def _get_default_generator(generator=None, device=None):
@@ -71,40 +67,37 @@ def _get_default_generator(generator=None, device=None):
     return PRNGGenerator(seed=np.random.randint(0, 2**31 - 1), device=device)
 
 
-def generate_random_ring_element(*size, ring_size=(2**64), generator=None, device=None, **kwargs):
-    """Generate a random element from the signed 64-bit ring Z_{2^64}."""
+def generate_random_ring_element_np(*size, ring_size=(2**64), generator=None, device=None):
     shape = _normalize_shape(size)
     gen = _get_default_generator(generator, device)
     bits = gen.next_uint64(shape)
     if ring_size == 2**64:
-        res = jnp.asarray(bits.view(np.int64), dtype=DATATYPE)
-    else:
-        res_np = (bits % np.uint64(ring_size)).astype(np.int64) - (ring_size // 2)
-        res = jnp.asarray(res_np, dtype=DATATYPE)
-    dev = resolve_device(device)
-    if dev is not None:
-        res = jax.device_put(res, dev)
-    return res
+        return bits.view(np.int64)
+    return (bits % np.uint64(ring_size)).astype(np.int64) - (ring_size // 2)
+
+
+def generate_kbit_random_tensor_np(*size, bitlength=None, generator=None, device=None):
+    shape = _normalize_shape(size)
+    if bitlength is None or bitlength >= 64:
+        return generate_random_ring_element_np(shape, generator=generator, device=device)
+    if bitlength <= 0:
+        return np.zeros(shape, dtype=np.int64)
+    gen = _get_default_generator(generator, device)
+    bits = gen.next_uint64(shape)
+    mask = np.uint64((1 << int(bitlength)) - 1)
+    return (bits & mask).view(np.int64)
+
+
+def generate_random_ring_element(*size, ring_size=(2**64), generator=None, device=None, **kwargs):
+    """Generate a random element from the signed 64-bit ring Z_{2^64}."""
+    arr_np = generate_random_ring_element_np(*size, ring_size=ring_size, generator=generator, device=device)
+    return to_jax(arr_np, device=device, dtype=DATATYPE)
 
 
 def generate_kbit_random_tensor(*size, bitlength=None, generator=None, device=None, **kwargs):
     """Generate a random k-bit integer tensor in [0, 2^bitlength)."""
-    shape = _normalize_shape(size)
-    if bitlength is None or bitlength >= 64:
-        return generate_random_ring_element(shape, generator=generator, device=device, **kwargs)
-    if bitlength <= 0:
-        res = jnp.zeros(shape, dtype=DATATYPE)
-        dev = resolve_device(device)
-        return jax.device_put(res, dev) if dev is not None else res
-
-    gen = _get_default_generator(generator, device)
-    bits = gen.next_uint64(shape)
-    mask = np.uint64((1 << int(bitlength)) - 1)
-    res = jnp.asarray((bits & mask).view(np.int64), dtype=DATATYPE)
-    dev = resolve_device(device)
-    if dev is not None:
-        res = jax.device_put(res, dev)
-    return res
+    arr_np = generate_kbit_random_tensor_np(*size, bitlength=bitlength, generator=generator, device=device)
+    return to_jax(arr_np, device=device, dtype=DATATYPE)
 
 
 def generate_permutation(size, generator=None, device=None, **kwargs):
@@ -114,13 +107,7 @@ def generate_permutation(size, generator=None, device=None, **kwargs):
     gen = _get_default_generator(generator, device)
     perm_np = gen.next_permutation(int(size))
     inv_perm_np = np.argsort(perm_np).astype(np.int64)
-    permutation = jnp.asarray(perm_np, dtype=DATATYPE)
-    inv_permutation = jnp.asarray(inv_perm_np, dtype=DATATYPE)
-    dev = resolve_device(device)
-    if dev is not None:
-        permutation = jax.device_put(permutation, dev)
-        inv_permutation = jax.device_put(inv_permutation, dev)
-    return permutation, inv_permutation
+    return to_jax(perm_np, device=device, dtype=DATATYPE), to_jax(inv_perm_np, device=device, dtype=DATATYPE)
 
 
 @jax.jit

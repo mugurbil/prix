@@ -16,13 +16,15 @@ import numpy as np
 
 import prix.communicator as comm
 from prix.config import cfg
-from prix.encoder import DATATYPE, resolve_device
+from prix.encoder import DATATYPE, resolve_device, to_jax
 from prix.random import (
     PRNGGenerator,
     count_wraps,
     generate_kbit_random_tensor,
+    generate_kbit_random_tensor_np,
     generate_permutation,
     generate_random_ring_element,
+    generate_random_ring_element_np,
 )
 
 
@@ -281,12 +283,33 @@ class TupleProvider:
         return func_from_cache
 
 
-@functools.partial(jax.jit, static_argnums=(1,))
-def _make_one_hot(r, lut_size: int):
-    r_clear = r % lut_size
-    classes = jnp.arange(lut_size, dtype=DATATYPE)
-    one_hot = (r_clear.reshape(-1, 1) == classes[None, :]).astype(DATATYPE)
-    return r_clear, one_hot
+def _przs_np(shape, ptype="arithmetic"):
+    import prix
+
+    g0 = prix.generators.get("prev")
+    g1 = prix.generators.get("next")
+    u0 = g0.next_uint64(shape)
+    u1 = g1.next_uint64(shape)
+    diff = (u0 ^ u1) if ptype == "binary" else (u0 - u1)
+    return diff.view(np.int64)
+
+
+def _share_batch_np(np_tensors, shapes, ptypes, device=None):
+    from prix.array import Array, Ptype, SENTINEL
+
+    rank = comm.get().get_rank()
+    out = []
+    for idx, (shape, ptype) in enumerate(zip(shapes, ptypes)):
+        diff = _przs_np(shape, ptype)
+        if rank == 0 and np_tensors[idx] is not None:
+            if ptype == "binary":
+                diff = diff ^ np_tensors[idx]
+            else:
+                diff = diff + np_tensors[idx]
+        res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype(ptype))
+        res.share = to_jax(diff, device=device, dtype=DATATYPE)
+        out.append(res)
+    return out
 
 
 def _share_batch(tensors, shapes, ptypes, device=None):
@@ -313,47 +336,56 @@ class TrustedFirstParty(TupleProvider):
     NAME = "TFP"
 
     def generate_additive_triple(self, size0, size1, op="mul", device=None, *args, **kwargs):
+        s0, s1 = tuple(size0), tuple(size1)
+        if op == "mul":
+            c_shape = jnp.broadcast_shapes(s0, s1)
+            if self.rank == 0:
+                a_np = generate_random_ring_element_np(s0, device=device)
+                b_np = generate_random_ring_element_np(s1, device=device)
+                c_np = a_np * b_np
+                tensors = [a_np, b_np, c_np]
+            else:
+                tensors = [None, None, None]
+            return tuple(_share_batch_np(tensors, (s0, s1, c_shape), ("arithmetic", "arithmetic", "arithmetic"), device=device))
+
         if self.rank == 0:
-            a = generate_random_ring_element(size0, device=device)
-            b = generate_random_ring_element(size1, device=device)
+            a = generate_random_ring_element(s0, device=device)
+            b = generate_random_ring_element(s1, device=device)
             c = _eval_ring_op(op, a, b, *args, **kwargs)
             tensors = [a, b, c]
             c_shape = c.shape
         else:
             tensors = [None, None, None]
-            if op == "mul":
-                c_shape = jnp.broadcast_shapes(tuple(size0), tuple(size1))
-            elif op == "matmul":
-                s0, s1 = tuple(size0), tuple(size1)
+            if op == "matmul":
                 c_shape = jnp.broadcast_shapes(s0[:-2], s1[:-2]) + (s0[-2], s1[-1])
             else:
-                a_dummy = jnp.zeros(size0, dtype=DATATYPE)
-                b_dummy = jnp.zeros(size1, dtype=DATATYPE)
+                a_dummy = jnp.zeros(s0, dtype=DATATYPE)
+                b_dummy = jnp.zeros(s1, dtype=DATATYPE)
                 c_shape = _eval_ring_op(op, a_dummy, b_dummy, *args, **kwargs).shape
-        shapes = (tuple(size0), tuple(size1), c_shape)
+        shapes = (s0, s1, c_shape)
         return tuple(_share_batch(tensors, shapes, ("arithmetic", "arithmetic", "arithmetic"), device=device))
 
     def square(self, size, device=None):
         shape = tuple(size)
         if self.rank == 0:
-            r = generate_random_ring_element(shape, device=device)
-            r2 = r * r
-            tensors = [r, r2]
+            r_np = generate_random_ring_element_np(shape, device=device)
+            r2_np = r_np * r_np
+            tensors = [r_np, r2_np]
         else:
             tensors = [None, None]
-        return tuple(_share_batch(tensors, (shape, shape), ("arithmetic", "arithmetic"), device=device))
+        return tuple(_share_batch_np(tensors, (shape, shape), ("arithmetic", "arithmetic"), device=device))
 
     def generate_binary_triple(self, size0, size1, device=None):
         s0, s1 = tuple(size0), tuple(size1)
         c_shape = jnp.broadcast_shapes(s0, s1)
         if self.rank == 0:
-            a = generate_kbit_random_tensor(s0, device=device)
-            b = generate_kbit_random_tensor(s1, device=device)
-            c = a & b
-            tensors = [a, b, c]
+            a_np = generate_kbit_random_tensor_np(s0, device=device)
+            b_np = generate_kbit_random_tensor_np(s1, device=device)
+            c_np = a_np & b_np
+            tensors = [a_np, b_np, c_np]
         else:
             tensors = [None, None, None]
-        return tuple(_share_batch(tensors, (s0, s1, c_shape), ("binary", "binary", "binary"), device=device))
+        return tuple(_share_batch_np(tensors, (s0, s1, c_shape), ("binary", "binary", "binary"), device=device))
 
     def wrap_rng(self, size, device=None):
         from prix.array import Array
@@ -377,34 +409,41 @@ class TrustedFirstParty(TupleProvider):
     def B2A_rng(self, size, device=None):
         shape = tuple(size)
         if self.rank == 0:
-            r = generate_kbit_random_tensor(shape, bitlength=1, device=device)
-            tensors = [r, r]
+            r_np = generate_kbit_random_tensor_np(shape, bitlength=1, device=device)
+            tensors = [r_np, r_np]
         else:
             tensors = [None, None]
-        return tuple(_share_batch(tensors, (shape, shape), ("arithmetic", "binary"), device=device))
+        return tuple(_share_batch_np(tensors, (shape, shape), ("arithmetic", "binary"), device=device))
 
     def generate_one_hot(self, tensor_size, lut_size, device=None):
+        from prix.array import Array, Ptype, SENTINEL
+
         t_shape = tuple(tensor_size)
         n_elem = int(np.prod(t_shape)) if len(t_shape) > 0 else 1
         oh_shape = (n_elem, int(lut_size))
+        diff_r = _przs_np(t_shape, "arithmetic")
+        diff_oh = _przs_np(oh_shape, "arithmetic")
         if self.rank == 0:
-            r = generate_random_ring_element(t_shape, device=device)
-            r_clear, one_hot = _make_one_hot(r, int(lut_size))
-            tensors = [r_clear, one_hot]
-        else:
-            tensors = [None, None]
-        return tuple(_share_batch(tensors, (t_shape, oh_shape), ("arithmetic", "arithmetic"), device=device))
+            r_np = generate_random_ring_element_np(t_shape, device=device)
+            r_clear = r_np % int(lut_size)
+            diff_r = diff_r + r_clear
+            diff_oh[np.arange(n_elem), r_clear.reshape(-1)] += 1
+        r_res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype.arithmetic)
+        r_res.share = to_jax(diff_r, device=device, dtype=DATATYPE)
+        oh_res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype.arithmetic)
+        oh_res.share = to_jax(diff_oh, device=device, dtype=DATATYPE)
+        return r_res, oh_res
 
     def egk_trunc_pr_rng(self, size, l, m, device=None):
         shape = tuple(size)
         if self.rank == 0:
-            r = generate_kbit_random_tensor(shape, bitlength=l - m, device=device)
-            r_p = generate_kbit_random_tensor(shape, bitlength=m, device=device)
-            b = generate_kbit_random_tensor(shape, bitlength=1, device=device)
-            tensors = [r, r_p, b]
+            r_np = generate_kbit_random_tensor_np(shape, bitlength=l - m, device=device)
+            rp_np = generate_kbit_random_tensor_np(shape, bitlength=m, device=device)
+            b_np = generate_kbit_random_tensor_np(shape, bitlength=1, device=device)
+            tensors = [r_np, rp_np, b_np]
         else:
             tensors = [None, None, None]
-        return tuple(_share_batch(tensors, (shape, shape, shape), ("arithmetic", "arithmetic", "arithmetic"), device=device))
+        return tuple(_share_batch_np(tensors, (shape, shape, shape), ("arithmetic", "arithmetic", "arithmetic"), device=device))
 
     def generate_permutation(self, tensor_size, device=None):
         gen = PRNGGenerator(seed=0, device=device)
