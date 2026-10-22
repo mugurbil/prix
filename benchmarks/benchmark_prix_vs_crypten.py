@@ -162,6 +162,12 @@ def _patch_crypten_repo(crypten_root):
             txt = txt.replace(target, replacement)
         open(init_p, "w").write(txt)
 
+    default_cfg_p = os.path.join(crypten_root, "configs/default.yaml")
+    if os.path.exists(default_cfg_p):
+        txt = open(default_cfg_p).read()
+        if 'provider: "TTP"' in txt:
+            open(default_cfg_p, "w").write(txt.replace('provider: "TTP"', 'provider: "TFP"'))
+
 
 # ============================================================================
 # Shared workload definitions (identical inputs/shapes for both frameworks)
@@ -437,6 +443,7 @@ def run_crypten(crypten_root, device, tmp_dir, modes, bench_args, prix_root=None
     sys.path.insert(0, crypten_root)
     orig_set_start = mp.set_start_method
     mp.set_start_method = lambda method, force=True: orig_set_start(method, force=True)
+    from curl.config import cfg
     from examples.multiprocess_launcher import MultiProcessLauncher
 
     results = {}
@@ -444,6 +451,7 @@ def run_crypten(crypten_root, device, tmp_dir, modes, bench_args, prix_root=None
         if key not in modes:
             continue
         cfg_path = _merged_config(crypten_root, cfg_name, tmp_dir, "crypten", fallback_root=prix_root)
+        cfg.load_config(cfg_path)
         part = os.path.join(tmp_dir, f"_crypten_{key}.json")
         args = AttrDict(
             config_path=cfg_path, out_path=part, device=device, mode=key, multi_gpu=False, **bench_args

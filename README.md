@@ -91,43 +91,39 @@ Each framework is benchmarked in four approximation modes, with identical inputs
 
 ---
 
-### 2. GPU Benchmarks (NVIDIA Tesla T4, CUDA 13.0)
+### 2. GPU Benchmarks (NVIDIA Tesla T4, CUDA)
 
-> [!NOTE]
-> These GPU numbers were measured with the previous benchmark script (CuRL LUT and Fission modes only, before the security fixes). They will be refreshed with `benchmark_prix_vs_crypten.py` including the CrypTen-approximations mode.
+#### Private LLM Inference — all modes (ms)
+| Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · SHAFT | PriX · SHAFT | CrypTen · CuRL LUTs | PriX · CuRL LUTs | CrypTen · Fission | PriX · Fission |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| BertTiny (2-Block, seq=16) | 1907.95 | 2279.82 | 1222.84 | 1319.37 | 1933.81 | 1541.65 | 395.51 | 157.57 |
+| BertBase (1-Block, seq=16) | 1675.36 | 1495.02 | 1326.25 | 1024.81 | 1690.22 | 1149.24 | 927.31 | 465.88 |
+| GPT2 (1-Block, seq=16) | 1612.91 | 1512.46 | 1286.20 | 1023.98 | 1638.29 | 1130.92 | 850.89 | 457.31 |
+| Llama (1-Block, d=768, seq=16) | 1582.04 | 1324.62 | 1280.75 | 890.74 | 1684.98 | 1039.00 | 949.89 | 369.72 |
+| ModernBert (1-Block, seq=16) | 1428.77 | 1266.74 | 1104.81 | 818.48 | 1460.58 | 938.75 | 683.50 | 247.29 |
 
-#### Private LLM Inference — CuRL Wavelet LUT Mode (ms)
-| Model | CrypTen (PyTorch, ms) | PriX (JAX, ms) | Speedup (CrypTen / PriX) |
-|---|---:|---:|---:|
-| BertTiny (2-Block, seq=16) | 1857.90 | 1469.43 | **1.26x** |
-| BertBase (1-Block, seq=16) | 1678.74 | 1089.91 | **1.54x** |
-| GPT2 (1-Block, seq=16) | 1614.01 | 1109.09 | **1.46x** |
-| Llama (1-Block, d=768, seq=16) | 1634.82 | 1012.78 | **1.61x** |
-| ModernBert (1-Block, seq=16) | 1438.15 | 954.41 | **1.51x** |
+#### PriX speedup over CrypTen — LLM inference on GPU
+| Model | CrypTen approx. | SHAFT (Fourier + ODE) | CuRL LUTs | Fission |
+|---|---:|---:|---:|---:|
+| BertTiny (2-Block, seq=16) | **0.84x** | **0.93x** | **1.25x** | **2.51x** |
+| BertBase (1-Block, seq=16) | **1.12x** | **1.29x** | **1.47x** | **1.99x** |
+| GPT2 (1-Block, seq=16) | **1.07x** | **1.26x** | **1.45x** | **1.86x** |
+| Llama (1-Block, d=768, seq=16) | **1.19x** | **1.44x** | **1.62x** | **2.57x** |
+| ModernBert (1-Block, seq=16) | **1.13x** | **1.35x** | **1.56x** | **2.76x** |
 
-#### Private LLM Inference — Fission Evaluator Mode (ms)
-| Model | CrypTen (PyTorch, ms) | PriX (JAX, ms) | Speedup (CrypTen / PriX) |
-|---|---:|---:|---:|
-| BertTiny (2-Block, seq=16) | 395.51 | 152.61 | **2.59x** |
-| BertBase (1-Block, seq=16) | 927.31 | 487.84 | **1.90x** |
-| GPT2 (1-Block, seq=16) | 850.89 | 442.06 | **1.92x** |
-| Llama (1-Block, d=768, seq=16) | 949.89 | 372.28 | **2.55x** |
-| ModernBert (1-Block, seq=16) | 683.50 | 259.99 | **2.63x** |
-
-#### MPC Primitives & CuRL Wavelet LUT Microbenchmarks on GPU (ms)
-| Benchmark | CrypTen (PyTorch, ms) | PriX (JAX, ms) | Speedup (CrypTen / PriX) |
-|---|---:|---:|---:|
-| Private MatMul (128x128) | 17.92 | 8.82 | **2.03x** |
-| Private Mul (128x128) | 10.17 | 7.77 | **1.31x** |
-| EGK TruncPr (128x128) | 6.56 | 3.29 | **2.00x** |
-| Comparison / ReLU (32x64) | 46.54 | 70.80 | **0.66x** |
-| Exp [Haar LUT] (32x64) | 65.44 | 85.70 | **0.76x** |
-| Reciprocal [Haar LUT] (32x64) | 34.99 | 14.90 | **2.35x** |
-| InvSqrt [Haar LUT] (32x64) | 126.52 | 14.61 | **8.66x** |
-| GeLU [Haar LUT] (32x64) | 23.17 | 15.46 | **1.50x** |
-| SiLU [Haar LUT] (32x64) | 23.92 | 16.58 | **1.44x** |
-| Softmax [LUT] (4x32x32) | 480.23 | 657.41 | **0.73x** |
-| LayerNorm [LUT] (4x32x64) | 145.50 | 31.51 | **4.62x** |
+#### MPC Primitives & Nonlinearities on GPU (ms, CrypTen / PriX)
+| Benchmark | CrypTen approx. | SHAFT (Fourier + ODE) | CuRL LUTs | Fission |
+|---|---:|---:|---:|---:|
+| Private MatMul (128x128) | 14.67 / 7.41 (**1.98x**) | 16.23 / 6.27 (**2.59x**) | 18.51 / 10.38 (**1.78x**) | 23.35 / 5.44 (**4.29x**) |
+| Private Mul (128x128) | 6.60 / 6.09 (**1.08x**) | 7.58 / 5.36 (**1.41x**) | 9.79 / 7.86 (**1.25x**) | 8.15 / 4.85 (**1.68x**) |
+| Comparison / ReLU (32x64) | 68.94 / 75.69 (**0.91x**) | 54.01 / 74.29 (**0.73x**) | 43.81 / 73.03 (**0.60x**) | 87.12 / 71.58 (**1.22x**) |
+| Exp (32x64) | 44.81 / 32.99 (**1.36x**) | 27.74 / 34.05 (**0.81x**) | 62.76 / 89.98 (**0.70x**) | — / 1.36 |
+| Reciprocal (32x64) | 138.81 / 135.23 (**1.03x**) | 122.65 / 141.75 (**0.87x**) | 32.26 / 15.01 (**2.15x**) | — / 1.41 |
+| InvSqrt (32x64) | 83.08 / 91.92 (**0.90x**) | 79.91 / 88.38 (**0.90x**) | 126.92 / 15.39 (**8.25x**) | — / 1.39 |
+| GeLU (32x64) | 157.38 / 171.37 (**0.92x**) | 92.32 / 98.21 (**0.94x**) | 24.16 / 16.75 (**1.44x**) | — / 1.70 |
+| SiLU (32x64) | 121.28 / 157.02 (**0.77x**) | 90.71 / 94.83 (**0.96x**) | 23.52 / 15.86 (**1.48x**) | — / 1.37 |
+| Softmax (4x32x32) | 562.02 / 720.44 (**0.78x**) | 210.82 / 268.87 (**0.78x**) | 506.30 / 683.60 (**0.74x**) | — / 1.50 |
+| LayerNorm (4x32x64) | 99.04 / 98.17 (**1.01x**) | 98.10 / 100.70 (**0.97x**) | 151.43 / 33.47 (**4.52x**) | — / 3.25 |
 
 ---
 
