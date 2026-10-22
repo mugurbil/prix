@@ -23,9 +23,12 @@ class InProcessCommunicator(Communicator):
     """
 
     BYTES_PER_ELEMENT = 8
+    SHM_SLOT_ELEMS = 2 * 1024 * 1024
     tls = threading.local()
     mailbox = None
     barrier_obj = None
+    shm_buffers = None
+    peer_pipes = None
     lock = threading.Lock()
 
     @classmethod
@@ -53,6 +56,23 @@ class InProcessCommunicator(Communicator):
         self.ttp_initialized = init_ttp
         self.ttp_offset = 1 if init_ttp else 0
         self._pending = []
+        self._shm_step = 0
+        self._peer_conn = None
+        self._my_shm = None
+        self._peer_shm = None
+        if (
+            self.world_size == 2
+            and self.rank < 2
+            and InProcessCommunicator.shm_buffers is not None
+            and InProcessCommunicator.peer_pipes is not None
+        ):
+            self._peer_conn = InProcessCommunicator.peer_pipes[self.rank]
+            self._my_shm = np.frombuffer(
+                InProcessCommunicator.shm_buffers[self.rank], dtype=np.int64
+            ).reshape(4, self.SHM_SLOT_ELEMS)
+            self._peer_shm = np.frombuffer(
+                InProcessCommunicator.shm_buffers[1 - self.rank], dtype=np.int64
+            ).reshape(4, self.SHM_SLOT_ELEMS)
         self.reset_communication_stats()
         self._name = f"rank_{rank}"
 
@@ -291,6 +311,54 @@ class InProcessCommunicator(Communicator):
             payload = self._to_transport_batch(array)
         else:
             payload = self._to_transport(array)
+
+        if self._peer_conn is not None:
+            if not batched and isinstance(payload, np.ndarray) and payload.dtype == np.int64 and payload.size <= self.SHM_SLOT_ELEMS:
+                slot = self._shm_step & 3
+                self._shm_step += 1
+                n = payload.size
+                self._my_shm[slot, :n] = payload.reshape(-1)
+                self._peer_conn.send_bytes(bytes([slot]))
+                peer_slot = self._peer_conn.recv_bytes()[0]
+                other = self._peer_shm[peer_slot, :n].reshape(payload.shape)
+                if op == "sum":
+                    res = payload + other
+                elif op in ("xor", "bxor"):
+                    res = payload ^ other
+                else:
+                    raise NotImplementedError(f"Unsupported reduction op: {op}")
+                return self._from_transport(res, device=self._get_device(array))
+            elif batched and all(isinstance(p, np.ndarray) and p.dtype == np.int64 for p in payload):
+                total_n = sum(p.size for p in payload)
+                if total_n <= self.SHM_SLOT_ELEMS:
+                    slot = self._shm_step & 3
+                    self._shm_step += 1
+                    offset = 0
+                    for p in payload:
+                        sz = p.size
+                        self._my_shm[slot, offset : offset + sz] = p.reshape(-1)
+                        offset += sz
+                    self._peer_conn.send_bytes(bytes([slot]))
+                    peer_slot = self._peer_conn.recv_bytes()[0]
+                    if op == "sum":
+                        flat_res = self._my_shm[slot, :total_n] + self._peer_shm[peer_slot, :total_n]
+                    elif op in ("xor", "bxor"):
+                        flat_res = self._my_shm[slot, :total_n] ^ self._peer_shm[peer_slot, :total_n]
+                    else:
+                        raise NotImplementedError(f"Unsupported reduction op: {op}")
+                    dev = self._get_device(array[0]) if len(array) > 0 else None
+                    out = []
+                    offset = 0
+                    for p in payload:
+                        sz = p.size
+                        out.append(
+                            self._from_transport(
+                                flat_res[offset : offset + sz].reshape(p.shape),
+                                device=dev,
+                            )
+                        )
+                        offset += sz
+                    return out
 
         for i in range(self.world_size):
             if i != self.rank:

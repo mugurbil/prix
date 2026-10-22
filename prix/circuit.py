@@ -46,16 +46,53 @@ def _spk_circuit_constants():
 def _spk_pre_and_mask(sp_share, a_share, b_share, in_mask, out_mask, multiplier):
     p0_share = sp_share[1] & out_mask
     s1p1_share = (sp_share & in_mask) * multiplier
-    return p0_share ^ a_share, s1p1_share ^ b_share
+    e_share = p0_share ^ a_share
+    f_share = s1p1_share ^ b_share
+    return jnp.concatenate([e_share[None], f_share], axis=0)
 
 
-@jax.jit
-def _spk_combine_and_post(sp_share, c_share, eps, delta, a_share, b_share, out_mask, is_rank0):
-    b_eff = jnp.where(is_rank0, b_share ^ delta, b_share)
+@functools.partial(jax.jit, static_argnames=("is_rank0",))
+def _spk_step_fused(
+    sp_share,
+    ef_prev,
+    c_prev,
+    a_prev,
+    b_prev,
+    out_mask_prev,
+    a_next,
+    b_next,
+    in_mask_next,
+    out_mask_next,
+    mult_next,
+    is_rank0,
+):
+    eps = ef_prev[0]
+    delta = ef_prev[1:]
+    b_eff = (b_prev ^ delta) if is_rank0 else b_prev
+    update_share = c_prev ^ (b_eff & eps) ^ (a_prev & delta)
+    not_out_mask = out_mask_prev ^ jnp.int64(-1)
+    s_new = sp_share[0] ^ update_share[0]
+    p_new = (sp_share[1] & not_out_mask) ^ update_share[1]
+    sp_new = jnp.stack([s_new, p_new], axis=0)
+
+    p0_share = p_new & out_mask_next
+    s1p1_share = (sp_new & in_mask_next) * mult_next
+    e_next = p0_share ^ a_next
+    f_next = s1p1_share ^ b_next
+    ef_next = jnp.concatenate([e_next[None], f_next], axis=0)
+    return sp_new, ef_next
+
+
+@functools.partial(jax.jit, static_argnames=("is_rank0",))
+def _spk_combine_and_post(sp_share, c_share, ef, a_share, b_share, out_mask, is_rank0):
+    eps = ef[0]
+    delta = ef[1:]
+    b_eff = (b_share ^ delta) if is_rank0 else b_share
     update_share = c_share ^ (b_eff & eps) ^ (a_share & delta)
     not_out_mask = out_mask ^ jnp.int64(-1)
-    sp_share = sp_share.at[1].set(sp_share[1] & not_out_mask)
-    return sp_share ^ update_share
+    s_new = sp_share[0] ^ update_share[0]
+    p_new = (sp_share[1] & not_out_mask) ^ update_share[1]
+    return jnp.stack([s_new, p_new], axis=0)
 
 
 def _spk_circuit(S, P):
@@ -67,28 +104,65 @@ def _spk_circuit(S, P):
     Multi-Party Computation for Equality, Comparison, Bits and Exponentiation".
     """
     import prix.communicator as comm
-    from prix.array import Array
+    from prix.array import Array, Ptype, SENTINEL
     from prix.provider import get_default_provider
 
-    # Vectorize private AND calls to reduce rounds:
-    SP = Array.stack([S, P])
     masks, out_masks, multipliers = _spk_circuit_constants()
     provider = get_default_provider()
     s_shape = S.size()
-    sp_shape = SP.size()
     is_rank0 = comm.get().get_rank() == 0
+    sp_share = jnp.stack([S.share, P.share], axis=0)
 
-    for i in range(__LOG_BITS):
-        a, b, c = provider.generate_binary_triple(s_shape, sp_shape, device=S.device)
-        eps_share, delta_share = _spk_pre_and_mask(
-            SP.share, a.share, b.share, masks[i], out_masks[i], multipliers[i]
+    if hasattr(provider, "generate_spk_triples") and not provider.tracing and len(provider.tuple_cache) == 0:
+        a_all, b_all, c_all = provider.generate_spk_triples(
+            s_shape, k_rounds=__LOG_BITS, device=S.device
         )
-        eps, delta = comm.get().all_reduce([eps_share, delta_share], op="bxor", batched=True)
-        SP.share = _spk_combine_and_post(
-            SP.share, c.share, eps, delta, a.share, b.share, out_masks[i], is_rank0
+        ef_share = _spk_pre_and_mask(
+            sp_share, a_all[0], b_all[0], masks[0], out_masks[0], multipliers[0]
         )
+        for i in range(__LOG_BITS - 1):
+            ef = comm.get().all_reduce(ef_share, op="bxor")
+            sp_share, ef_share = _spk_step_fused(
+                sp_share,
+                ef,
+                c_all[i],
+                a_all[i],
+                b_all[i],
+                out_masks[i],
+                a_all[i + 1],
+                b_all[i + 1],
+                masks[i + 1],
+                out_masks[i + 1],
+                multipliers[i + 1],
+                is_rank0,
+            )
+        ef_last = comm.get().all_reduce(ef_share, op="bxor")
+        sp_share = _spk_combine_and_post(
+            sp_share,
+            c_all[__LOG_BITS - 1],
+            ef_last,
+            a_all[__LOG_BITS - 1],
+            b_all[__LOG_BITS - 1],
+            out_masks[__LOG_BITS - 1],
+            is_rank0,
+        )
+    else:
+        sp_shape = (2,) + s_shape
+        for i in range(__LOG_BITS):
+            a, b, c = provider.generate_binary_triple(s_shape, sp_shape, device=S.device)
+            ef_share = _spk_pre_and_mask(
+                sp_share, a.share, b.share, masks[i], out_masks[i], multipliers[i]
+            )
+            ef = comm.get().all_reduce(ef_share, op="bxor")
+            sp_share = _spk_combine_and_post(
+                sp_share, c.share, ef, a.share, b.share, out_masks[i], is_rank0
+            )
 
-    return SP[0], SP[1]
+    s_out = Array(src=SENTINEL, precision=0, device=S.device, ptype=Ptype.binary)
+    s_out.share = sp_share[0]
+    p_out = Array(src=SENTINEL, precision=0, device=S.device, ptype=Ptype.binary)
+    p_out.share = sp_share[1]
+    return s_out, p_out
 
 
 def _p_circuit(P):

@@ -19,6 +19,7 @@ from prix.config import cfg
 from prix.encoder import DATATYPE, resolve_device, to_jax
 from prix.random import (
     PRNGGenerator,
+    _sm64_raw,
     count_wraps,
     generate_kbit_random_tensor,
     generate_kbit_random_tensor_np,
@@ -34,11 +35,18 @@ def _int64_matmul(a, b):
     Bit-exact 64-bit ring matrix multiplication mod 2^64 via limb splitting in float64:
     - For K <= 512: 3 limbs of 22 bits (6 float64 matmuls instead of CuRL's 9).
     - For K > 512:  4 limbs of 16 bits (10 float64 matmuls instead of CuRL's 16).
+    On GPU, limbs are stacked along axis 0 to execute a single cublasDgemmStridedBatched kernel.
     """
     ua = jax.lax.bitcast_convert_type(a, jnp.uint64)
     ub = jax.lax.bitcast_convert_type(b, jnp.uint64)
     k = a.shape[-1]
-    if k <= 128:
+    is_gpu = jax.default_backend() == "gpu"
+    if is_gpu:
+        if ua.ndim > ub.ndim:
+            ub = ub.reshape((1,) * (ua.ndim - ub.ndim) + ub.shape)
+        elif ub.ndim > ua.ndim:
+            ua = ua.reshape((1,) * (ub.ndim - ua.ndim) + ua.shape)
+    if k <= 512:
         mask22 = jnp.uint64((1 << 22) - 1)
         a0 = (ua & mask22).astype(jnp.float64)
         a1 = ((ua >> 22) & mask22).astype(jnp.float64)
@@ -47,27 +55,25 @@ def _int64_matmul(a, b):
         b1 = ((ub >> 22) & mask22).astype(jnp.float64)
         b2 = (ub >> 44).astype(jnp.float64)
 
-        c0 = (a0 @ b0).astype(jnp.uint64)
-        c1 = (a0 @ b1 + a1 @ b0).astype(jnp.float64).astype(jnp.uint64)
-        c2 = (a0 @ b2 + a1 @ b1 + a2 @ b0).astype(jnp.float64).astype(jnp.uint64)
-        res = c0 + (c1 << jnp.uint64(22)) + (c2 << jnp.uint64(44))
-        return jax.lax.bitcast_convert_type(res, DATATYPE)
-    elif k <= 512:
-        mask22 = jnp.uint64((1 << 22) - 1)
-        a0 = (ua & mask22).astype(jnp.float64)
-        a1 = ((ua >> 22) & mask22).astype(jnp.float64)
-        a2 = (ua >> 44).astype(jnp.float64)
-        b0 = (ub & mask22).astype(jnp.float64)
-        b1 = ((ub >> 22) & mask22).astype(jnp.float64)
-        b2 = (ub >> 44).astype(jnp.float64)
-
-        c0 = (a0 @ b0).astype(jnp.uint64)
-        c1 = (a0 @ b1).astype(jnp.uint64) + (a1 @ b0).astype(jnp.uint64)
-        c2 = (
-            (a0 @ b2).astype(jnp.uint64)
-            + (a1 @ b1).astype(jnp.uint64)
-            + (a2 @ b0).astype(jnp.uint64)
-        )
+        if is_gpu:
+            lhs = jnp.stack([a0, a0, a1, a0, a1, a2], axis=0)
+            rhs = jnp.stack([b0, b1, b0, b2, b1, b0], axis=0)
+            p = jnp.matmul(lhs, rhs).astype(jnp.uint64)
+            c0 = p[0]
+            c1 = p[1] + p[2]
+            c2 = p[3] + p[4] + p[5]
+        elif k <= 128:
+            c0 = (a0 @ b0).astype(jnp.uint64)
+            c1 = (a0 @ b1 + a1 @ b0).astype(jnp.float64).astype(jnp.uint64)
+            c2 = (a0 @ b2 + a1 @ b1 + a2 @ b0).astype(jnp.float64).astype(jnp.uint64)
+        else:
+            c0 = (a0 @ b0).astype(jnp.uint64)
+            c1 = (a0 @ b1).astype(jnp.uint64) + (a1 @ b0).astype(jnp.uint64)
+            c2 = (
+                (a0 @ b2).astype(jnp.uint64)
+                + (a1 @ b1).astype(jnp.uint64)
+                + (a2 @ b0).astype(jnp.uint64)
+            )
         res = c0 + (c1 << jnp.uint64(22)) + (c2 << jnp.uint64(44))
         return jax.lax.bitcast_convert_type(res, DATATYPE)
     else:
@@ -81,10 +87,19 @@ def _int64_matmul(a, b):
         b2 = ((ub >> 32) & mask16).astype(jnp.float64)
         b3 = (ub >> 48).astype(jnp.float64)
 
-        c0 = (a0 @ b0).astype(jnp.uint64)
-        c1 = (a0 @ b1 + a1 @ b0).astype(jnp.uint64)
-        c2 = (a0 @ b2 + a1 @ b1 + a2 @ b0).astype(jnp.uint64)
-        c3 = (a0 @ b3 + a1 @ b2 + a2 @ b1 + a3 @ b0).astype(jnp.uint64)
+        if is_gpu:
+            lhs = jnp.stack([a0, a0, a1, a0, a1, a2, a0, a1, a2, a3], axis=0)
+            rhs = jnp.stack([b0, b1, b0, b2, b1, b0, b3, b2, b1, b0], axis=0)
+            p = jnp.matmul(lhs, rhs).astype(jnp.uint64)
+            c0 = p[0]
+            c1 = p[1] + p[2]
+            c2 = p[3] + p[4] + p[5]
+            c3 = p[6] + p[7] + p[8] + p[9]
+        else:
+            c0 = (a0 @ b0).astype(jnp.uint64)
+            c1 = (a0 @ b1 + a1 @ b0).astype(jnp.uint64)
+            c2 = (a0 @ b2 + a1 @ b1 + a2 @ b0).astype(jnp.uint64)
+            c3 = (a0 @ b3 + a1 @ b2 + a2 @ b1 + a3 @ b0).astype(jnp.uint64)
         res = c0 + (c1 << jnp.uint64(16)) + (c2 << jnp.uint64(32)) + (c3 << jnp.uint64(48))
         return jax.lax.bitcast_convert_type(res, DATATYPE)
 
@@ -294,6 +309,159 @@ def _przs_np(shape, ptype="arithmetic"):
     return diff.view(np.int64)
 
 
+def _get_prng_offsets(n_przs, n_loc=0):
+    import prix
+
+    g0 = prix.generators.get("prev")
+    g1 = prix.generators.get("next")
+    s0, c0 = g0.next_offset(n_przs)
+    s1, c1 = g1.next_offset(n_przs)
+    if n_loc > 0:
+        g_loc = prix.generators.get("local")
+        s_loc, c_loc = g_loc.next_offset(n_loc)
+    else:
+        s_loc, c_loc = 0, 0
+    return c_loc, c0, c1, s_loc, s0, s1
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
+def _tfp_mul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shape, is_rank0):
+    n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
+    n1 = int(np.prod(s1_shape)) if len(s1_shape) > 0 else 1
+    n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+    tot = n0 + n1 + n2
+    diff_all = _sm64_raw(s0, c0, (tot,)) - _sm64_raw(s1, c1, (tot,))
+    diff_a = diff_all[:n0].reshape(s0_shape)
+    diff_b = diff_all[n0 : n0 + n1].reshape(s1_shape)
+    diff_c = diff_all[n0 + n1 :].reshape(c_shape)
+    if is_rank0:
+        ab = _sm64_raw(s_loc, c_loc, (n0 + n1,))
+        a = ab[:n0].reshape(s0_shape)
+        b = ab[n0:].reshape(s1_shape)
+        c = a * b
+        return diff_a + a, diff_b + b, diff_c + c
+    return diff_a, diff_b, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
+def _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shape, is_rank0):
+    n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
+    n1 = int(np.prod(s1_shape)) if len(s1_shape) > 0 else 1
+    n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+    tot = n0 + n1 + n2
+    diff_all = _sm64_raw(s0, c0, (tot,)) - _sm64_raw(s1, c1, (tot,))
+    diff_a = diff_all[:n0].reshape(s0_shape)
+    diff_b = diff_all[n0 : n0 + n1].reshape(s1_shape)
+    diff_c = diff_all[n0 + n1 :].reshape(c_shape)
+    if is_rank0:
+        ab = _sm64_raw(s_loc, c_loc, (n0 + n1,))
+        a = ab[:n0].reshape(s0_shape)
+        b = ab[n0:].reshape(s1_shape)
+        c = _int64_matmul(a, b)
+        return diff_a + a, diff_b + b, diff_c + c
+    return diff_a, diff_b, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+def _tfp_square_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
+    diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
+    if is_rank0:
+        r = _sm64_raw(s_loc, c_loc, shape)
+        return diff[0] + r, diff[1] + (r * r)
+    return diff[0], diff[1]
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
+def _tfp_binary_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shape, is_rank0):
+    n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
+    n1 = int(np.prod(s1_shape)) if len(s1_shape) > 0 else 1
+    n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+    tot = n0 + n1 + n2
+    diff_all = _sm64_raw(s0, c0, (tot,)) ^ _sm64_raw(s1, c1, (tot,))
+    diff_a = diff_all[:n0].reshape(s0_shape)
+    diff_b = diff_all[n0 : n0 + n1].reshape(s1_shape)
+    diff_c = diff_all[n0 + n1 :].reshape(c_shape)
+    if is_rank0:
+        ab = _sm64_raw(s_loc, c_loc, (n0 + n1,))
+        a = ab[:n0].reshape(s0_shape)
+        b = ab[n0:].reshape(s1_shape)
+        c = a & b
+        return diff_a ^ a, diff_b ^ b, diff_c ^ c
+    return diff_a, diff_b, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "k_rounds", "is_rank0"))
+def _tfp_spk_triples_jit(c_loc, c0, c1, s_loc, s0, s1, shape, k_rounds, is_rank0):
+    a_shape = (k_rounds,) + shape
+    b_shape = (k_rounds, 2) + shape
+    n_a = int(np.prod(a_shape))
+    n_b = int(np.prod(b_shape))
+    tot = n_a + 2 * n_b
+    diff_all = _sm64_raw(s0, c0, (tot,)) ^ _sm64_raw(s1, c1, (tot,))
+    diff_a = diff_all[:n_a].reshape(a_shape)
+    diff_b = diff_all[n_a : n_a + n_b].reshape(b_shape)
+    diff_c = diff_all[n_a + n_b :].reshape(b_shape)
+    if is_rank0:
+        ab = _sm64_raw(s_loc, c_loc, (n_a + n_b,))
+        a = ab[:n_a].reshape(a_shape)
+        b = ab[n_a:].reshape(b_shape)
+        c = a[:, None] & b
+        return diff_a ^ a, diff_b ^ b, diff_c ^ c
+    return diff_a, diff_b, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+def _tfp_b2a_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
+    u0 = _sm64_raw(s0, c0, (2, *shape))
+    u1 = _sm64_raw(s1, c1, (2, *shape))
+    diff_a = u0[0] - u1[0]
+    diff_b = u0[1] ^ u1[1]
+    if is_rank0:
+        r = _sm64_raw(s_loc, c_loc, shape) & jnp.int64(1)
+        return diff_a + r, diff_b ^ r
+    return diff_a, diff_b
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "t_shape", "lut_size", "is_rank0"))
+def _tfp_one_hot_jit(c_loc, c0, c1, s_loc, s0, s1, t_shape, lut_size, is_rank0):
+    n_elem = int(np.prod(t_shape)) if len(t_shape) > 0 else 1
+    oh_shape = (n_elem, lut_size)
+    tot = n_elem + n_elem * lut_size
+    diff_all = _sm64_raw(s0, c0, (tot,)) - _sm64_raw(s1, c1, (tot,))
+    diff_r = diff_all[:n_elem].reshape(t_shape)
+    diff_oh = diff_all[n_elem:].reshape(oh_shape)
+    if is_rank0:
+        r = _sm64_raw(s_loc, c_loc, t_shape)
+        r_clear = r % jnp.int64(lut_size)
+        r_share = diff_r + r_clear
+        oh_share = diff_oh.at[jnp.arange(n_elem), r_clear.reshape(-1)].add(1)
+        return r_share, oh_share
+    return diff_r, diff_oh
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "l_minus_m", "m", "is_rank0"))
+def _tfp_egk_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, l_minus_m, m, is_rank0):
+    diff = _sm64_raw(s0, c0, (3, *shape)) - _sm64_raw(s1, c1, (3, *shape))
+    if is_rank0:
+        loc = _sm64_raw(s_loc, c_loc, (3, *shape))
+        r = loc[0] & jnp.int64((1 << l_minus_m) - 1)
+        rp = loc[1] & jnp.int64((1 << m) - 1)
+        b = loc[2] & jnp.int64(1)
+        return diff[0] + r, diff[1] + rp, diff[2] + b
+    return diff[0], diff[1], diff[2]
+
+
+def _wrap_shares(shares, ptypes, device=None):
+    from prix.array import Array, Ptype, SENTINEL
+
+    out = []
+    for s, pt in zip(shares, ptypes):
+        res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype(pt))
+        res.share = to_jax(s, device=device, dtype=DATATYPE)
+        out.append(res)
+    return tuple(out)
+
+
 def _share_batch_np(np_tensors, shapes, ptypes, device=None):
     from prix.array import Array, Ptype, SENTINEL
 
@@ -337,9 +505,17 @@ class TrustedFirstParty(TupleProvider):
 
     def generate_additive_triple(self, size0, size1, op="mul", device=None, *args, **kwargs):
         s0, s1 = tuple(size0), tuple(size1)
+        is_rank0 = self.rank == 0
         if op == "mul":
             c_shape = jnp.broadcast_shapes(s0, s1)
-            if self.rank == 0:
+            if jax.default_backend() == "gpu":
+                n0 = int(np.prod(s0)) if len(s0) > 0 else 1
+                n1 = int(np.prod(s1)) if len(s1) > 0 else 1
+                n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+                c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n1 + n2, n0 + n1 if is_rank0 else 0)
+                shares = _tfp_mul_triple_jit(c_loc, c0, c1, s_loc, sd0, sd1, s0, s1, c_shape, is_rank0)
+                return _wrap_shares(shares, ("arithmetic", "arithmetic", "arithmetic"), device=device)
+            if is_rank0:
                 a_np = generate_random_ring_element_np(s0, device=device)
                 b_np = generate_random_ring_element_np(s1, device=device)
                 c_np = a_np * b_np
@@ -348,7 +524,16 @@ class TrustedFirstParty(TupleProvider):
                 tensors = [None, None, None]
             return tuple(_share_batch_np(tensors, (s0, s1, c_shape), ("arithmetic", "arithmetic", "arithmetic"), device=device))
 
-        if self.rank == 0:
+        if op == "matmul":
+            c_shape = jnp.broadcast_shapes(s0[:-2], s1[:-2]) + (s0[-2], s1[-1])
+            n0 = int(np.prod(s0)) if len(s0) > 0 else 1
+            n1 = int(np.prod(s1)) if len(s1) > 0 else 1
+            n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n1 + n2, n0 + n1 if is_rank0 else 0)
+            shares = _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, sd0, sd1, s0, s1, c_shape, is_rank0)
+            return _wrap_shares(shares, ("arithmetic", "arithmetic", "arithmetic"), device=device)
+
+        if is_rank0:
             a = generate_random_ring_element(s0, device=device)
             b = generate_random_ring_element(s1, device=device)
             c = _eval_ring_op(op, a, b, *args, **kwargs)
@@ -356,18 +541,21 @@ class TrustedFirstParty(TupleProvider):
             c_shape = c.shape
         else:
             tensors = [None, None, None]
-            if op == "matmul":
-                c_shape = jnp.broadcast_shapes(s0[:-2], s1[:-2]) + (s0[-2], s1[-1])
-            else:
-                a_dummy = jnp.zeros(s0, dtype=DATATYPE)
-                b_dummy = jnp.zeros(s1, dtype=DATATYPE)
-                c_shape = _eval_ring_op(op, a_dummy, b_dummy, *args, **kwargs).shape
+            a_dummy = jnp.zeros(s0, dtype=DATATYPE)
+            b_dummy = jnp.zeros(s1, dtype=DATATYPE)
+            c_shape = _eval_ring_op(op, a_dummy, b_dummy, *args, **kwargs).shape
         shapes = (s0, s1, c_shape)
         return tuple(_share_batch(tensors, shapes, ("arithmetic", "arithmetic", "arithmetic"), device=device))
 
     def square(self, size, device=None):
         shape = tuple(size)
-        if self.rank == 0:
+        is_rank0 = self.rank == 0
+        if jax.default_backend() == "gpu":
+            n = int(np.prod(shape)) if len(shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
+            shares = _tfp_square_jit(c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0)
+            return _wrap_shares(shares, ("arithmetic", "arithmetic"), device=device)
+        if is_rank0:
             r_np = generate_random_ring_element_np(shape, device=device)
             r2_np = r_np * r_np
             tensors = [r_np, r2_np]
@@ -378,7 +566,15 @@ class TrustedFirstParty(TupleProvider):
     def generate_binary_triple(self, size0, size1, device=None):
         s0, s1 = tuple(size0), tuple(size1)
         c_shape = jnp.broadcast_shapes(s0, s1)
-        if self.rank == 0:
+        is_rank0 = self.rank == 0
+        if jax.default_backend() == "gpu":
+            n0 = int(np.prod(s0)) if len(s0) > 0 else 1
+            n1 = int(np.prod(s1)) if len(s1) > 0 else 1
+            n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n1 + n2, n0 + n1 if is_rank0 else 0)
+            shares = _tfp_binary_triple_jit(c_loc, c0, c1, s_loc, sd0, sd1, s0, s1, c_shape, is_rank0)
+            return _wrap_shares(shares, ("binary", "binary", "binary"), device=device)
+        if is_rank0:
             a_np = generate_kbit_random_tensor_np(s0, device=device)
             b_np = generate_kbit_random_tensor_np(s1, device=device)
             c_np = a_np & b_np
@@ -386,6 +582,20 @@ class TrustedFirstParty(TupleProvider):
         else:
             tensors = [None, None, None]
         return tuple(_share_batch_np(tensors, (s0, s1, c_shape), ("binary", "binary", "binary"), device=device))
+
+    def generate_spk_triples(self, shape, k_rounds=6, device=None):
+        s = tuple(shape)
+        is_rank0 = self.rank == 0
+        n = int(np.prod(s)) if len(s) > 0 else 1
+        n_a = k_rounds * n
+        n_b = k_rounds * 2 * n
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n_a + 2 * n_b, (n_a + n_b) if is_rank0 else 0)
+        a_sh, b_sh, c_sh = _tfp_spk_triples_jit(c_loc, c0, c1, s_loc, sd0, sd1, s, k_rounds, is_rank0)
+        return (
+            to_jax(a_sh, device=device, dtype=DATATYPE),
+            to_jax(b_sh, device=device, dtype=DATATYPE),
+            to_jax(c_sh, device=device, dtype=DATATYPE),
+        )
 
     def wrap_rng(self, size, device=None):
         from prix.array import Array
@@ -408,7 +618,13 @@ class TrustedFirstParty(TupleProvider):
 
     def B2A_rng(self, size, device=None):
         shape = tuple(size)
-        if self.rank == 0:
+        is_rank0 = self.rank == 0
+        if jax.default_backend() == "gpu":
+            n = int(np.prod(shape)) if len(shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
+            shares = _tfp_b2a_rng_jit(c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0)
+            return _wrap_shares(shares, ("arithmetic", "binary"), device=device)
+        if is_rank0:
             r_np = generate_kbit_random_tensor_np(shape, bitlength=1, device=device)
             tensors = [r_np, r_np]
         else:
@@ -416,27 +632,23 @@ class TrustedFirstParty(TupleProvider):
         return tuple(_share_batch_np(tensors, (shape, shape), ("arithmetic", "binary"), device=device))
 
     def generate_one_hot(self, tensor_size, lut_size, device=None):
-        from prix.array import Array, Ptype, SENTINEL
-
         t_shape = tuple(tensor_size)
         n_elem = int(np.prod(t_shape)) if len(t_shape) > 0 else 1
-        oh_shape = (n_elem, int(lut_size))
-        diff_r = _przs_np(t_shape, "arithmetic")
-        diff_oh = _przs_np(oh_shape, "arithmetic")
-        if self.rank == 0:
-            r_np = generate_random_ring_element_np(t_shape, device=device)
-            r_clear = r_np % int(lut_size)
-            diff_r = diff_r + r_clear
-            diff_oh[np.arange(n_elem), r_clear.reshape(-1)] += 1
-        r_res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype.arithmetic)
-        r_res.share = to_jax(diff_r, device=device, dtype=DATATYPE)
-        oh_res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype.arithmetic)
-        oh_res.share = to_jax(diff_oh, device=device, dtype=DATATYPE)
-        return r_res, oh_res
+        lut_sz = int(lut_size)
+        is_rank0 = self.rank == 0
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n_elem + n_elem * lut_sz, n_elem if is_rank0 else 0)
+        r_sh, oh_sh = _tfp_one_hot_jit(c_loc, c0, c1, s_loc, sd0, sd1, t_shape, lut_sz, is_rank0)
+        return _wrap_shares((r_sh, oh_sh), ("arithmetic", "arithmetic"), device=device)
 
     def egk_trunc_pr_rng(self, size, l, m, device=None):
         shape = tuple(size)
-        if self.rank == 0:
+        is_rank0 = self.rank == 0
+        if jax.default_backend() == "gpu":
+            n = int(np.prod(shape)) if len(shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(3 * n, 3 * n if is_rank0 else 0)
+            shares = _tfp_egk_rng_jit(c_loc, c0, c1, s_loc, sd0, sd1, shape, int(l - m), int(m), is_rank0)
+            return _wrap_shares(shares, ("arithmetic", "arithmetic", "arithmetic"), device=device)
+        if is_rank0:
             r_np = generate_kbit_random_tensor_np(shape, bitlength=l - m, device=device)
             rp_np = generate_kbit_random_tensor_np(shape, bitlength=m, device=device)
             b_np = generate_kbit_random_tensor_np(shape, bitlength=1, device=device)

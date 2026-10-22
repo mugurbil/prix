@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from enum import Enum
+import functools
 import math
 
 import jax
@@ -17,6 +18,7 @@ from prix.config import cfg
 from prix.encoder import DATATYPE, FixedPointEncoder, decode, encode, resolve_device, to_jax
 from prix.provider import _eval_ring_op, _int64_matmul, get_default_provider
 from prix.random import (
+    _przs_jit,
     count_wraps,
     generate_kbit_random_tensor,
     generate_random_ring_element,
@@ -194,10 +196,18 @@ class Array:
         g0 = prix.generators.get("prev")
         g1 = prix.generators.get("next")
         if g0 is not None and g1 is not None:
-            u0 = g0.next_uint64(size)
-            u1 = g1.next_uint64(size)
-            diff = (u0 ^ u1) if ptype == Ptype.binary else (u0 - u1)
-            result.share = to_jax(diff.view(np.int64), device=device, dtype=DATATYPE)
+            if jax.default_backend() == "gpu":
+                shape = tuple(size)
+                n = int(np.prod(shape)) if len(shape) > 0 else 1
+                s0, c0 = g0.next_offset(n)
+                s1, c1 = g1.next_offset(n)
+                diff = _przs_jit(c0, c1, s0, s1, shape, ptype == Ptype.binary)
+                result.share = to_jax(diff, device=device, dtype=DATATYPE)
+            else:
+                u0 = g0.next_uint64(size)
+                u1 = g1.next_uint64(size)
+                diff = (u0 ^ u1) if ptype == Ptype.binary else (u0 - u1)
+                result.share = to_jax(diff.view(np.int64), device=device, dtype=DATATYPE)
         elif ptype == Ptype.binary:
             s0 = generate_kbit_random_tensor(size, bitlength=64, generator=g0, device=device)
             s1 = generate_kbit_random_tensor(size, bitlength=64, generator=g1, device=device)
@@ -389,14 +399,9 @@ class Array:
             s_shape = self.size()
             a, b, c = provider.generate_binary_triple(s_shape, s_shape, device=self.device)
             is_rank0 = self.rank == 0
-            if is_rank0:
-                eps_share = self.share ^ a.share
-                delta_share = b.share
-            else:
-                eps_share = a.share
-                delta_share = self.share ^ b.share
-            eps, delta = comm.get().all_reduce([eps_share, delta_share], op="bxor", batched=True)
-            c.share = _binary_and_combine(c.share, eps, delta, a.share, b.share, is_rank0)
+            ed_share = _a2b_pre_and(self.share, a.share, b.share, is_rank0)
+            ed = comm.get().all_reduce(ed_share, op="bxor")
+            c.share = _binary_and_combine(c.share, ed[0], ed[1], a.share, b.share, is_rank0)
             P = Array.from_shares(self.share, precision=0, device=self.device, ptype=Ptype.binary)
             carry, _ = circuit._spk_circuit(c, P)
             binary_tensor = P.shallow_copy()
@@ -1170,6 +1175,18 @@ class Array:
     __mod__ = mod
 
 
+@functools.partial(jax.jit, static_argnames=("is_rank0",))
+def _a2b_pre_and(x_share, a_share, b_share, is_rank0):
+    e_s = (x_share ^ a_share) if is_rank0 else a_share
+    f_s = b_share if is_rank0 else (x_share ^ b_share)
+    return jnp.stack([e_s, f_s], axis=0)
+
+
+@jax.jit
+def _beaver_pre_same_shape(x_share, y_share, a_share, b_share):
+    return jnp.stack([x_share - a_share, y_share - b_share], axis=0)
+
+
 @jax.jit
 def _beaver_mul_combine(c_share, eps, delta, a_share, b_share, is_rank0):
     b_eff = jnp.where(is_rank0, b_share + delta, b_share)
@@ -1179,7 +1196,18 @@ def _beaver_mul_combine(c_share, eps, delta, a_share, b_share, is_rank0):
 @jax.jit
 def _beaver_matmul_combine(c_share, eps, delta, a_share, b_share, is_rank0):
     b_eff = jnp.where(is_rank0, b_share + delta, b_share)
-    return c_share + _int64_matmul(eps, b_eff) + _int64_matmul(a_share, delta)
+    if eps.ndim > b_eff.ndim:
+        pad = (1,) * (eps.ndim - b_eff.ndim)
+        b_eff = b_eff.reshape(pad + b_eff.shape)
+        delta = delta.reshape(pad + delta.shape)
+    elif b_eff.ndim > eps.ndim:
+        pad = (1,) * (b_eff.ndim - eps.ndim)
+        eps = eps.reshape(pad + eps.shape)
+        a_share = a_share.reshape(pad + a_share.shape)
+    lhs = jnp.stack([eps, a_share], axis=0)
+    rhs = jnp.stack([b_eff, delta], axis=0)
+    prods = _int64_matmul(lhs, rhs)
+    return c_share + prods[0] + prods[1]
 
 
 # Protocol helper functions
@@ -1202,8 +1230,13 @@ def _beaver_protocol(op, x, y, *args, **kwargs):
         if bool(jnp.any(triples_check != 0)):
             raise ValueError("Beaver Triples verification failed!")
 
-    with IgnoreEncodings([a, b, x, y]):
-        epsilon, delta = Array.reveal_batch([x - a, y - b])
+    if x.size() == y.size():
+        ed_share = _beaver_pre_same_shape(x.share, y.share, a.share, b.share)
+        ed = comm.get().all_reduce(ed_share, op="sum")
+        epsilon, delta = ed[0], ed[1]
+    else:
+        with IgnoreEncodings([a, b, x, y]):
+            epsilon, delta = Array.reveal_batch([x - a, y - b])
 
     is_rank0 = comm.get().get_rank() == 0
     if op == "mul":

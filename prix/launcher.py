@@ -6,6 +6,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
+import ctypes
 import logging
 import multiprocessing
 import os
@@ -13,6 +14,7 @@ import threading
 import uuid
 
 import prix
+from prix.communicator.process_communicator import InProcessCommunicator
 from prix.config import cfg
 from prix.evaluator import EvaluatorServer
 from prix.provider import TTPServer
@@ -50,6 +52,16 @@ class MultiProcessLauncher:
 
         mailbox = [ctx.Queue() for _ in range(total_ranks)]
         barrier = ctx.Barrier(world_size)
+        if world_size == 2:
+            shm_elems = InProcessCommunicator.SHM_SLOT_ELEMS
+            InProcessCommunicator.shm_buffers = [
+                ctx.RawArray(ctypes.c_int64, 4 * shm_elems) for _ in range(2)
+            ]
+            c0, c1 = ctx.Pipe(duplex=True)
+            InProcessCommunicator.peer_pipes = [c0, c1]
+        else:
+            InProcessCommunicator.shm_buffers = None
+            InProcessCommunicator.peer_pipes = None
 
         self.processes = []
         self.ttp_process = None

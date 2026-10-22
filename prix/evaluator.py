@@ -223,19 +223,20 @@ class EvaluatorServer:
                     raw_sum = results[0] + results[1] if world_size == 2 else np.add.reduce(results)
                     array = raw_sum.astype(np.float32) / np.float32(scale)
 
-                    if function == "layernorm":
-                        mean = np.mean(array, axis=-1, keepdims=True)
-                        variance = np.var(array, axis=-1, keepdims=True)
-                        result = (array - mean) / np.sqrt(variance + np.float32(1e-05))
-                    elif function in fission_operations:
-                        result = fission_operations[function](array)
-                    else:
-                        raise ValueError(f"Unsupported function {function}")
+                    with np.errstate(all="ignore"):
+                        if function == "layernorm":
+                            mean = np.mean(array, axis=-1, keepdims=True)
+                            variance = np.var(array, axis=-1, keepdims=True)
+                            result = (array - mean) / np.sqrt(variance + np.float32(1e-05))
+                        elif function in fission_operations:
+                            result = fission_operations[function](array)
+                        else:
+                            raise ValueError(f"Unsupported function {function}")
 
-                    # Secret share result back to the MPC parties
-                    encoded = np.round(result * (2 ** cfg.encoder.precision_bits)).astype(
-                        np.int64
-                    )
+                        # Secret share result back to the MPC parties
+                        encoded = np.round(result * (2 ** cfg.encoder.precision_bits)).astype(
+                            np.int64
+                        )
                     out_shares = [encoded]
                     for _ in range(1, world_size):
                         share = generate_random_ring_element_np(
