@@ -8,6 +8,12 @@
 
 ## Installation & Quickstart
 
+Install from PyPI:
+```bash
+pip install prix-jax
+```
+
+Or install from source:
 ```bash
 pip install -e .
 ```
