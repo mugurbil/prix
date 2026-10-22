@@ -49,8 +49,10 @@ Andes Y.~L. Kei and Sherman S.~M. Chow.
 \newblock {SHAFT}: Secure, handy, accurate, and fast transformer inference.
 \newblock In {\em Network and Distributed System Security Symposium (NDSS)},
   2025.
-\newblock Cryptology ePrint Archive, Paper 2024/1965,
-  \url{https://eprint.iacr.org/2024/1965}.
+\newblock
+  \url{https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/};
+  Cryptology ePrint Archive, Paper 2025/2324,
+  \url{https://eprint.iacr.org/2025/2324}.
 
 \bibitem{knott2021crypten}
 Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim,
@@ -101,8 +103,8 @@ Manuel~B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, Jos{\'e}
 \newblock {Curl}: Private {LLMs} through wavelet-encoded look-up tables.
 \newblock In {\em Proceedings of the Conference on Applied Machine Learning in
   Information Security (CAMLIS)}, pages 1--31, 2024.
-\newblock Cryptology ePrint Archive, Paper 2024/1045,
-  \url{https://eprint.iacr.org/2024/1045}.
+\newblock Cryptology ePrint Archive, Paper 2024/1127,
+  \url{https://eprint.iacr.org/2024/1127}.
 
 \bibitem{ugurbil2025fission}
 Mehmet Ugurbil, Dimitris Mouris, Manuel~B. Santos, Jos{\'e} Cabrero-Holgueras,

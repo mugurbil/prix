@@ -28,7 +28,7 @@ MODES = [
     ("crypten", "CrypTen\napprox."),
     ("poly", "Piecewise\npoly"),
     ("shaft", "SHAFT"),
-    ("lut", "CuRL\nLUTs"),
+    ("lut", "Curl\nLUTs"),
     ("fission", "Fission"),
 ]
 MODELS = [
@@ -50,7 +50,7 @@ OPS = [
     ("Softmax (4x32x32)", "Softmax"),
     ("LayerNorm (4x32x64)", "LayerNorm"),
 ]
-SHORT_MODES = ["CrypTen", "Poly", "SHAFT", "CuRL", "Fission"]
+SHORT_MODES = ["CrypTen", "Poly", "SHAFT", "Curl", "Fission"]
 PLATFORMS = [("cpu", "CPU · AMD EPYC 7B12"), ("gpu", "GPU · NVIDIA Tesla T4")]
 
 CRYPTEN_COLOR = "#9aa5b1"

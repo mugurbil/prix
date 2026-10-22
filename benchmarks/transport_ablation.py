@@ -21,7 +21,7 @@ import numpy as np
 
 MODES = ["crypten", "poly", "shaft", "lut", "fission"]
 MODE_LABELS = {"crypten": "CrypTen approx.", "poly": "Piecewise poly", "shaft": "SHAFT",
-               "lut": "CuRL LUTs", "fission": "Fission"}
+               "lut": "Curl LUTs", "fission": "Fission"}
 
 
 def geomean(xs):

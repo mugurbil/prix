@@ -1,4 +1,4 @@
-<p align="center"><img width="35%" src="https://github.com/mugurbil/prix/blob/main/prix.png" alt="PriX logo" /></p>
+<p align="center"><img width="35%" src="https://raw.githubusercontent.com/mugurbil/prix/main/prix.png" alt="PriX logo" /></p>
 
 [![PyPI version](https://img.shields.io/pypi/v/prix-jax.svg)](https://pypi.org/project/prix-jax/)
 [![Tests](https://github.com/mugurbil/prix/actions/workflows/tests.yml/badge.svg)](https://github.com/mugurbil/prix/actions/workflows/tests.yml)
@@ -9,7 +9,7 @@
 
 **PriX** is a **modern, high-performance JAX/XLA drop-in alternative to [CrypTen (NeurIPS 2021)](https://proceedings.neurips.cc/paper/2021/hash/2754518221cfbc8d25c13a06a4cb8421-Abstract.html)** built for **Private Machine Learning and Private LLM / Transformer Research** via Secure Multi-Party Computation (MPC).
 
-Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.reconstruct()` / `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (CPU, CUDA GPU, TPU)**—and switch between five state-of-the-art MPC approximation paradigms ([**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045), [**PUMA (2023)**](https://arxiv.org/abs/2307.12533) / [**Nimbus (NeurIPS 2024)**](https://arxiv.org/abs/2411.15707), [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="lut" | "poly" | "shaft" | "crypten" | "fission"`).
+Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.reconstruct()` / `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (tested on CPU and CUDA GPU)**—and switch between five state-of-the-art MPC approximation paradigms ([**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127), [**PUMA (2023)**](https://arxiv.org/abs/2307.12533) / [**Nimbus (NeurIPS 2024)**](https://arxiv.org/abs/2411.15707), [**SHAFT (NDSS 2025)**](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="lut" | "poly" | "shaft" | "crypten" | "fission"`).
 
 > [!WARNING]
 > **Research prototype — not yet suitable for protecting real secrets.**
@@ -21,11 +21,11 @@ Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiproce
 
 ## Why PriX over CrypTen?
 
-Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) pioneered ML-friendly MPC in PyTorch, but has been archived since 2023 and is pinned to legacy Python/PyTorch versions, while recent MPC breakthroughs—[CuRL (CAMLIS 2024)](https://eprint.iacr.org/2024/1045), [PUMA (2023)](https://arxiv.org/abs/2307.12533) / [Nimbus (NeurIPS 2024)](https://arxiv.org/abs/2411.15707), [SHAFT (NDSS 2025)](https://eprint.iacr.org/2024/1965), and [Fission (IEEE CNS 2025)](https://eprint.iacr.org/2025/653)—live in separate repositories ([jimouris/curl](https://github.com/jimouris/curl), [secretflow/spu](https://github.com/secretflow/spu), [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT)). **PriX** unifies all five in a single, actively maintained JAX/XLA package:
+Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) pioneered ML-friendly MPC in PyTorch, but its repository was archived in May 2025 and needs compatibility patches to run on current Python, PyTorch and JAX releases, while recent MPC breakthroughs—[Curl (CAMLIS 2024)](https://eprint.iacr.org/2024/1127), [PUMA (2023)](https://arxiv.org/abs/2307.12533) / [Nimbus (NeurIPS 2024)](https://arxiv.org/abs/2411.15707), [SHAFT (NDSS 2025)](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), and [Fission (IEEE CNS 2025)](https://eprint.iacr.org/2025/653)—live in separate repositories ([jimouris/curl](https://github.com/jimouris/curl), [secretflow/spu](https://github.com/secretflow/spu), [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT)). **PriX** unifies all five in a single, actively maintained JAX/XLA package:
 
 | Feature | CrypTen (PyTorch) | **PriX (JAX/XLA)** |
 |---|---|---|
-| **Python & Accelerator Support** | Legacy Python / `torch==1.9` | **Python 3.10–3.13**, modern **CPU, CUDA GPU, & TPU** via `pip install prix-jax` |
+| **Python & Accelerator Support** | Archived (May 2025); needs patches for current Python / PyTorch | **Python 3.10–3.13**, **CPU & CUDA GPU** (tested) via `pip install prix-jax` |
 | **API Ergonomics** | `crypten.cryptensor`, `@run_multiprocess`, `crypten.nn` | **`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn`** (plus drop-in `prix.cryptensor` alias) |
 | **Nonlinear Approximation Backends** | Polynomial / NR / limit only (or separate forks) | **5 built-in backends in 1 line** (`mode="lut" \| "poly" \| "shaft" \| "crypten" \| "fission"`) |
 | **Kernel Execution** | Eager PyTorch op-by-op launches | **`@jax.jit`-compiled local protocol steps** (fused carry-lookahead rounds, LUT gather, limb matmul, Fourier combination) |
@@ -95,9 +95,9 @@ for mode in ["crypten", "poly", "shaft", "lut", "fission"]:
 
 | `mode` | Nonlinearities & Truncation | Paper & Reference Code |
 |---|---|---|
-| **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045) · [jimouris/curl](https://github.com/jimouris/curl) |
+| **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) · [jimouris/curl](https://github.com/jimouris/curl) |
 | **`"poly"`** | Piecewise low-degree polynomials for `gelu`, `silu`, `exp`, `tanh`, `sigmoid`, `erf` (1 batched comparison + degree-4 polynomial, no LUTs, `configs/poly.yaml`) | [**PUMA (arXiv 2023)**](https://arxiv.org/abs/2307.12533) · [**Nimbus (NeurIPS 2024)**](https://arxiv.org/abs/2411.15707) · [secretflow/spu](https://github.com/secretflow/spu) |
-| **`"shaft"`** | 1-round trigonometric-triple Fourier-series GeLU / SiLU / Erf / Tanh / Sigmoid + constant-round Forward-Euler ODE Softmax (`configs/shaft.yaml`) | [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965) · [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT) |
+| **`"shaft"`** | 1-round trigonometric-triple Fourier-series GeLU / SiLU / Erf / Tanh / Sigmoid + constant-round Forward-Euler ODE Softmax (`configs/shaft.yaml`) | [**SHAFT (NDSS 2025)**](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/) · [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT) |
 | **`"crypten"`** | Classic limit `exp`, Newton–Raphson `reciprocal` / `inv_sqrt`, Taylor `erf`, sigmoid-based `silu`, CrypTen truncation (`configs/approximations.yaml`) | [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984) · [facebookresearch/CrypTen](https://github.com/facebookresearch/CrypTen) |
 | **`"fission"`** | Hybrid permute-and-reveal to a non-colluding plaintext evaluator party, auto-spawned by `prix.run` (`configs/fission.yaml`) | [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653) · [jimouris/curl](https://github.com/jimouris/curl) |
 
@@ -138,7 +138,7 @@ print("Output shape:", run_private_mlp())
 | Notebook | Description | Colab Link |
 |---|---|---|
 | [**01 · PriX in 5 Minutes: MPC Basics**](examples/01_quickstart_mpc_basics.ipynb) | Secret sharing across parties (`src=0`, `src=1`), `@prix.mpc.run_multiprocess`, private arithmetic, comparisons, and `where` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/01_quickstart_mpc_basics.ipynb) |
-| [**02 · Comparing MPC Nonlinearities**](examples/02_approximations_and_ablations.ipynb) | Accuracy & latency ablations across **CuRL LUTs**, **PUMA/Nimbus Poly**, **SHAFT**, **CrypTen**, and **Fission**, plus `prix.cfg` hyperparameter sweeps | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/02_approximations_and_ablations.ipynb) |
+| [**02 · Comparing MPC Nonlinearities**](examples/02_approximations_and_ablations.ipynb) | Accuracy & latency ablations across **Curl LUTs**, **PUMA/Nimbus Poly**, **SHAFT**, **CrypTen**, and **Fission**, plus `prix.cfg` hyperparameter sweeps | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/02_approximations_and_ablations.ipynb) |
 | [**03 · Private Transformers & LLMs (`prix.nn`)**](examples/03_private_transformers_and_llms.ipynb) | Building custom `prix.nn.Module` Transformer blocks, loading `state_dict` weights, and encrypting models with `.encrypt()` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/03_private_transformers_and_llms.ipynb) |
 | [**04 · GPU Benchmark Suite (PriX vs. CrypTen)**](examples/prix_vs_curl_gpu_colab.ipynb) | End-to-end reproducible GPU benchmark comparing PriX vs. CrypTen across all 5 modes and 5 LLM architectures | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/prix_vs_curl_gpu_colab.ipynb) |
 
@@ -158,7 +158,7 @@ JAX_PLATFORMS=cpu python3 -m unittest discover -s tests -q
 ```
 
 To run the head-to-head benchmark suite against the PyTorch **CrypTen** baseline
-([jimouris/curl](https://github.com/jimouris/curl), the CrypTen-based reference implementation of [CuRL (CAMLIS 2024)](https://eprint.iacr.org/2024/1045) and [Fission (IEEE CNS 2025)](https://eprint.iacr.org/2025/653), augmented with [PUMA (2023)](https://arxiv.org/abs/2307.12533) / [Nimbus (NeurIPS 2024)](https://arxiv.org/abs/2411.15707) and [SHAFT (NDSS 2025)](https://github.com/andeskyl/SHAFT)):
+([jimouris/curl](https://github.com/jimouris/curl), the CrypTen-based reference implementation of [Curl (CAMLIS 2024)](https://eprint.iacr.org/2024/1127) and [Fission (IEEE CNS 2025)](https://eprint.iacr.org/2025/653), augmented with [PUMA (2023)](https://arxiv.org/abs/2307.12533) / [Nimbus (NeurIPS 2024)](https://arxiv.org/abs/2411.15707) and [SHAFT (NDSS 2025)](https://github.com/andeskyl/SHAFT)):
 ```bash
 # On CPU (all five approximation modes, both frameworks, then a markdown report)
 JAX_PLATFORMS=cpu python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --device cpu
@@ -210,7 +210,7 @@ AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). 
 <summary><b>CPU tables: LLM latency, speedups, and primitives (click to expand)</b></summary>
 
 #### Private LLM Inference — all modes (ms)
-| Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · CuRL LUTs | PriX · CuRL LUTs | CrypTen · Fission | PriX · Fission |
+| Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · Curl LUTs | PriX · Curl LUTs | CrypTen · Fission | PriX · Fission |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | BertTiny (2-Block, seq=16) | 1116.92 | 394.21 | 1214.06 | 332.66 | 769.78 | 255.53 | 884.35 | 298.84 | 426.03 | 97.29 |
 | BertBase (1-Block, seq=16) | 2111.69 | 555.14 | 2422.60 | 512.64 | 1992.19 | 464.97 | 1927.60 | 453.40 | 2067.63 | 334.52 |
@@ -219,7 +219,7 @@ AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). 
 | ModernBert (1-Block, seq=16) | 1520.72 | 386.44 | 1524.23 | 346.73 | 1536.32 | 273.18 | 2089.26 | 313.73 | 1378.75 | 200.17 |
 
 #### PriX speedup over CrypTen — LLM inference
-| Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | CuRL LUTs | Fission |
+| Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
 | BertTiny (2-Block, seq=16) | **2.83x** | **3.65x** | **3.01x** | **2.96x** | **4.38x** |
 | BertBase (1-Block, seq=16) | **3.80x** | **4.73x** | **4.28x** | **4.25x** | **6.18x** |
@@ -228,7 +228,7 @@ AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). 
 | ModernBert (1-Block, seq=16) | **3.94x** | **4.40x** | **5.62x** | **6.66x** | **6.89x** |
 
 #### MPC Primitives & Nonlinearities on CPU (ms, CrypTen / PriX)
-| Benchmark | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | CuRL LUTs | Fission |
+| Benchmark | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
 | Private MatMul (128x128) | 23.52 / 4.91 (**4.79x**) | 23.13 / 5.97 (**3.87x**) | 22.46 / 4.81 (**4.67x**) | 26.46 / 6.56 (**4.03x**) | 34.75 / 4.59 (**7.57x**) |
 | Private Mul (128x128) | 4.64 / 2.63 (**1.77x**) | 4.64 / 1.84 (**2.53x**) | 5.02 / 1.89 (**2.65x**) | 8.62 / 4.67 (**1.85x**) | 6.95 / 2.77 (**2.51x**) |
@@ -256,7 +256,7 @@ Google Colab, one Tesla T4. All five modes were measured in one session.
 <summary><b>GPU tables: LLM latency, speedups, and primitives (click to expand)</b></summary>
 
 #### Private LLM Inference — all modes (ms)
-| Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · CuRL LUTs | PriX · CuRL LUTs | CrypTen · Fission | PriX · Fission |
+| Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · Curl LUTs | PriX · Curl LUTs | CrypTen · Fission | PriX · Fission |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | BertTiny (2-Block, seq=16) | 2059.81 | 908.87 | 2002.88 | 773.85 | 1306.09 | 492.68 | 2102.56 | 660.26 | 415.48 | 155.49 |
 | BertBase (1-Block, seq=16) | 1729.39 | 773.28 | 1682.48 | 765.60 | 1372.00 | 657.27 | 1776.27 | 670.65 | 932.96 | 423.73 |
@@ -265,7 +265,7 @@ Google Colab, one Tesla T4. All five modes were measured in one session.
 | ModernBert (1-Block, seq=16) | 1538.26 | 572.18 | 1433.70 | 547.52 | 1121.48 | 407.00 | 1503.04 | 484.17 | 704.84 | 240.73 |
 
 #### PriX speedup over CrypTen — LLM inference on GPU
-| Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | CuRL LUTs | Fission |
+| Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
 | BertTiny (2-Block, seq=16) | **2.27x** | **2.59x** | **2.65x** | **3.18x** | **2.67x** |
 | BertBase (1-Block, seq=16) | **2.24x** | **2.20x** | **2.09x** | **2.65x** | **2.20x** |
@@ -274,7 +274,7 @@ Google Colab, one Tesla T4. All five modes were measured in one session.
 | ModernBert (1-Block, seq=16) | **2.69x** | **2.62x** | **2.76x** | **3.10x** | **2.93x** |
 
 #### MPC Primitives & Nonlinearities on GPU (ms, CrypTen / PriX)
-| Benchmark | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | CuRL LUTs | Fission |
+| Benchmark | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
 | Private MatMul (128x128) | 14.21 / 4.94 (**2.88x**) | 13.32 / 4.20 (**3.17x**) | 11.26 / 4.15 (**2.71x**) | 17.66 / 12.22 (**1.45x**) | 16.60 / 3.57 (**4.65x**) |
 | Private Mul (128x128) | 4.60 / 2.55 (**1.80x**) | 5.40 / 2.49 (**2.17x**) | 4.69 / 2.76 (**1.70x**) | 9.77 / 5.62 (**1.74x**) | 8.56 / 2.68 (**3.19x**) |
@@ -301,10 +301,10 @@ Google Colab, one Tesla T4. All five modes were measured in one session.
 PriX implements and accelerates the protocols and nonlinear approximations introduced in the following works:
 
 - **CrypTen (`mode="crypten"`)** — Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim, and Laurens van der Maaten. *"CrypTen: Secure Multi-Party Computation Meets Machine Learning."* **NeurIPS 2021** ([Paper](https://arxiv.org/abs/2109.00984) · [Code](https://github.com/facebookresearch/CrypTen)).
-- **CuRL (`mode="lut"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1045](https://eprint.iacr.org/2024/1045) · [Code](https://github.com/jimouris/curl)).
+- **Curl (`mode="lut"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1127](https://eprint.iacr.org/2024/1127) · [Code](https://github.com/jimouris/curl)).
 - **PUMA (`mode="poly"`)** — Ye Dong, Wen-jie Lu, Yancheng Zheng, Haoqi Wu, Derun Zhao, Jin Tan, Zhicong Huang, Cheng Hong, Tao Wei, and Wenguang Chen. *"PUMA: Secure Inference of LLaMA-7B in Five Minutes."* **arXiv 2023** ([arXiv:2307.12533](https://arxiv.org/abs/2307.12533) · [Code](https://github.com/secretflow/spu)).
 - **Nimbus (`mode="poly"`)** — Zhengyi Li, Kang Yang, Jin Tan, Wen-jie Lu, Haoqi Wu, Xiao Wang, Yu Yu, Derun Zhao, Yancheng Zheng, Minyi Guo, and Jingwen Leng. *"Nimbus: Secure and Efficient Two-Party Inference for Transformers."* **NeurIPS 2024** ([arXiv:2411.15707](https://arxiv.org/abs/2411.15707)).
-- **SHAFT (`mode="shaft"`)** — Andes Y. L. Kei and Sherman S. M. Chow. *"SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference."* **NDSS 2025** ([ePrint 2024/1965](https://eprint.iacr.org/2024/1965) · [Code](https://github.com/andeskyl/SHAFT)).
+- **SHAFT (`mode="shaft"`)** — Andes Y. L. Kei and Sherman S. M. Chow. *"SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference."* **NDSS 2025** ([Paper](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/) · [ePrint 2025/2324](https://eprint.iacr.org/2025/2324) · [Code](https://github.com/andeskyl/SHAFT)).
 - **Fission (`mode="fission"`)** — Mehmet Ugurbil, Dimitris Mouris, Manuel B. Santos, José Cabrero-Holgueras, Miguel de Vega, and Shubho Sengupta. *"Fission: Distributed Privacy-Preserving Large Language Model Inference."* **IEEE CNS 2025** ([ePrint 2025/653](https://eprint.iacr.org/2025/653) · [Code](https://github.com/jimouris/curl)).
 
 ### Citing PriX

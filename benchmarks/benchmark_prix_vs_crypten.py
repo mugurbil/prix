@@ -3,7 +3,7 @@
 Head-to-head benchmark: CrypTen (PyTorch) vs PriX (JAX), on CPU or GPU.
 
 The PyTorch baseline is the CrypTen-based reference implementation from
-https://github.com/jimouris/curl (a CrypTen fork that adds CuRL wavelet LUTs and
+https://github.com/jimouris/curl (a CrypTen fork that adds Curl wavelet LUTs and
 Fission evaluators), augmented with SHAFT (https://github.com/andeskyl/SHAFT,
 NDSS 2025). Both frameworks are benchmarked in four approximation modes:
 
@@ -13,7 +13,7 @@ NDSS 2025). Both frameworks are benchmarked in four approximation modes:
                                                        (configs/poly.yaml)
   shaft    - SHAFT constant-round Fourier-series activations & ODE softmax
                                                        (configs/shaft.yaml)
-  lut      - CuRL wavelet look-up tables                (configs/default.yaml)
+  lut      - Curl wavelet look-up tables                (configs/default.yaml)
   fission  - Fission hybrid plaintext evaluator         (configs/fission.yaml)
 
 Each mode's YAML is deep-merged on top of the framework's default.yaml (so every
@@ -37,7 +37,7 @@ MODES = [
     ("crypten", "CrypTen approximations", "approximations.yaml", 0),
     ("poly", "PUMA/Nimbus piecewise poly", "poly.yaml", 0),
     ("shaft", "SHAFT (Fourier + ODE)", "shaft.yaml", 0),
-    ("lut", "CuRL wavelet LUTs", "default.yaml", 0),
+    ("lut", "Curl wavelet LUTs", "default.yaml", 0),
     ("fission", "Fission evaluator", "fission.yaml", 1),
 ]
 MODE_KEYS = [m[0] for m in MODES]
@@ -427,7 +427,7 @@ def run_prix(prix_root, device, tmp_dir, modes, bench_args, transport="shm"):
 # CrypTen (PyTorch, jimouris/curl + andeskyl/SHAFT)
 # ============================================================================
 def _install_shaft_into_curl():
-    """Register SHAFT (NDSS 2025) Fourier-series activations and ODE softmax on CrypTen/CuRL."""
+    """Register SHAFT (NDSS 2025) Fourier-series activations and ODE softmax on CrypTen/Curl."""
     import torch
     import curl
     from curl.config import cfg

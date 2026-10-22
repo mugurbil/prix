@@ -36,7 +36,7 @@ ptype = Ptype
 
 
 class _EncoderProxy:
-    """Compatibility proxy exposing CrypTen/CuRL `.encoder` attributes on `Array`."""
+    """Compatibility proxy exposing CrypTen/Curl `.encoder` attributes on `Array`."""
 
     def __init__(self, array_obj):
         self._array = array_obj
@@ -335,7 +335,7 @@ class Array:
         return decode(revealed, self.precision)
 
     def get_plain_text(self, dst=None):
-        """Alias for reconstruct(dst=dst) for CrypTen/CuRL compatibility."""
+        """Alias for reconstruct(dst=dst) for CrypTen/Curl compatibility."""
         return self.reconstruct(dst=dst)
 
     # Rescaling encodings
