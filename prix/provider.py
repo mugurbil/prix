@@ -29,14 +29,43 @@ from prix.random import (
 )
 
 
+# Largest contraction size K for which each limb-product GEMM is exact in float64
+# (every entry of A_i @ B_j must stay below 2^53):
+#   22-bit limbs: K * 2^44 <= 2^53  ->  K <= 2^9
+#   16-bit limbs: K * 2^32 <= 2^53  ->  K <= 2^21
+# Larger contractions are split into chunks of at most _MATMUL_MAX_K_16 and the
+# exact uint64 partial results are summed (wrap-around addition is exact mod 2^64).
+_MATMUL_MAX_K_22 = 1 << 9
+_MATMUL_MAX_K_16 = 1 << 21
+
+
 @jax.jit
 def _int64_matmul(a, b):
     """
     Bit-exact 64-bit ring matrix multiplication mod 2^64 via limb splitting in float64:
-    - For K <= 512: 3 limbs of 22 bits (6 float64 matmuls instead of CuRL's 9).
-    - For K > 512:  4 limbs of 16 bits (10 float64 matmuls instead of CuRL's 16).
+    - For K <= 512: 3 limbs of 22 bits (6 float64 matmuls instead of CrypTen's 9).
+    - For K >  512: 4 limbs of 16 bits (10 float64 matmuls instead of CrypTen's 16).
+    - For K > 2^21: the contraction is split into chunks of at most 2^21, each computed
+      exactly as above, and the partial results are summed mod 2^64.
     On GPU, limbs are stacked along axis 0 to execute a single cublasDgemmStridedBatched kernel.
     """
+    k = a.shape[-1]
+    if k <= _MATMUL_MAX_K_16:
+        return _int64_matmul_exact(a, b)
+    b_axis = b.ndim - 2 if b.ndim >= 2 else 0
+    res = None
+    for start in range(0, k, _MATMUL_MAX_K_16):
+        stop = min(start + _MATMUL_MAX_K_16, k)
+        part = _int64_matmul_exact(
+            jax.lax.slice_in_dim(a, start, stop, axis=a.ndim - 1),
+            jax.lax.slice_in_dim(b, start, stop, axis=b_axis),
+        )
+        res = part if res is None else res + part  # int64 addition wraps mod 2^64
+    return res
+
+
+def _int64_matmul_exact(a, b):
+    """Exact limb-split matmul for a single chunk with K <= _MATMUL_MAX_K_16 (traced inside jit)."""
     ua = jax.lax.bitcast_convert_type(a, jnp.uint64)
     ub = jax.lax.bitcast_convert_type(b, jnp.uint64)
     k = a.shape[-1]
@@ -46,7 +75,7 @@ def _int64_matmul(a, b):
             ub = ub.reshape((1,) * (ua.ndim - ub.ndim) + ub.shape)
         elif ub.ndim > ua.ndim:
             ua = ua.reshape((1,) * (ub.ndim - ua.ndim) + ua.shape)
-    if k <= 512:
+    if k <= _MATMUL_MAX_K_22:
         mask22 = jnp.uint64((1 << 22) - 1)
         a0 = (ua & mask22).astype(jnp.float64)
         a1 = ((ua >> 22) & mask22).astype(jnp.float64)
@@ -96,10 +125,13 @@ def _int64_matmul(a, b):
             c2 = p[3] + p[4] + p[5]
             c3 = p[6] + p[7] + p[8] + p[9]
         else:
-            c0 = (a0 @ b0).astype(jnp.uint64)
-            c1 = (a0 @ b1 + a1 @ b0).astype(jnp.uint64)
-            c2 = (a0 @ b2 + a1 @ b1 + a2 @ b0).astype(jnp.uint64)
-            c3 = (a0 @ b3 + a1 @ b2 + a2 @ b1 + a3 @ b0).astype(jnp.uint64)
+            # Convert each limb product to uint64 before summing, so every float64
+            # value stays below K * 2^32 <= 2^53 (exact for K <= 2^21, as on GPU).
+            u = lambda x: x.astype(jnp.uint64)
+            c0 = u(a0 @ b0)
+            c1 = u(a0 @ b1) + u(a1 @ b0)
+            c2 = u(a0 @ b2) + u(a1 @ b1) + u(a2 @ b0)
+            c3 = u(a0 @ b3) + u(a1 @ b2) + u(a2 @ b1) + u(a3 @ b0)
         res = c0 + (c1 << jnp.uint64(16)) + (c2 << jnp.uint64(32)) + (c3 << jnp.uint64(48))
         return jax.lax.bitcast_convert_type(res, DATATYPE)
 

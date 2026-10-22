@@ -140,7 +140,7 @@ print("Output shape:", run_private_mlp())
 | [**04 · GPU Benchmark Suite (PriX vs. CrypTen)**](examples/prix_vs_curl_gpu_colab.ipynb) | End-to-end reproducible GPU benchmark comparing PriX vs. CrypTen across all 5 modes and 5 LLM architectures | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/mugurbil/prix/blob/main/examples/prix_vs_curl_gpu_colab.ipynb) |
 
 ### Guides & Reference Docs
-- [**PriX Technical Report / Paper (PDF)**](paper/prix_arxiv.pdf) ([LaTeX source](paper/main.tex)) — *"PriX: Compiling Private Transformers via Whole-Graph XLA Fusion in Secure Multi-Party Computation"*.
+- [**PriX Technical Report / Paper (PDF)**](paper/prix_arxiv.pdf) ([LaTeX source](paper/main.tex)) — *"PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX"*.
 - [**Quickstart & CrypTen Migration Guide**](docs/quickstart.md) — Side-by-side CrypTen-to-PriX cheat sheet, arithmetic vs. binary secret sharing, and `TFP` vs. `TTP` providers.
 - [**MPC Approximation Modes & Configuration Reference**](docs/modes_and_configuration.md) — Deep dive into `"lut"`, `"poly"`, `"shaft"`, `"crypten"`, and `"fission"` modes and how to mix-and-match methods via `prix.cfg`.
 - [**API Reference**](docs/api_reference.md) — Complete reference for top-level `prix` functions, `prix.Array` methods, and `prix.nn` neural network layers.
@@ -271,7 +271,7 @@ If you use **PriX** in your research, please cite our technical report ([`paper/
 ```bibtex
 @article{ugurbil2026prix,
   author  = {Mehmet Ugurbil},
-  title   = {{PriX}: Compiling Private Transformers via Whole-Graph {XLA} Fusion in Secure Multi-Party Computation},
+  title   = {{PriX}: Private Accelerated Transformers via Secure Multi-Party Computation in {JAX}},
   journal = {arXiv preprint},
   year    = {2026},
   url     = {https://github.com/mugurbil/prix}

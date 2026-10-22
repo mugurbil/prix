@@ -16,7 +16,7 @@
     linkcolor=blue!70!black,
     citecolor=blue!70!black,
     urlcolor=blue!70!black,
-    pdftitle={PriX: Compiling Private Transformers via Whole-Graph XLA Fusion in Secure Multi-Party Computation},
+    pdftitle={PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX},
     pdfauthor={Mehmet Ugurbil}
 }
 
@@ -48,7 +48,7 @@
 \newcommand{\shareB}[1]{\langle #1 \rangle^{B}}
 \newcommand{\Zring}{\mathbb{Z}_{2^{64}}}
 
-\title{\textbf{PriX: Compiling Private Transformers via Whole-Graph XLA Fusion in Secure Multi-Party Computation}}
+\title{\textbf{PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX}}
 
 \author{
   Mehmet Ugurbil \\
@@ -234,7 +234,8 @@ To compute $C = A B \bmod 2^{64}$ for $A \in \Zring^{M \times K}$ and $B \in \Zr
 PriX uses two limb configurations, chosen by the contraction size $K$:
 \begin{itemize}
     \item $K \le 512$: $L = 3$ limbs of $w = 22$ bits ($A_2, B_2$ have 20 bits), so only the \textbf{6} pairs with $i + j \le 2$ are computed. Each product entry is below $K \cdot 2^{44} \le 2^{53}$, so every FP64 GEMM is exact.
-    \item $K > 512$: $L = 4$ limbs of $w = 16$ bits, so only the \textbf{10} pairs with $i + j \le 3$ are computed. On GPU each pair is a separate slice of one batched GEMM and is converted to \texttt{uint64} individually, which is exact for $K \cdot 2^{32} \le 2^{53}$, i.e.\ $K \le 2^{21}$. On CPU, up to four pair products of equal shift are summed in FP64 before conversion, which is exact for $K \le 2^{19}$. Larger $K$ is currently not guarded against.
+    \item $K > 512$: $L = 4$ limbs of $w = 16$ bits, so only the \textbf{10} pairs with $i + j \le 3$ are computed. On GPU each pair is a separate slice of one batched GEMM. Each pair product is converted to \texttt{uint64} individually, which is exact for $K \cdot 2^{32} \le 2^{53}$, i.e.\ $K \le 2^{21}$. On CPU, each pair product is likewise converted to \texttt{uint64} before products of equal shift are added, so both backends share the same $K \le 2^{21}$ bound.
+    \item $K > 2^{21}$: the contraction is split into chunks of at most $2^{21}$. Each chunk is multiplied exactly as above, and the \texttt{uint64} partial results are added; wrap-around addition is exact modulo $2^{64}$, so the result is bit-exact for any $K$. The chunking is decided at trace time, so it adds no overhead when $K \le 2^{21}$.
 \end{itemize}
 CrypTen's CUDA backend~\cite{knott2021crypten} uses 3 limbs for $K < 256$ and 4 limbs otherwise, and computes \emph{all} $9$ or $16$ limb products in one batched \texttt{torch.matmul} before discarding the vanishing ones. PriX therefore performs 6 instead of 9 GEMMs for $K < 256$, 6 instead of 16 for $256 \le K \le 512$, and 10 instead of 16 for $K > 512$. On GPU, PriX stacks the surviving limb pairs into one batched GEMM, and the limb extraction, GEMM, conversion, shifts, and modular accumulation are compiled together with the Beaver combination $\shareA{C} + \epsilon \shareA{B} + \shareA{A}\delta + \mathbb{I}[p=0](\epsilon\delta)$. On CPU, CrypTen uses PyTorch's \texttt{int64} matmul directly, so PriX's advantage there comes mainly from using FP64 BLAS.
 
