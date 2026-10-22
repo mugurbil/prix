@@ -51,6 +51,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/mugurbil/prix"
+Documentation = "https://github.com/mugurbil/prix/tree/main/docs"
 Repository = "https://github.com/mugurbil/prix"
 Issues = "https://github.com/mugurbil/prix/issues"
 
