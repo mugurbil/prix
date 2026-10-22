@@ -444,6 +444,21 @@ def _tfp_b2a_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     return diff_a, diff_b
 
 
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+def _tfp_wrap_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
+    diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
+    if is_rank0:
+        r_loc = _sm64_raw(s_loc, c_loc, shape)
+        r0 = diff[0] + r_loc
+        r1 = -diff[0]
+        theta_r = (
+            ((r0 > 0) & (r1 > 0) & (r_loc < 0)).astype(DATATYPE)
+            - ((r0 < 0) & (r1 < 0) & (r_loc > 0)).astype(DATATYPE)
+        )
+        return r0, diff[1] + theta_r
+    return diff[0], diff[1]
+
+
 @functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "t_shape", "lut_size", "is_rank0"))
 def _tfp_one_hot_jit(c_loc, c0, c1, s_loc, s0, s1, t_shape, lut_size, is_rank0):
     n_elem = int(np.prod(t_shape)) if len(t_shape) > 0 else 1
@@ -651,8 +666,31 @@ class TrustedFirstParty(TupleProvider):
     def wrap_rng(self, size, device=None):
         from prix.array import Array
 
+        num_parties = comm.get().get_world_size()
+        if num_parties == 2:
+            shape = tuple(size)
+            is_rank0 = self.rank == 0
+            if jax.default_backend() == "gpu":
+                n = int(np.prod(shape)) if len(shape) > 0 else 1
+                c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
+                shares = _tfp_wrap_rng_jit(c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0)
+                return _wrap_shares(shares, ("arithmetic", "arithmetic"), device=device)
+            diff_r = _przs_np(shape, "arithmetic")
+            diff_theta = _przs_np(shape, "arithmetic")
+            if is_rank0:
+                r_loc = generate_random_ring_element_np(shape, device=device)
+                r0 = diff_r + r_loc
+                r1 = -diff_r
+                theta_r = (
+                    ((r0 > 0) & (r1 > 0) & (r_loc < 0)).astype(np.int64)
+                    - ((r0 < 0) & (r1 < 0) & (r_loc > 0)).astype(np.int64)
+                )
+                shares = (r0, diff_theta + theta_r)
+            else:
+                shares = (diff_r, diff_theta)
+            return _wrap_shares(shares, ("arithmetic", "arithmetic"), device=device)
+
         if self.rank == 0:
-            num_parties = comm.get().get_world_size()
             r = [
                 generate_random_ring_element(size, device=device)
                 for _ in range(num_parties)

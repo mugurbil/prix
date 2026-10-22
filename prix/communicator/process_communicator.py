@@ -399,17 +399,41 @@ class InProcessCommunicator(Communicator):
         if async_op:
             raise NotImplementedError()
 
+        dev = self._get_device(array)
+        if (
+            self._peer_conn is not None
+            and hasattr(array, "dtype")
+            and array.dtype == np.int64
+            and array.size <= self.SHM_SLOT_ELEMS
+        ):
+            slot = self._shm_step & 3
+            self._shm_step += 1
+            n = int(array.size)
+            if self.rank != dst:
+                payload = self._to_transport(array)
+                self._my_shm[slot, :n] = payload.reshape(-1)
+                self._peer_conn.send_bytes(bytes([slot]))
+                self._peer_conn.recv_bytes()
+                return None
+            else:
+                self._peer_conn.send_bytes(bytes([slot]))
+                peer_slot = self._peer_conn.recv_bytes()[0]
+                other = self._peer_shm[peer_slot, :n].reshape(array.shape).copy()
+                my_arr = array if isinstance(array, jax.Array) else self._from_transport(array, device=dev)
+                other_arr = self._from_transport(other, device=dev)
+                return [my_arr, other_arr] if dst == 0 else [other_arr, my_arr]
+
         payload = self._to_transport(array)
         if self.rank != dst:
             self._put_to_mailbox(dst, payload)
             return None
         else:
-            gathered = {self.rank: self._from_transport(payload)}
+            gathered = {self.rank: self._from_transport(payload, device=dev)}
             for other in range(self.world_size):
                 if other == self.rank:
                     continue
                 _, other_payload = self._get_from_mailbox(src=other)
-                gathered[other] = self._from_transport(other_payload)
+                gathered[other] = self._from_transport(other_payload, device=dev)
             return [gathered[r] for r in range(self.world_size)]
 
     @_logging
@@ -418,17 +442,18 @@ class InProcessCommunicator(Communicator):
         if async_op:
             raise NotImplementedError()
 
+        dev = self._get_device(array)
         payload = self._to_transport(array)
         for i in range(self.world_size):
             if i != self.rank:
                 self._put_to_mailbox(i, payload)
 
-        gathered = {self.rank: self._from_transport(payload)}
+        gathered = {self.rank: self._from_transport(payload, device=dev)}
         for other in range(self.world_size):
             if other == self.rank:
                 continue
             _, other_payload = self._get_from_mailbox(src=other)
-            gathered[other] = self._from_transport(other_payload)
+            gathered[other] = self._from_transport(other_payload, device=dev)
 
         return [gathered[r] for r in range(self.world_size)]
 
@@ -438,16 +463,17 @@ class InProcessCommunicator(Communicator):
         if async_op:
             raise NotImplementedError()
 
+        dev = self._get_device(array)
         targets = range(self.world_size) if group is None else group
         if self.rank == src:
             payload = self._to_transport(array)
             for i in targets:
                 if i != self.rank:
                     self._put_to_mailbox(i, payload)
-            return self._from_transport(payload)
+            return self._from_transport(payload, device=dev)
         else:
             _, payload = self._get_from_mailbox(src=src)
-            return self._from_transport(payload)
+            return self._from_transport(payload, device=dev)
 
     @_logging
     def broadcast_parallel(self, inputs_list, src_list, groups_list):

@@ -1261,29 +1261,74 @@ def _square(x):
         return r2 + 2 * r * epsilon + epsilon * epsilon
 
 
+@jax.jit
+def _wraps_pre_jit(x_share, r_share, theta_r_share):
+    z_share = x_share + r_share
+    beta_xr = (
+        ((x_share > 0) & (r_share > 0) & (z_share < 0)).astype(DATATYPE)
+        - ((x_share < 0) & (r_share < 0) & (z_share > 0)).astype(DATATYPE)
+    )
+    return z_share, beta_xr - theta_r_share
+
+
+@jax.jit
+def _wraps_post_2pc_jit(theta_x_share, z0, z1):
+    z_sum = z0 + z1
+    theta_z = (
+        ((z0 > 0) & (z1 > 0) & (z_sum < 0)).astype(DATATYPE)
+        - ((z0 < 0) & (z1 < 0) & (z_sum > 0)).astype(DATATYPE)
+    )
+    return theta_x_share + theta_z
+
+
+@jax.jit
+def _truncate_post_jit(x_share, wrap_share, y_arr, corr_factor):
+    return jax.lax.div(x_share, y_arr) - wrap_share * corr_factor
+
+
+@jax.jit
+def _truncate_post_rank0_2pc_jit(x_share, theta_x_share, z0, z1, y_arr, corr_factor):
+    z_sum = z0 + z1
+    theta_z = (
+        ((z0 > 0) & (z1 > 0) & (z_sum < 0)).astype(DATATYPE)
+        - ((z0 < 0) & (z1 < 0) & (z_sum > 0)).astype(DATATYPE)
+    )
+    return jax.lax.div(x_share, y_arr) - (theta_x_share + theta_z) * corr_factor
+
+
 def _wraps(x):
     provider = get_default_provider()
     r, theta_r = provider.wrap_rng(x.size(), device=x.device)
-    beta_xr = theta_r.clone()
-    beta_xr.share = count_wraps([x.share, r.share])
-
-    with IgnoreEncodings([x, r]):
-        z = x + r
-    theta_z = comm.get().gather(z.share, 0)
-    theta_x = beta_xr - theta_r
+    z_share, theta_x_share = _wraps_pre_jit(x.share, r.share, theta_r.share)
+    theta_z = comm.get().gather(z_share, 0)
 
     if x.rank == 0:
-        theta_z = count_wraps(theta_z)
-        theta_x.share = theta_x.share + theta_z
-    return theta_x
+        if len(theta_z) == 2:
+            theta_x_share = _wraps_post_2pc_jit(theta_x_share, theta_z[0], theta_z[1])
+        else:
+            theta_x_share = theta_x_share + count_wraps(theta_z)
+    return Array.from_shares(theta_x_share, precision=0, device=x.device)
 
 
 def _truncate(x, y):
+    y_int = int(y) if isinstance(y, (int, float)) else int(np.asarray(y).item())
+    y_arr = jnp.int64(y_int)
+    corr_factor = jnp.int64(4 * ((1 << 62) // y_int))
+    if comm.get().get_world_size() == 2:
+        provider = get_default_provider()
+        r, theta_r = provider.wrap_rng(x.size(), device=x.device)
+        z_share, theta_x_share = _wraps_pre_jit(x.share, r.share, theta_r.share)
+        theta_z = comm.get().gather(z_share, 0)
+        if x.rank == 0:
+            x.share = _truncate_post_rank0_2pc_jit(
+                x.share, theta_x_share, theta_z[0], theta_z[1], y_arr, corr_factor
+            )
+        else:
+            x.share = _truncate_post_jit(x.share, theta_x_share, y_arr, corr_factor)
+        return x
+
     wrap_count = _wraps(x)
-    y_arr = jnp.asarray(y, dtype=DATATYPE)
-    x.share = jax.lax.div(x.share, y_arr)
-    correction = wrap_count * 4 * (int(2**62) // int(np.asarray(y).item()))
-    x.share = x.share - correction.share
+    x.share = _truncate_post_jit(x.share, wrap_count.share, y_arr, corr_factor)
     return x
 
 

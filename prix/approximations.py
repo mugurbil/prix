@@ -1288,7 +1288,8 @@ def _cached_fourier_coeffs(func_name, width, terms):
 
 
 @jax.jit
-def _fourier_linear_comb_jit(u_share, v_share, delta, k_arr, beta_sin_scaled):
+def _fourier_linear_comb_jit(u_share, v_share, delta_int, period_scaled, inv_scale_f, k_arr, beta_sin_scaled):
+    delta = jnp.mod(delta_int, period_scaled).astype(jnp.float32) * inv_scale_f
     angles = k_arr * jnp.expand_dims(delta, axis=0)
     wv = jnp.round(jnp.sin(angles) * beta_sin_scaled).astype(DATATYPE)
     wu = jnp.round(jnp.cos(angles) * beta_sin_scaled).astype(DATATYPE)
@@ -1296,7 +1297,10 @@ def _fourier_linear_comb_jit(u_share, v_share, delta, k_arr, beta_sin_scaled):
 
 
 @jax.jit
-def _fourier_linear_comb_cos_jit(u_share, v_share, delta, k_arr, beta_sin_scaled, beta_cos_scaled):
+def _fourier_linear_comb_cos_jit(
+    u_share, v_share, delta_int, period_scaled, inv_scale_f, k_arr, beta_sin_scaled, beta_cos_scaled
+):
+    delta = jnp.mod(delta_int, period_scaled).astype(jnp.float32) * inv_scale_f
     angles = k_arr * jnp.expand_dims(delta, axis=0)
     s = jnp.sin(angles)
     c = jnp.cos(angles)
@@ -1318,12 +1322,12 @@ def _fourier_series(self, terms, period, alpha=None, beta_cos=None, beta_sin=Non
     terms_int = int(terms)
     period_f = float(period)
     scale_f = float(1 << x.precision)
-    period_scaled = int(round(period_f * scale_f))
+    inv_scale_f = jnp.float32(1.0 / scale_f)
+    period_scaled = jnp.int64(int(round(period_f * scale_f)))
     provider = prix.get_default_provider()
     t, u, v = provider.generate_trig_triple(x.size(), period_f, terms_int, device=x.device)
 
-    delta_int = to_jax(comm.get().all_reduce((x - t).share), device=x.device, dtype=DATATYPE)
-    delta = jnp.mod(delta_int, jnp.int64(period_scaled)).astype(jnp.float32) / jnp.float32(scale_f)
+    delta_int = to_jax(comm.get().all_reduce(x.share - t.share), device=x.device, dtype=DATATYPE)
     bcast_shape = (terms_int,) + (1,) * x.dim()
     k_arr = to_jax(
         np.arange(1, terms_int + 1, dtype=np.float32).reshape(bcast_shape)
@@ -1341,7 +1345,9 @@ def _fourier_series(self, terms, period, alpha=None, beta_cos=None, beta_sin=Non
         beta_sin_scaled = jnp.zeros(bcast_shape, dtype=jnp.float32)
 
     if beta_cos is None:
-        sum_share = _fourier_linear_comb_jit(u.share, v.share, delta, k_arr, beta_sin_scaled)
+        sum_share = _fourier_linear_comb_jit(
+            u.share, v.share, delta_int, period_scaled, inv_scale_f, k_arr, beta_sin_scaled
+        )
     else:
         beta_cos_scaled = to_jax(
             np.asarray(beta_cos, dtype=np.float32).reshape(bcast_shape) * scale_f,
@@ -1349,7 +1355,7 @@ def _fourier_series(self, terms, period, alpha=None, beta_cos=None, beta_sin=Non
             dtype=jnp.float32,
         )
         sum_share = _fourier_linear_comb_cos_jit(
-            u.share, v.share, delta, k_arr, beta_sin_scaled, beta_cos_scaled
+            u.share, v.share, delta_int, period_scaled, inv_scale_f, k_arr, beta_sin_scaled, beta_cos_scaled
         )
 
     res = x.shallow_copy()
