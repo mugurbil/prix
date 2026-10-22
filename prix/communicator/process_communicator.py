@@ -312,7 +312,9 @@ class InProcessCommunicator(Communicator):
         else:
             payload = self._to_transport(array)
 
-        if self._peer_conn is not None:
+        # Validate `op` *before* any handshake so an unsupported op can never
+        # leave the two ranks out of step on the shared-memory pipe.
+        if self._peer_conn is not None and op in ("sum", "xor", "bxor"):
             if not batched and isinstance(payload, np.ndarray) and payload.dtype == np.int64 and payload.size <= self.SHM_SLOT_ELEMS:
                 slot = self._shm_step & 3
                 self._shm_step += 1

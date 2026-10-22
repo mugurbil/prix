@@ -6,6 +6,8 @@
 # LICENSE file in the root directory of this source tree.
 
 import functools
+import secrets
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -105,7 +107,7 @@ def _get_default_generator(generator=None, device=None):
     dev_key = "cuda" if (device is not None and "cuda" in str(device).lower()) else "cpu"
     if isinstance(local_gen, dict) and dev_key in local_gen:
         return local_gen[dev_key]
-    return PRNGGenerator(seed=np.random.randint(0, 2**31 - 1), device=device)
+    return PRNGGenerator(seed=secrets.randbits(64), device=device)
 
 
 def generate_random_ring_element_np(*size, ring_size=(2**64), generator=None, device=None):
@@ -160,8 +162,15 @@ def generate_permutation(size, generator=None, device=None, **kwargs):
         size = size[0]
     gen = _get_default_generator(generator, device)
     perm_np = gen.next_permutation(int(size))
-    inv_perm_np = np.argsort(perm_np).astype(np.int64)
+    inv_perm_np = _invert_permutation(perm_np)
     return to_jax(perm_np, device=device, dtype=DATATYPE), to_jax(inv_perm_np, device=device, dtype=DATATYPE)
+
+
+def _invert_permutation(perm_np):
+    """O(n) inverse of a permutation (cheaper than argsort's O(n log n))."""
+    inv = np.empty_like(perm_np)
+    inv[perm_np] = np.arange(perm_np.shape[0], dtype=perm_np.dtype)
+    return inv
 
 
 @jax.jit

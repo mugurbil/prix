@@ -25,8 +25,8 @@ import prix
 import prix.communicator as comm
 from prix.config import cfg
 from prix.encoder import DATATYPE, resolve_device, to_jax
-from prix.evaluator import EvaluatorClient
-from prix.random import PRNGGenerator, chebyshev_series
+from prix.evaluator import EvaluatorClient, check_supported as check_evaluator_supported
+from prix.random import PRNGGenerator, _invert_permutation, chebyshev_series
 
 __all__ = [
     "LookupTables",
@@ -636,16 +636,25 @@ class LookupTables:
             cls._build_lut_by_name("silu_haar", device=device)
 
 
-@functools.lru_cache(maxsize=64)
-def _cached_perm_np(n):
-    gen = PRNGGenerator(seed=0)
+def _fresh_perm_np(n):
+    """Fresh permutation shared by all MPC parties (jointly-seeded "global"
+    generator) but unknown to the Fission evaluator. Never cached/reused."""
+    import prix
+
+    gen = prix.generators.get("global")
+    if gen is None:
+        raise RuntimeError("prix.init() must be called before Fission evaluation")
     perm = gen.next_permutation(int(n))
-    inv_perm = np.argsort(perm).astype(np.int64)
-    return perm, inv_perm
+    return perm, _invert_permutation(perm)
 
 
-def permute_reveal_evaluate_share(self, func):
-    """Applies the permute and split reveal technique via Fission EvaluatorClient."""
+def permute_reveal_evaluate_share(self, func, **extra):
+    """Applies the permute and split reveal technique via Fission EvaluatorClient.
+
+    `extra` holds plaintext function parameters (e.g. layernorm `eps`) that are
+    forwarded to the evaluator in the request message.
+    """
+    check_evaluator_supported(func)
     shape = self.size()
     communicator = comm.get()
     if (
@@ -658,13 +667,13 @@ def permute_reveal_evaluate_share(self, func):
             flat_np = arr_np.reshape(-1, arr_np.shape[-1])
         else:
             flat_np = arr_np.reshape(-1)
-        perm_np, inv_perm_np = _cached_perm_np(flat_np.shape[0])
+        perm_np, inv_perm_np = _fresh_perm_np(flat_np.shape[0])
         shuffled_np = flat_np[perm_np]
 
         eval_rank = communicator.get_world_size() + (1 if communicator.ttp_initialized else 0)
         if communicator.get_rank() == 0:
             communicator.send_obj(
-                {"function": func, "scale": self.scale, "array_size": shuffled_np.shape},
+                {"function": func, "scale": self.scale, "array_size": shuffled_np.shape, **extra},
                 eval_rank,
                 EvaluatorClient.get().eval_comm_group,
             )
@@ -681,7 +690,7 @@ def permute_reveal_evaluate_share(self, func):
     else:
         result = self.flatten()
     result, inv_perm = result.shuffle()
-    result = EvaluatorClient.get().evaluator_request(func, result)
+    result = EvaluatorClient.get().evaluator_request(func, result, **extra)
     result = result.unshuffle(inv_perm)
     return result.reshape(shape)
 
@@ -741,6 +750,11 @@ def exp(self):
     if method in ("split", "haar", "bior"):
         if cfg.functions.exp.all_neg:
             return _nexp_lut(-self, method)
+        if method == "split":
+            raise ValueError(
+                "exp method 'split' only supports non-positive inputs; "
+                "set cfg.functions.exp.all_neg=True or use 'haar'/'bior'"
+            )
         luts = LookupTables(self.device)
         shifted = self + (2 ** cfg.functions.exp.lut_max_bits)
         if method == "haar":
@@ -944,8 +958,9 @@ def inv_sqrt(self):
             b = self < 1
             return b * y_0 + (1 - b) * y_1
     elif method == "NR":
-        initial = cfg.functions.sqrt.nr_initial
-        iters = cfg.functions.sqrt.nr_iters
+        # Prefer inv_sqrt-specific NR settings; fall back to the shared sqrt ones.
+        initial = getattr(cfg.functions.inv_sqrt, "nr_initial", cfg.functions.sqrt.nr_initial)
+        iters = getattr(cfg.functions.inv_sqrt, "nr_iters", cfg.functions.sqrt.nr_iters)
         if initial is None:
             with cfg.temp_override({"functions.exp.method": "limit"}):
                 y = exp(self.div(2).add(0.2).neg()).mul(2.2).add(0.2)
@@ -1364,10 +1379,11 @@ def gelu(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        sgn = self.sign()
-        abs_val = sgn * self
-        drelu = 1 - self._ltz()
-        relu_val = self * drelu
+        # One comparison + one multiplication for both |x| and relu(x):
+        # with m = x * [x < 0]:  |x| = x - 2m,  relu(x) = x - m.
+        neg_part = self * self._ltz()
+        abs_val = self - 2 * neg_part
+        relu_val = self - neg_part
         if method == "haar":
             truncation = (
                 cfg.functions.gelu.lut_max_bits
@@ -1433,10 +1449,11 @@ def silu(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        sgn = self.sign()
-        abs_val = sgn * self
-        drelu = 1 - self._ltz()
-        relu_val = self * drelu
+        # One comparison + one multiplication for both |x| and relu(x):
+        # with m = x * [x < 0]:  |x| = x - 2m,  relu(x) = x - m.
+        neg_part = self * self._ltz()
+        abs_val = self - 2 * neg_part
+        relu_val = self - neg_part
         if method == "haar":
             truncation = (
                 cfg.functions.silu.lut_max_bits
@@ -1557,7 +1574,7 @@ def layernorm(self, weight=None, bias=None, eps=1e-5):
         inv_std = (variance + eps).inv_sqrt()
         out = diff * inv_std
     elif method == "fission":
-        out = permute_reveal_evaluate_share(self, "layernorm")
+        out = permute_reveal_evaluate_share(self, "layernorm", eps=float(eps))
     else:
         raise ValueError(f"Unrecognized method {method} for layernorm")
 

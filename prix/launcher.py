@@ -9,8 +9,10 @@ import copy
 import ctypes
 import logging
 import multiprocessing
+import multiprocessing.connection
 import os
 import threading
+import time
 import uuid
 
 import prix
@@ -170,18 +172,31 @@ class MultiProcessLauncher:
         for process in self.eval_processes:
             process.start()
 
-    def join(self):
-        for process in self.processes:
-            process.join()
-            if process.exitcode != 0:
+    def join(self, timeout=None):
+        """Waits for all MPC parties. If any party exits with a non-zero code,
+        every remaining process is terminated immediately (so a crashed peer can
+        never leave the others blocked forever) and a RuntimeError is raised."""
+        deadline = None if timeout is None else time.monotonic() + timeout
+        pending = list(self.processes)
+        while pending:
+            remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+            ready = multiprocessing.connection.wait([p.sentinel for p in pending], timeout=remaining)
+            if not ready:
                 self.terminate()
-                raise RuntimeError(
-                    f"{process.name} exited with non-zero exit code {process.exitcode}"
-                )
+                raise TimeoutError(f"MPC parties did not finish within {timeout}s")
+            for process in [p for p in pending if p.sentinel in ready]:
+                process.join()
+                pending.remove(process)
+                if process.exitcode != 0:
+                    self.terminate()
+                    raise RuntimeError(
+                        f"{process.name} exited with non-zero exit code {process.exitcode}"
+                    )
         if self.ttp_process is not None:
             self.ttp_process.join(timeout=2.0)
         for process in self.eval_processes:
             process.join(timeout=2.0)
+        self.terminate()
 
     def terminate(self):
         for process in self.processes:

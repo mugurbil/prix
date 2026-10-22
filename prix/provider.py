@@ -239,8 +239,7 @@ class TupleProvider:
             with open(batch_path, "rb") as f:
                 batch_data = pickle.load(f)
             for key, values in batch_data.items():
-                if key not in self.tuple_cache:
-                    self.tuple_cache[key] = values
+                self.tuple_cache.setdefault(key, []).extend(values)
 
     def load_cache(self, filepath=None):
         self._load_requests(filepath=filepath)
@@ -261,9 +260,10 @@ class TupleProvider:
         batch_count = 0
         for func_name, args, kwargs in self.request_cache:
             result = object.__getattribute__(self, func_name)(*args, **kwargs)
-            hashable_request = (func_name, args)
-            if hashable_request not in self.tuple_cache:
-                self.tuple_cache[hashable_request] = result
+            hashable_request = _cache_key(func_name, args, kwargs)
+            # Each request gets its own fresh tuple: correlated randomness must
+            # never be reused (opening x - a and x' - a would reveal x - x').
+            self.tuple_cache.setdefault(hashable_request, []).append(result)
             batch_count += 1
             if batch_count >= self.CACHE_SAVE_BATCH_SIZE:
                 self._save_tuples()
@@ -290,12 +290,33 @@ class TupleProvider:
             return object.__getattribute__(self, func_name)
 
         def func_from_cache(*args, **kwargs):
-            request = (func_name, args)
-            if request in tuple_cache:
-                return tuple(r.copy() for r in tuple_cache[request])
+            request = _cache_key(func_name, args, kwargs)
+            pool = tuple_cache.get(request)
+            if pool:
+                # Single-use: pop so the same tuple is never handed out twice.
+                result = pool.pop(0)
+                if not pool:
+                    del tuple_cache[request]
+                return result
             return object.__getattribute__(self, func_name)(*args, **kwargs)
 
         return func_from_cache
+
+
+def _cache_key(func_name, args, kwargs):
+    """Hashable tuple-cache key that includes kwargs (e.g. conv stride/padding)."""
+    def _freeze(v):
+        if isinstance(v, (list, tuple)):
+            return tuple(_freeze(e) for e in v)
+        if isinstance(v, dict):
+            return tuple(sorted((k, _freeze(e)) for k, e in v.items()))
+        try:
+            hash(v)
+            return v
+        except TypeError:
+            return repr(v)
+
+    return (func_name, _freeze(args), _freeze(kwargs or {}))
 
 
 def _przs_np(shape, ptype="arithmetic"):
@@ -431,9 +452,14 @@ def _tfp_one_hot_jit(c_loc, c0, c1, s_loc, s0, s1, t_shape, lut_size, is_rank0):
     diff_r = diff_all[:n_elem].reshape(t_shape)
     diff_oh = diff_all[n_elem:].reshape(oh_shape)
     if is_rank0:
-        r = _sm64_raw(s_loc, c_loc, t_shape)
+        # The additive mask r must be (statistically) uniform over a range much
+        # larger than |x| so that opening z = x - r hides x. We draw r uniformly
+        # from [0, 2^61): this hides any |x| << 2^61 with statistical distance
+        # |x| / 2^61, and since x - r never wraps mod 2^64, (x - r) mod lut_size
+        # stays exact for every LUT size (power of two or not).
+        r = _sm64_raw(s_loc, c_loc, t_shape) & jnp.int64((1 << 61) - 1)
         r_clear = r % jnp.int64(lut_size)
-        r_share = diff_r + r_clear
+        r_share = diff_r + r
         oh_share = diff_oh.at[jnp.arange(n_elem), r_clear.reshape(-1)].add(1)
         return r_share, oh_share
     return diff_r, diff_oh
@@ -658,7 +684,13 @@ class TrustedFirstParty(TupleProvider):
         return tuple(_share_batch_np(tensors, (shape, shape, shape), ("arithmetic", "arithmetic", "arithmetic"), device=device))
 
     def generate_permutation(self, tensor_size, device=None):
-        gen = PRNGGenerator(seed=0, device=device)
+        # Shared by all MPC parties (via the jointly-seeded "global" generator)
+        # but unknown to the TTP / Fission evaluators; fresh on every call.
+        import prix
+
+        gen = prix.generators.get("global")
+        if gen is None:
+            raise RuntimeError("prix.init() must be called before generating permutations")
         return generate_permutation(tensor_size, generator=gen, device=device)
 
 

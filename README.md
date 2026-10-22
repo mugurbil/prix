@@ -6,6 +6,12 @@
 
 **PriX** is a JAX/XLA framework for **Private Accelerated Transformers** via Secure Multi-Party Computation (MPC), implementing Wavelet-encoded Look-Up Tables (Haar and Biorthogonal 2.2), `[EGK+20]` probabilistic truncation, and Fission hybrid plaintext evaluators.
 
+> [!WARNING]
+> **Research prototype — not yet suitable for protecting real secrets.**
+> - The share/triple PRNG is SplitMix64 (GPU) / PCG64 (CPU), which is fast but **not a cryptographically secure PRF**; a party that learns some outputs can predict the stream. A keyed CSPRNG (e.g. Threefry/AES-CTR) is planned.
+> - The default `TFP` (Trusted First Party) provider lets party 0 generate all correlated randomness, so **party 0 can learn every secret** (as in CrypTen). Use it for benchmarking only; `TTP` assumes a non-colluding dealer.
+> - Security is semi-honest (honest-but-curious) only.
+
 ## Installation & Quickstart
 
 Install from PyPI:

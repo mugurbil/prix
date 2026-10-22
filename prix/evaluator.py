@@ -7,6 +7,7 @@
 
 import logging
 import math
+import secrets
 
 import jax
 import jax.numpy as jnp
@@ -40,6 +41,26 @@ def _np_log_softmax(x):
     return shifted - np.log(np.sum(np.exp(shifted), axis=-1, keepdims=True))
 
 
+# Functions an EvaluatorServer can compute. Clients validate against this set
+# *before* sending anything, so an unsupported request can never leave the
+# server dead and the MPC parties blocked waiting for a reply.
+SUPPORTED_FUNCTIONS = frozenset({
+    "exp", "log", "reciprocal", "inv_sqrt", "sqrt", "cos", "sin", "sigmoid",
+    "tanh", "erf", "gelu", "silu", "softmax", "log_softmax", "relu", "layernorm",
+})
+
+# Saturation bound for encoding evaluator outputs (exactly representable in float32).
+_INT64_SAT = np.float32(2.0 ** 62)
+
+
+def check_supported(func_name):
+    if func_name not in SUPPORTED_FUNCTIONS:
+        raise ValueError(
+            f"Fission evaluator does not support '{func_name}'. "
+            f"Supported: {sorted(SUPPORTED_FUNCTIONS)}"
+        )
+
+
 class EvaluatorClient:
     __instance = None
 
@@ -55,6 +76,7 @@ class EvaluatorClient:
             )
 
         def evaluator_request(self, func_name, array, *args, **kwargs):
+            check_supported(func_name)
             communicator = comm.get()
             world_size = communicator.get_world_size()
             evaluators_size = communicator.get_evaluators_size()
@@ -72,6 +94,7 @@ class EvaluatorClient:
                         "function": func_name,
                         "scale": array.scale,
                         "array_size": array.size(),
+                        **kwargs,
                     }
                     communicator.send_obj(message, evaluator_rank, self.eval_comm_group)
                 communicator.send(array.share, evaluator_rank)
@@ -96,6 +119,7 @@ class EvaluatorClient:
                         "function": func_name,
                         "scale": array.scale,
                         "array_size": chunks[i].size(),
+                        **kwargs,
                     }
                     communicator.send_obj(message, evaluator_rank, self.eval_comm_group)
 
@@ -165,7 +189,7 @@ class EvaluatorServer:
         ttp_offset = 1 if communicator.ttp_initialized else 0
         eval_idx = evaluator_rank - world_size - ttp_offset
 
-        self.generator = PRNGGenerator(seed=12345 + evaluator_rank)
+        self.generator = PRNGGenerator(seed=secrets.randbits(64))
         self.eval_groups = communicator.eval_groups
         self.eval_comm_group = communicator.eval_comm_group
         self.device = "cpu"
@@ -225,18 +249,19 @@ class EvaluatorServer:
 
                     with np.errstate(all="ignore"):
                         if function == "layernorm":
+                            eps = np.float32(message.get("eps", 1e-05))
                             mean = np.mean(array, axis=-1, keepdims=True)
                             variance = np.var(array, axis=-1, keepdims=True)
-                            result = (array - mean) / np.sqrt(variance + np.float32(1e-05))
-                        elif function in fission_operations:
-                            result = fission_operations[function](array)
+                            result = (array - mean) / np.sqrt(variance + eps)
                         else:
-                            raise ValueError(f"Unsupported function {function}")
+                            result = fission_operations[function](array)
 
-                        # Secret share result back to the MPC parties
-                        encoded = np.round(result * (2 ** cfg.encoder.precision_bits)).astype(
-                            np.int64
-                        )
+                        # Secret share result back to the MPC parties. inf/NaN
+                        # (e.g. log(0), 1/0) are saturated instead of being cast
+                        # to undefined int64 values.
+                        scaled = result * np.float32(2 ** cfg.encoder.precision_bits)
+                        scaled = np.clip(np.nan_to_num(scaled, nan=0.0), -_INT64_SAT, _INT64_SAT)
+                        encoded = np.round(scaled).astype(np.int64)
                     out_shares = [encoded]
                     for _ in range(1, world_size):
                         share = generate_random_ring_element_np(

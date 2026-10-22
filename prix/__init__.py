@@ -10,6 +10,7 @@ __version__ = "0.1.0"
 import builtins
 import contextlib
 import logging
+import secrets
 from types import SimpleNamespace
 
 logging.getLogger("jax._src.xla_bridge").setLevel(logging.CRITICAL)
@@ -43,24 +44,42 @@ def _setup_prng():
     sharings of zero (PRZS) without communication.
     """
     global generators
-    rank = comm.get().get_rank()
-    world_size = comm.get().get_world_size()
+    communicator = comm.get()
+    rank = communicator.get_rank()
+    world_size = communicator.get_world_size()
 
+    # All seeds are drawn from OS entropy (never hard-coded): a party's "local"
+    # seed is private to it, pairwise PRZS seeds are known only to the two
+    # adjacent parties, and the "global" seed is known only to the MPC parties
+    # (not to the TTP or Fission evaluators).
     if world_size >= 2:
         prev_rank = (rank - 1) % world_size
         next_rank = (rank + 1) % world_size
 
-        #Deterministic shared seeds per adjacent party pair, or exchanged via comm
-        seed_prev = 100003 * (prev_rank + 1) + 1009 * (rank + 1)
-        seed_next = 100003 * (rank + 1) + 1009 * (next_rank + 1)
+        # Each party picks the seed it shares with `next_rank` and sends it there;
+        # it receives the seed it shares with `prev_rank`. Sends are non-blocking.
+        seed_next = secrets.randbits(64)
+        communicator.send_obj(seed_next, next_rank)
+        seed_prev = int(communicator.recv_obj(prev_rank))
+
+        # Global seed: XOR of every party's contribution (exchanged directly
+        # between parties, not through a single dealer).
+        my_global = secrets.randbits(64)
+        for dst in range(world_size):
+            if dst != rank:
+                communicator.send_obj(my_global, dst)
+        seed_global = my_global
+        for src in range(world_size):
+            if src != rank:
+                seed_global ^= int(communicator.recv_obj(src))
     else:
-        seed_prev = 42
-        seed_next = 42
+        seed_prev = seed_next = secrets.randbits(64)
+        seed_global = secrets.randbits(64)
 
     generators["prev"] = PRNGGenerator(seed=seed_prev)
     generators["next"] = PRNGGenerator(seed=seed_next)
-    generators["local"] = PRNGGenerator(seed=7919 * (rank + 1))
-    generators["global"] = PRNGGenerator(seed=314159)
+    generators["local"] = PRNGGenerator(seed=secrets.randbits(64))
+    generators["global"] = PRNGGenerator(seed=seed_global)
 
 
 def init(
