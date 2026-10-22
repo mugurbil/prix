@@ -95,7 +95,7 @@ To address both challenges, we design and implement \textbf{PriX} (\emph{Private
     \item \textbf{Unified Multi-Paradigm MPC Framework:} PriX is the first open-source library to unify \textbf{CrypTen} polynomial/Newton--Raphson approximations~\cite{knott2021crypten}, \textbf{PUMA / Nimbus} piecewise low-degree polynomials~\cite{dong2023puma,li2024nimbus}, \textbf{SHAFT} Fourier-series and ODE Softmax~\cite{kei2025shaft}, \textbf{CuRL / Wavelet} LUTs and $\mathsf{TruncPr}$~\cite{gouert2024ripple,reis2025wave,santos2024curl,escudero2020improved}, and \textbf{Fission} hybrid evaluators~\cite{ugurbil2025fission} under a single API supporting Python~3.10--3.13 across CPUs, CUDA GPUs, and TPUs. Researchers can switch paradigms in one line of code (\texttt{mode="lut" | "poly" | "shaft" | "crypten" | "fission"}) or compose hybrid configurations (e.g., SHAFT ODE Softmax with CuRL Wavelet LayerNorm).
     \item \textbf{Whole-Graph XLA Kernel Fusion for MPC Circuits:} PriX compiles local secret-share arithmetic, Kogge--Stone carry-lookahead rounds, vectorized multi-table wavelet LUT gathers, and Fourier/ODE recurrences via \texttt{@jax.jit}, eliminating intermediate memory traffic and Python dispatch overhead.
     \item \textbf{Exact 10-Pair FP64 $\Zring$ Matrix Multiplication \& Batched Collectives:} We reduce 64-bit ring matrix multiplication from 16 to 10 exact 16-bit limb products modulo $2^{64}$ inside a single fused XLA kernel, and coalesce Beaver triple openings $(\epsilon, \delta)$ and wrap-count reductions into single communication rounds backed by lock-free shared memory.
-    \item \textbf{Comprehensive 60-Benchmark CPU \& GPU Evaluation:} We evaluate PriX against the PyTorch CrypTen baseline across 10 primitives and 5 Transformer architectures (\texttt{BertTiny}, \texttt{BertBase}, \texttt{GPT2}, \texttt{Llama}, \texttt{ModernBert}) in all 4 approximation modes on both CPU and NVIDIA Tesla T4 GPU. PriX is faster on all 60/60 benchmarks, achieving \textbf{1.47$\times$--6.26$\times$} LLM speedups on CPU and \textbf{1.97$\times$--3.09$\times$} on GPU.
+    \item \textbf{Comprehensive 75-Benchmark CPU \& GPU Evaluation:} We evaluate PriX against the PyTorch CrypTen baseline across 10 primitives and 5 Transformer architectures (\texttt{BertTiny}, \texttt{BertBase}, \texttt{GPT2}, \texttt{Llama}, \texttt{ModernBert}) in all 5 approximation modes on both CPU and NVIDIA Tesla T4 GPU. PriX is faster on all 75/75 benchmarks on each platform, achieving \textbf{1.47$\times$--6.26$\times$} LLM speedups on CPU and \textbf{1.97$\times$--3.09$\times$} on GPU.
 \end{enumerate}
 
 %======================================================================
@@ -375,21 +375,21 @@ Tables~\ref{tab:cpu_llm} and~\ref{tab:cpu_ops} report the CPU benchmark results.
 
 \begin{table}[t]
 \centering
-\caption{\textbf{GPU (NVIDIA Tesla T4) Private LLM Inference Latency (ms) and PriX Speedup} across all four MPC approximation modes ($N=2$ parties, sequence length $L=16$).}
+\caption{\textbf{GPU (NVIDIA Tesla T4) Private LLM Inference Latency (ms) and PriX Speedup} across all five MPC approximation modes ($N=2$ parties, sequence length $L=16$).}
 \label{tab:gpu_llm}
 \vspace{2pt}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}lrrrrrrrr@{}}
+\begin{tabular}{@{}lrrrrrrrrrr@{}}
 \toprule
-& \multicolumn{2}{c}{\textbf{CrypTen Approx.}} & \multicolumn{2}{c}{\textbf{SHAFT (Fourier+ODE)}} & \multicolumn{2}{c}{\textbf{CuRL Wavelet LUTs}} & \multicolumn{2}{c}{\textbf{Fission Evaluator}} \\
-\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9}
-\textbf{Model} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} \\
+& \multicolumn{2}{c}{\textbf{CrypTen Approx.}} & \multicolumn{2}{c}{\textbf{PUMA/Nimbus Poly}} & \multicolumn{2}{c}{\textbf{SHAFT (Fourier+ODE)}} & \multicolumn{2}{c}{\textbf{CuRL Wavelet LUTs}} & \multicolumn{2}{c}{\textbf{Fission Evaluator}} \\
+\cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9} \cmidrule(lr){10-11}
+\textbf{Model} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} \\
 \midrule
-BertTiny (2-Blk)   & 1891.21 & \textbf{831.48 (2.27$\times$)} & 1206.41 & \textbf{497.70 (2.42$\times$)} & 1928.25 & \textbf{641.74 (3.00$\times$)} & 393.31 & \textbf{144.88 (2.71$\times$)} \\
-BertBase (1-Blk)   & 1651.63 & \textbf{753.54 (2.19$\times$)} & 1303.92 & \textbf{623.69 (2.09$\times$)} & 1680.62 & \textbf{658.69 (2.55$\times$)} & 908.80 & \textbf{428.51 (2.12$\times$)} \\
-GPT2 (1-Blk)       & 1648.83 & \textbf{780.20 (2.11$\times$)} & 1284.63 & \textbf{611.72 (2.10$\times$)} & 1611.53 & \textbf{645.35 (2.50$\times$)} & 860.02 & \textbf{436.71 (1.97$\times$)} \\
-Llama (1-Blk)      & 1596.48 & \textbf{628.52 (2.54$\times$)} & 1284.00 & \textbf{488.35 (2.63$\times$)} & 1681.80 & \textbf{554.73 (3.03$\times$)} & 978.78 & \textbf{354.19 (2.76$\times$)} \\
-ModernBert (1-Blk) & 1439.01 & \textbf{552.47 (2.60$\times$)} & 1094.72 & \textbf{415.51 (2.63$\times$)} & 1438.62 & \textbf{466.32 (3.09$\times$)} & 705.92 & \textbf{239.02 (2.95$\times$)} \\
+BertTiny (2-Blk)   & 1891.21 & \textbf{831.48 (2.27$\times$)} & 2067.09 & \textbf{760.77 (2.72$\times$)} & 1206.41 & \textbf{497.70 (2.42$\times$)} & 1928.25 & \textbf{641.74 (3.00$\times$)} & 393.31 & \textbf{144.88 (2.71$\times$)} \\
+BertBase (1-Blk)   & 1651.63 & \textbf{753.54 (2.19$\times$)} & 1753.06 & \textbf{755.92 (2.32$\times$)} & 1303.92 & \textbf{623.69 (2.09$\times$)} & 1680.62 & \textbf{658.69 (2.55$\times$)} & 908.80 & \textbf{428.51 (2.12$\times$)} \\
+GPT2 (1-Blk)       & 1648.83 & \textbf{780.20 (2.11$\times$)} & 1724.75 & \textbf{744.40 (2.32$\times$)} & 1284.63 & \textbf{611.72 (2.10$\times$)} & 1611.53 & \textbf{645.35 (2.50$\times$)} & 860.02 & \textbf{436.71 (1.97$\times$)} \\
+Llama (1-Blk)      & 1596.48 & \textbf{628.52 (2.54$\times$)} & 1697.80 & \textbf{618.72 (2.74$\times$)} & 1284.00 & \textbf{488.35 (2.63$\times$)} & 1681.80 & \textbf{554.73 (3.03$\times$)} & 978.78 & \textbf{354.19 (2.76$\times$)} \\
+ModernBert (1-Blk) & 1439.01 & \textbf{552.47 (2.60$\times$)} & 1543.28 & \textbf{530.96 (2.91$\times$)} & 1094.72 & \textbf{415.51 (2.63$\times$)} & 1438.62 & \textbf{466.32 (3.09$\times$)} & 705.92 & \textbf{239.02 (2.95$\times$)} \\
 \bottomrule
 \end{tabular}%
 }
@@ -401,26 +401,26 @@ ModernBert (1-Blk) & 1439.01 & \textbf{552.47 (2.60$\times$)} & 1094.72 & \textb
 \label{tab:gpu_ops}
 \vspace{2pt}
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}lrrrr@{}}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Operation (Shape)} & \textbf{CrypTen Approx.} & \textbf{SHAFT (Fourier+ODE)} & \textbf{CuRL Wavelet LUTs} & \textbf{Fission Evaluator} \\
+\textbf{Operation (Shape)} & \textbf{CrypTen Approx.} & \textbf{PUMA/Nimbus Poly} & \textbf{SHAFT (Fourier+ODE)} & \textbf{CuRL Wavelet LUTs} & \textbf{Fission Evaluator} \\
 \midrule
-Private MatMul ($128\times 128$)   & 13.32 / \textbf{3.37 (3.96$\times$)}    & 11.29 / \textbf{5.43 (2.08$\times$)}   & 16.16 / \textbf{7.05 (2.29$\times$)}    & 11.36 / \textbf{3.53 (3.21$\times$)} \\
-Private Mul ($128\times 128$)      & 4.06 / \textbf{4.00 (1.01$\times$)}     & 4.09 / \textbf{2.60 (1.57$\times$)}    & 9.77 / \textbf{5.09 (1.92$\times$)}     & 4.23 / \textbf{2.74 (1.54$\times$)} \\
-Comparison / ReLU ($32\times 64$)  & 45.60 / \textbf{13.77 (3.31$\times$)}   & 44.99 / \textbf{13.09 (3.44$\times$)}  & 51.06 / \textbf{13.67 (3.74$\times$)}   & 50.62 / \textbf{13.79 (3.67$\times$)} \\
-Exp ($32\times 64$)                & 28.31 / \textbf{16.73 (1.69$\times$)}   & 27.10 / \textbf{17.57 (1.54$\times$)}  & 67.27 / \textbf{24.89 (2.70$\times$)}   & 6.99 / \textbf{1.52 (4.61$\times$)} \\
-Reciprocal ($32\times 64$)         & 120.16 / \textbf{65.95 (1.82$\times$)}  & 134.18 / \textbf{62.83 (2.14$\times$)} & 34.20 / \textbf{12.07 (2.83$\times$)}   & 8.58 / \textbf{1.59 (5.40$\times$)} \\
-InvSqrt ($32\times 64$)            & 76.28 / \textbf{37.66 (2.03$\times$)}   & 81.15 / \textbf{36.33 (2.23$\times$)}  & 130.45 / \textbf{12.67 (10.30$\times$)} & 7.24 / \textbf{1.74 (4.15$\times$)} \\
-GeLU ($32\times 64$)               & 142.86 / \textbf{72.66 (1.97$\times$)}  & 93.29 / \textbf{25.61 (3.64$\times$)}  & 24.22 / \textbf{12.61 (1.92$\times$)}   & 7.33 / \textbf{1.75 (4.20$\times$)} \\
-SiLU ($32\times 64$)               & 124.01 / \textbf{46.51 (2.67$\times$)}  & 92.20 / \textbf{27.90 (3.30$\times$)}  & 25.96 / \textbf{12.99 (2.00$\times$)}   & 7.58 / \textbf{1.60 (4.74$\times$)} \\
-Softmax ($4\times 32\times 32$)    & 543.45 / \textbf{221.37 (2.45$\times$)} & 225.10 / \textbf{93.67 (2.40$\times$)} & 491.56 / \textbf{190.68 (2.58$\times$)} & 7.40 / \textbf{1.59 (4.65$\times$)} \\
-LayerNorm ($4\times 32\times 64$)  & 92.08 / \textbf{42.26 (2.18$\times$)}   & 96.84 / \textbf{45.36 (2.14$\times$)}  & 149.84 / \textbf{24.11 (6.22$\times$)}  & 9.34 / \textbf{3.40 (2.75$\times$)} \\
+Private MatMul ($128\times 128$)   & 13.32 / \textbf{3.37 (3.96$\times$)}    & 11.62 / \textbf{3.09 (3.76$\times$)}    & 11.29 / \textbf{5.43 (2.08$\times$)}   & 16.16 / \textbf{7.05 (2.29$\times$)}    & 11.36 / \textbf{3.53 (3.21$\times$)} \\
+Private Mul ($128\times 128$)      & 4.06 / \textbf{4.00 (1.01$\times$)}     & 6.03 / \textbf{2.74 (2.20$\times$)}     & 4.09 / \textbf{2.60 (1.57$\times$)}    & 9.77 / \textbf{5.09 (1.92$\times$)}     & 4.23 / \textbf{2.74 (1.54$\times$)} \\
+Comparison / ReLU ($32\times 64$)  & 45.60 / \textbf{13.77 (3.31$\times$)}   & 48.33 / \textbf{13.53 (3.57$\times$)}   & 44.99 / \textbf{13.09 (3.44$\times$)}  & 51.06 / \textbf{13.67 (3.74$\times$)}   & 50.62 / \textbf{13.79 (3.67$\times$)} \\
+Exp ($32\times 64$)                & 28.31 / \textbf{16.73 (1.69$\times$)}   & 88.40 / \textbf{26.79 (3.30$\times$)}   & 27.10 / \textbf{17.57 (1.54$\times$)}  & 67.27 / \textbf{24.89 (2.70$\times$)}   & 6.99 / \textbf{1.52 (4.61$\times$)} \\
+Reciprocal ($32\times 64$)         & 120.16 / \textbf{65.95 (1.82$\times$)}  & 172.88 / \textbf{60.79 (2.84$\times$)}  & 134.18 / \textbf{62.83 (2.14$\times$)} & 34.20 / \textbf{12.07 (2.83$\times$)}   & 8.58 / \textbf{1.59 (5.40$\times$)} \\
+InvSqrt ($32\times 64$)            & 76.28 / \textbf{37.66 (2.03$\times$)}   & 134.06 / \textbf{36.38 (3.68$\times$)}  & 81.15 / \textbf{36.33 (2.23$\times$)}  & 130.45 / \textbf{12.67 (10.30$\times$)} & 7.24 / \textbf{1.74 (4.15$\times$)} \\
+GeLU ($32\times 64$)               & 142.86 / \textbf{72.66 (1.97$\times$)}  & 67.20 / \textbf{29.50 (2.28$\times$)}   & 93.29 / \textbf{25.61 (3.64$\times$)}  & 24.22 / \textbf{12.61 (1.92$\times$)}   & 7.33 / \textbf{1.75 (4.20$\times$)} \\
+SiLU ($32\times 64$)               & 124.01 / \textbf{46.51 (2.67$\times$)}  & 66.24 / \textbf{29.29 (2.26$\times$)}   & 92.20 / \textbf{27.90 (3.30$\times$)}  & 25.96 / \textbf{12.99 (2.00$\times$)}   & 7.58 / \textbf{1.60 (4.74$\times$)} \\
+Softmax ($4\times 32\times 32$)    & 543.45 / \textbf{221.37 (2.45$\times$)} & 609.44 / \textbf{248.86 (2.45$\times$)} & 225.10 / \textbf{93.67 (2.40$\times$)} & 491.56 / \textbf{190.68 (2.58$\times$)} & 7.40 / \textbf{1.59 (4.65$\times$)} \\
+LayerNorm ($4\times 32\times 64$)  & 92.08 / \textbf{42.26 (2.18$\times$)}   & 153.26 / \textbf{45.09 (3.40$\times$)}  & 96.84 / \textbf{45.36 (2.14$\times$)}  & 149.84 / \textbf{24.11 (6.22$\times$)}  & 9.34 / \textbf{3.40 (2.75$\times$)} \\
 \bottomrule
 \end{tabular}%
 }
 \end{table}
 
-Tables~\ref{tab:gpu_llm} and~\ref{tab:gpu_ops} report the GPU benchmark results on an NVIDIA Tesla T4. Once again, PriX outperforms the PyTorch CrypTen baseline on \textbf{100\% of benchmarks (20/20 LLM benchmarks and 40/40 primitive benchmarks)}:
+Tables~\ref{tab:gpu_llm} and~\ref{tab:gpu_ops} report the GPU benchmark results on an NVIDIA Tesla T4. Once again, PriX outperforms the PyTorch CrypTen baseline on \textbf{100\% of benchmarks (25/25 LLM benchmarks and 50/50 primitive benchmarks)}:
 \begin{itemize}
     \item \textbf{Eliminating Bitwise Circuit Launch Overhead on GPU:} In CrypTen (PyTorch), a $32\times 64$ $\operatorname{ReLU}$ on GPU takes 44.99--51.06\,ms---\emph{nearly $2\times$ slower than on CPU} (25.10--30.14\,ms)---because each Kogge--Stone round dispatches multiple tiny CUDA kernels. PriX's \texttt{@jax.jit}-fused Kogge--Stone rounds execute $\operatorname{ReLU}$ in \textbf{13.09--13.79\,ms} on GPU, achieving a \textbf{3.31$\times$--3.74$\times$} speedup over CrypTen.
     \item \textbf{10.30$\times$ Faster Wavelet $\operatorname{InvSqrt}$ and 6.22$\times$ Faster $\operatorname{LayerNorm}$ on GPU:} In CuRL mode, CrypTen's tailored dual-grid $\operatorname{InvSqrt}$ requires multiple comparisons, masks, and two separate LUT evaluations, taking 130.45\,ms on GPU. PriX's fused dual-LUT gather (\texttt{\_lut\_gather\_2}) and fused Kogge--Stone comparison reduce $\operatorname{InvSqrt}$ to \textbf{12.67\,ms (10.30$\times$ speedup)} and $\operatorname{LayerNorm}$ from 149.84\,ms to \textbf{24.11\,ms (6.22$\times$ speedup)}.
@@ -445,7 +445,7 @@ PriX is designed as a research framework operating under the standard \textbf{se
 \label{sec:conclusion}
 %======================================================================
 
-We presented \textbf{PriX}, a modern JAX/XLA framework for privacy-preserving Transformer and LLM research via Secure Multi-Party Computation. By unifying four major MPC approximation paradigms (\textbf{CrypTen}, \textbf{SHAFT}, \textbf{CuRL}, and \textbf{Fission}) with whole-graph XLA kernel fusion, 10-pair exact FP64 ring matrix multiplication, and lock-free shared-memory collectives, PriX outperforms the PyTorch CrypTen baseline across all 60 CPU and GPU benchmarks by \textbf{1.47$\times$--6.26$\times$ on CPU} and \textbf{1.97$\times$--10.30$\times$ on GPU}. PriX is open-source and available on PyPI via \texttt{pip install prix-jax}.
+We presented \textbf{PriX}, a modern JAX/XLA framework for privacy-preserving Transformer and LLM research via Secure Multi-Party Computation. By unifying five major MPC approximation paradigms (\textbf{CrypTen}, \textbf{PUMA/Nimbus}, \textbf{SHAFT}, \textbf{CuRL}, and \textbf{Fission}) with whole-graph XLA kernel fusion, 10-pair exact FP64 ring matrix multiplication, and lock-free shared-memory collectives, PriX outperforms the PyTorch CrypTen baseline across all 75 CPU and GPU benchmarks by \textbf{1.47$\times$--6.26$\times$ on CPU} and \textbf{1.97$\times$--10.30$\times$ on GPU}. PriX is open-source and available on PyPI via \texttt{pip install prix-jax}.
 
 \bibliographystyle{plain}
 \bibliography{references}
