@@ -184,8 +184,11 @@ def _patch_crypten_repo(crypten_root):
     mod_p = os.path.join(crypten_root, "curl/nn/module.py")
     if os.path.exists(mod_p):
         txt = open(mod_p).read()
-        if r"\text{in\_features}" in txt and 'r"""' not in txt[:200]:
-            open(mod_p, "w").write(txt.replace(r"\text{in\_features}", r"\\text{in\\_features}"))
+        txt_new = txt.replace(r"\text{in\_features}", r"\\text{in\\_features}").replace(
+            r"\text{out\_features}", r"\\text{out\\_features}"
+        )
+        if txt_new != txt:
+            open(mod_p, "w").write(txt_new)
 
 
 # ============================================================================
