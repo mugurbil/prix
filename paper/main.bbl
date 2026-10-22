@@ -67,11 +67,11 @@ Peter~M. Kogge and Harold~S. Stone.
 
 \bibitem{li2024nimbus}
 Zhengyi Li, Kang Yang, Jin Tan, Wen jie Lu, Haoqi Wu, Xiao Wang, Yu~Yu, Derun
-  Zhao, Yancheng Zheng, Minyi Guo, and Jiwu Shu.
+  Zhao, Yancheng Zheng, Minyi Guo, and Jingwen Leng.
 \newblock Nimbus: Secure and efficient two-party inference for transformers.
 \newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
   volume~37, 2024.
-\newblock \url{https://arxiv.org/abs/2411.03700}.
+\newblock \url{https://arxiv.org/abs/2411.15707}.
 
 \bibitem{mohassel2017secureml}
 Payman Mohassel and Yupeng Zhang.
