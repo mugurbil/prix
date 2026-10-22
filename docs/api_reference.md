@@ -15,8 +15,10 @@
   Tears down active communicator and client connections.
 
 ### Tensor Creation & Manipulation
-- **`prix.cryptensor(array, src=0, precision=None, device=None, ptype=prix.mpc.arithmetic)`** *(alias: `prix.array`)*
+- **`prix.array(array, src=0, precision=None, device=None, ptype=prix.mpc.arithmetic)`** *(CrypTen alias: `prix.cryptensor`)*
   Secret-shares `array` from party `src` across all parties.
+- **`prix.is_encrypted_array(obj)`** *(CrypTen alias: `prix.is_encrypted_tensor`)*
+  Returns `True` if `obj` is a secret-shared `prix.Array`.
 - **`prix.zeros(*sizes, device=None, ptype=prix.mpc.arithmetic)`**
   Secret-shared tensor of zeros.
 - **`prix.ones(*sizes, device=None, ptype=prix.mpc.arithmetic)`**
@@ -43,7 +45,7 @@
 ## 2. Secret-Shared Tensor (`prix.Array`)
 
 ### Decryption & Conversion
-- **`tensor.get_plain_text(dst=None)`** *(alias: `tensor.reconstruct(dst=None)`)*: Reconstructs and decodes the fixed-point secret-shared tensor to a float32 JAX array.
+- **`tensor.reconstruct(dst=None)`** *(CrypTen alias: `tensor.get_plain_text(dst=None)`)*: Reconstructs and decodes the fixed-point secret-shared tensor to a float32 JAX array.
 - **`tensor.reveal(dst=None)`**: Reveals the raw 64-bit integer ring element without fixed-point downscaling.
 - **`tensor.to(ptype, ...)`**: Converts between `prix.mpc.arithmetic` ($\mathbb{Z}_{2^{64}}$) and `prix.mpc.binary` ($\mathbb{Z}_2^{64}$) secret shares (`A2B` / `B2A`).
 

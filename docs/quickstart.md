@@ -27,8 +27,8 @@ PriX preserves CrypTen's familiar entrypoints while running on JAX/XLA and suppo
 | **Initialize** | `crypten.init()` | `prix.init(mode="lut")` *(or handled by `@prix.mpc.run_multiprocess`)* |
 | **Multi-process decorator** | `@crypten.mpc.run_multiprocess(world_size=2)` | `@prix.mpc.run_multiprocess(world_size=2, mode="shaft")` |
 | **Functional runner** | `MultiProcessLauncher(2, fn).start()` | `result = prix.run(fn, world_size=2, mode="lut")` |
-| **Encrypt tensor** | `crypten.cryptensor(x, src=0)` | `prix.cryptensor(x, src=0)` *(or `prix.array(x, src=0)`)* |
-| **Decrypt tensor** | `x_enc.get_plain_text()` | `x_enc.get_plain_text()` *(or `x_enc.reconstruct()`)* |
+| **Encrypt tensor** | `crypten.cryptensor(x, src=0)` | `prix.array(x, src=0)` *(alias: `prix.cryptensor(x, src=0)`)* |
+| **Decrypt tensor** | `x_enc.get_plain_text()` | `x_enc.reconstruct()` *(alias: `x_enc.get_plain_text()`)* |
 | **Reveal raw ring element** | `x_enc.reveal()` | `x_enc.reveal()` |
 | **Share type (Arithmetic vs. Binary)** | `crypten.mpc.arithmetic` / `crypten.mpc.binary` | `prix.mpc.arithmetic` / `prix.mpc.binary` |
 | **Switch approximation backend** | Manual fork / config file edit | `prix.set_mode("shaft")` or `prix.run(fn, mode="shaft")` |
@@ -41,7 +41,7 @@ PriX preserves CrypTen's familiar entrypoints while running on JAX/XLA and suppo
 ## 3. Core Concepts for Researchers
 
 ### A. Secret Sharing Across Parties (`src=0` vs. `src=1`)
-When running with `world_size=2`, every `prix.Array` (`prix.cryptensor`) is split across Party 0 and Party 1:
+When running with `world_size=2`, every `prix.Array` (`prix.array`) is split across Party 0 and Party 1:
 - **Arithmetic shares (`ptype=prix.mpc.arithmetic`)**: Fixed-point values $\lfloor x \cdot 2^{b} \rfloor \pmod{2^{64}}$ split additively across parties ($b = 16$ bits of precision by default). Addition and public scaling are free (zero communication); private multiplication and matrix multiplication require 1 round of communication using Beaver triples.
 - **Binary shares (`ptype=prix.mpc.binary`)**: 64-bit integers split via bitwise XOR ($\oplus$) across parties. Bitwise XOR is free; bitwise AND requires 1 round of communication; private comparisons (`>`, `<`, `relu`) use a fused Kogge–Stone carry-lookahead circuit.
 
@@ -51,12 +51,12 @@ import prix
 @prix.mpc.run_multiprocess(world_size=2, mode="lut")
 def demo():
     # Party 0 provides x; Party 1 provides y
-    x = prix.cryptensor([1.0, -2.0, 3.0], src=0)
-    y = prix.cryptensor([0.5, 4.0, -1.0], src=1)
+    x = prix.array([1.0, -2.0, 3.0], src=0)
+    y = prix.array([0.5, 4.0, -1.0], src=1)
 
     # Arithmetic + comparison + activation
     z = (x * y + 1.0).relu()
-    return z.get_plain_text()
+    return z.reconstruct()
 
 print(demo())  # [1.5, 0.0, 0.0]
 ```
@@ -83,7 +83,7 @@ def private_attention():
     attn = nn.MultiheadAttention(embed_dim=32, num_heads=4).encrypt(src=0)
     x = prix.randn(1, 8, 32)  # (batch=1, seq=8, embed_dim=32)
     y = attn(x, x, x)
-    return y.get_plain_text().shape
+    return y.reconstruct().shape
 
 print(private_attention())  # (1, 8, 32)
 ```

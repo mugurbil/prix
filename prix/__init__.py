@@ -179,6 +179,10 @@ def cryptensor(*args, **kwargs):
     return Array(*args, **kwargs)
 
 
+def is_encrypted_array(obj):
+    return isinstance(obj, Array)
+
+
 def is_encrypted_tensor(obj):
     return isinstance(obj, Array)
 
@@ -319,6 +323,7 @@ __all__ = [
     "generators",
     "init",
     "init_thread",
+    "is_encrypted_array",
     "is_encrypted_tensor",
     "is_initialized",
     "load_cache",

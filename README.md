@@ -9,7 +9,7 @@
 
 **PriX** is a **modern, high-performance JAX/XLA drop-in alternative to [CrypTen (NeurIPS 2021)](https://proceedings.neurips.cc/paper/2021/hash/2754518221cfbc8d25c13a06a4cb8421-Abstract.html)** built for **Private Machine Learning and Private LLM / Transformer Research** via Secure Multi-Party Computation (MPC).
 
-Write familiar CrypTen-style Python (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (CPU, CUDA GPU, TPU)**—and switch between four state-of-the-art MPC approximation paradigms ([**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045), [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="lut" | "shaft" | "crypten" | "fission"`).
+Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.reconstruct()` / `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (CPU, CUDA GPU, TPU)**—and switch between four state-of-the-art MPC approximation paradigms ([**CuRL (CAMLIS 2024)**](https://eprint.iacr.org/2024/1045), [**SHAFT (NDSS 2025)**](https://eprint.iacr.org/2024/1965), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="lut" | "shaft" | "crypten" | "fission"`).
 
 > [!WARNING]
 > **Research prototype — not yet suitable for protecting real secrets.**
@@ -26,7 +26,7 @@ Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) p
 | Feature | CrypTen (PyTorch) | **PriX (JAX/XLA)** |
 |---|---|---|
 | **Python & Accelerator Support** | Legacy Python / `torch==1.9` | **Python 3.10–3.13**, modern **CPU, CUDA GPU, & TPU** via `pip install prix-jax` |
-| **API Ergonomics** | `crypten.cryptensor`, `@run_multiprocess`, `crypten.nn` | **Drop-in CrypTen-compatible API** (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn`) |
+| **API Ergonomics** | `crypten.cryptensor`, `@run_multiprocess`, `crypten.nn` | **`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn`** (plus drop-in `prix.cryptensor` alias) |
 | **Nonlinear Approximation Backends** | Polynomial / NR / limit only (or separate forks) | **4 built-in backends in 1 line** (`mode="lut" \| "shaft" \| "crypten" \| "fission"`) |
 | **Kernel Execution** | Eager PyTorch op-by-op launches | **Whole-graph `@jax.jit` XLA fusion** (fused Kogge-Stone adder, LUT gather, Fourier & ODE steps) |
 | **Performance (CPU & GPU)** | Baseline (`1.0x`) | **1.5x–6.3x faster on CPU**, **2.0x–10.3x faster on GPU** across all 60 benchmarks |
@@ -51,25 +51,25 @@ pip install -e .
 
 ## 30-Second Quickstart for Researchers
 
-### 1. Secret Sharing & Multi-Party Computation (CrypTen-Style API)
+### 1. Secret Sharing & Multi-Party Computation
 
-If you know CrypTen, you already know PriX. Decorate any function with `@prix.mpc.run_multiprocess` (or call `prix.run(fn, ...)`):
+If you know JAX, PyTorch, or CrypTen, you already know PriX. Decorate any function with `@prix.mpc.run_multiprocess` (or call `prix.run(fn, ...)`), secret-share tensors with `prix.array(...)` (or `prix.cryptensor(...)`), and reconstruct with `.reconstruct()` (or `.get_plain_text()`):
 
 ```python
 import prix
 
 @prix.mpc.run_multiprocess(world_size=2, mode="shaft")
 def private_inference_demo():
-    # Party 0 encrypts input x; Party 1 encrypts weights w
-    x = prix.cryptensor([[1.0, -0.5, 2.0]], src=0)
-    w = prix.cryptensor([[0.5, 1.0], [-1.0, 0.25], [0.8, -0.5]], src=1)
+    # Party 0 secret-shares input x; Party 1 secret-shares weights w
+    x = prix.array([[1.0, -0.5, 2.0]], src=0)
+    w = prix.array([[0.5, 1.0], [-1.0, 0.25], [0.8, -0.5]], src=1)
 
     # Private matrix multiplication + nonlinear activations under MPC
     logits = (x @ w).gelu()
     probs = logits.softmax(dim=-1)
 
-    # Reconstruct plaintext result
-    return probs.get_plain_text()
+    # Reconstruct plaintext result (or use .get_plain_text())
+    return probs.reconstruct()
 
 print("Decrypted probabilities:", private_inference_demo())
 ```
@@ -82,8 +82,8 @@ Running ablation studies for a paper? Switch between all four MPC nonlinear appr
 import prix
 
 def eval_gelu():
-    x = prix.cryptensor([-2.0, -0.5, 0.0, 0.5, 2.0])
-    return x.gelu().get_plain_text()
+    x = prix.array([-2.0, -0.5, 0.0, 0.5, 2.0])
+    return x.gelu().reconstruct()
 
 for mode in ["crypten", "shaft", "lut", "fission"]:
     out = prix.run(eval_gelu, world_size=2, mode=mode)
@@ -121,7 +121,7 @@ def run_private_mlp():
     model = TinyMLP(d_model=16, d_ff=64).encrypt(src=0)
     x = prix.randn(2, 8, 16)  # secret-shared random input (batch=2, seq=8, d=16)
     y = model(x)
-    return y.get_plain_text().shape
+    return y.reconstruct().shape
 
 print("Output shape:", run_private_mlp())
 ```

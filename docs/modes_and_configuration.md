@@ -24,8 +24,8 @@ import prix
 
 @prix.mpc.run_multiprocess(world_size=2, mode="shaft")
 def run_shaft():
-    x = prix.cryptensor([-1.5, 0.0, 1.5])
-    return x.gelu().get_plain_text()
+    x = prix.array([-1.5, 0.0, 1.5])
+    return x.gelu().reconstruct()
 ```
 
 Or switch dynamically inside a process using `prix.set_mode`:
@@ -57,7 +57,7 @@ def hybrid_curl_shaft():
         "functions.softmax.ode_iter_num": 16,
     }):
         x = prix.randn(2, 16, 64)
-        return x.gelu().softmax(dim=-1).get_plain_text()
+        return x.gelu().softmax(dim=-1).reconstruct()
 ```
 
 ---
