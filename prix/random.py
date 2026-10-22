@@ -199,3 +199,19 @@ def chebyshev_series(func, width, terms):
     cos_term = jnp.cos(jnp.outer(n_range, n_range + 0.5) * np.pi / terms)
     coeffs = (2.0 / terms) * jnp.sum(y * cos_term, axis=1)
     return coeffs
+
+
+@functools.lru_cache(maxsize=16)
+def fourier_series(func, width, terms, step=1e-4):
+    """Computes Fourier series coefficients (alpha, beta_cos, beta_sin) on [-width, width]."""
+    n_range = np.arange(1, int(terms) + 1, dtype=np.float64)
+    x = np.arange(-float(width), float(width), float(step), dtype=np.float64)
+    npx = np.pi * np.outer(n_range, x) / float(width)
+    y = np.asarray(func(x), dtype=np.float64)
+    cos_npx = np.cos(npx)
+    sin_npx = np.sin(npx)
+    trapz = getattr(np, "trapezoid", getattr(np, "trapz", None))
+    alpha = float(trapz(y, x) / (2.0 * float(width)))
+    beta_cos = jnp.asarray(trapz(y[None, :] * cos_npx, x, axis=-1) / float(width), dtype=jnp.float32)
+    beta_sin = jnp.asarray(trapz(y[None, :] * sin_npx, x, axis=-1) / float(width), dtype=jnp.float32)
+    return alpha, beta_cos, beta_sin

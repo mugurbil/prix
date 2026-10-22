@@ -1,0 +1,80 @@
+communicator:
+  verbose: False
+debug:
+  debug_mode: False
+  validation_mode: False
+encoder:
+  precision_bits: 16
+  trunc_method:
+    prod: "crypten"
+    lut: "crypten"
+functions:
+  max:
+    method: "log_reduction"
+  exp:
+    method: "limit"
+    iterations: 8
+    all_neg: False
+  log:
+    method: "iter"
+    iterations: 2
+    exp_iterations: 8
+    order: 8
+  reciprocal:
+    method: "NR"
+    nr_iters: 10
+    log_iters: 1
+    all_pos: True
+    initial: null
+  sqrt:
+    method: "NR"
+    nr_iters: 3
+    nr_initial: null
+  inv_sqrt:
+    method: "NR"
+    nr_iters: 3
+    nr_initial: null
+  sigmoid_tanh:
+    method: "fourier"
+    terms: 32
+    sigmoid_fs_period: 16
+    sigmoid_fs_terms: 8
+    tanh_fs_period: 16
+    tanh_fs_terms: 8
+  trigonometry:
+    method: "NR"
+    iterations: 10
+  erf:
+    method: "fourier"
+    iterations: 8
+    fs_period: 16
+    fs_terms: 5
+  gelu:
+    method: "fourier"
+    fs_period: 8
+    fs_terms: 8
+  silu:
+    method: "fourier"
+    fs_period: 16
+    fs_terms: 12
+  softmax:
+    method: "ode"
+    ode_clip: True
+    ode_iter_num: 16
+    ode_ub: 12
+    ode_lb: -4
+  log_softmax:
+    method: "approximation"
+  layernorm:
+    method: "approximation"
+mpc:
+  active_security: False
+  provider: "TFP"
+  protocol: "beaver"
+nn:
+  dpsmpc:
+    protocol: "layer_estimation"
+    skip_loss_forward: True
+    cache_pred_size: True
+  gradients:
+    layernorm: "normal"

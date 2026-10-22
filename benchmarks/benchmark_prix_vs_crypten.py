@@ -4,10 +4,13 @@ Head-to-head benchmark: CrypTen (PyTorch) vs PriX (JAX), on CPU or GPU.
 
 The PyTorch baseline is the CrypTen-based reference implementation from
 https://github.com/jimouris/curl (a CrypTen fork that adds CuRL wavelet LUTs and
-Fission evaluators). Both frameworks are benchmarked in three approximation modes:
+Fission evaluators), augmented with SHAFT (https://github.com/andeskyl/SHAFT,
+NDSS 2025). Both frameworks are benchmarked in four approximation modes:
 
   crypten  - CrypTen's original approximations (Newton-Raphson, limit exp,
              Taylor erf, ...) with CrypTen truncation  (configs/approximations.yaml)
+  shaft    - SHAFT constant-round Fourier-series activations & ODE softmax
+                                                       (configs/shaft.yaml)
   lut      - CuRL wavelet look-up tables                (configs/default.yaml)
   fission  - Fission hybrid plaintext evaluator         (configs/fission.yaml)
 
@@ -17,6 +20,7 @@ key exists) and the provider is forced to TFP for both frameworks.
 
 import argparse
 import json
+import math
 import multiprocessing as mp
 import os
 import subprocess
@@ -29,6 +33,7 @@ import numpy as np
 MODES = [
     # (key, title, config file, number of Fission evaluators)
     ("crypten", "CrypTen approximations", "approximations.yaml", 0),
+    ("shaft", "SHAFT (Fourier + ODE)", "shaft.yaml", 0),
     ("lut", "CuRL wavelet LUTs", "default.yaml", 0),
     ("fission", "Fission evaluator", "fission.yaml", 1),
 ]
@@ -85,13 +90,16 @@ def _deep_merge(base, override):
     return out
 
 
-def _merged_config(root, cfg_name, tmp_dir, tag):
+def _merged_config(root, cfg_name, tmp_dir, tag, fallback_root=None):
     """default.yaml <- mode yaml, provider forced to TFP; written to tmp_dir."""
     import yaml
 
     with open(os.path.join(root, "configs", "default.yaml")) as f:
         base = yaml.safe_load(f)
-    with open(os.path.join(root, "configs", cfg_name)) as f:
+    mode_cfg_path = os.path.join(root, "configs", cfg_name)
+    if not os.path.exists(mode_cfg_path) and fallback_root is not None:
+        mode_cfg_path = os.path.join(fallback_root, "configs", cfg_name)
+    with open(mode_cfg_path) as f:
         mode = yaml.safe_load(f)
     merged = _deep_merge(base, mode)
     merged.setdefault("mpc", {})["provider"] = "TFP"
@@ -296,14 +304,122 @@ def run_prix(prix_root, device, tmp_dir, modes, bench_args):
 
 
 # ============================================================================
-# CrypTen (PyTorch, jimouris/curl)
+# CrypTen (PyTorch, jimouris/curl + andeskyl/SHAFT)
 # ============================================================================
+def _install_shaft_into_curl():
+    """Register SHAFT (NDSS 2025) Fourier-series activations and ODE softmax on CrypTen/CuRL."""
+    import torch
+    import curl
+    from curl.config import cfg
+    from curl.cryptensor import CrypTensor
+    from curl.common.functions import approximations as approx_mod
+    from curl.mpc.primitives import ArithmeticSharedTensor
+    from curl.mpc.provider.provider import TupleProvider
+    from curl.mpc.provider.tfp_provider import TrustedFirstParty
+
+    if getattr(approx_mod, "_shaft_installed", False):
+        return
+
+    if "generate_trig_triple" not in TupleProvider.TRACEABLE_FUNCTIONS:
+        TupleProvider.TRACEABLE_FUNCTIONS.append("generate_trig_triple")
+
+    def generate_trig_triple(self, size, period, terms, device=None):
+        t = torch.rand(size, device=device) * period
+        k = [i * 2 * math.pi / period for i in range(1, terms + 1)]
+        t_k = torch.stack([i * t for i in k])
+        u, v = torch.sin(t_k), torch.cos(t_k)
+        t = ArithmeticSharedTensor(t, precision=None, src=0)
+        u = ArithmeticSharedTensor(u, precision=None, src=0)
+        v = ArithmeticSharedTensor(v, precision=None, src=0)
+        return t, u, v
+
+    TrustedFirstParty.generate_trig_triple = generate_trig_triple
+
+    def _fourier_series(self, terms, period, alpha=None, beta_cos=None, beta_sin=None):
+        device = self.device
+        beta_sin = beta_sin.view([-1 if i == 0 else 1 for i in range(self.dim() + 1)]).to(device)
+        k = [i * 2 * math.pi / period for i in range(1, terms + 1)]
+        provider = curl.mpc.get_default_provider()
+        t, u, v = provider.generate_trig_triple(self.size(), period, terms, device=device)
+        delta = (self - t).get_plain_text()
+        delta_k = torch.stack([i * delta for i in k])
+        p, q = torch.sin(delta_k).to(device), torch.cos(delta_k).to(device)
+        res = ((v * p + u * q) * beta_sin).sum(dim=0)
+        if alpha is not None:
+            res = res + alpha
+        return res
+
+    orig_gelu = approx_mod.gelu
+    orig_silu = approx_mod.silu
+    orig_softmax = approx_mod.softmax
+
+    def shaft_gelu(self):
+        if cfg.functions.gelu.method == "fourier":
+            period = getattr(cfg.functions.gelu, "fs_period", 8)
+            width = period / 2
+            terms = getattr(cfg.functions.gelu, "fs_terms", 8)
+            relu_x = self.relu()
+            abs_x = 2 * relu_x - self
+            do_fs = abs_x < width
+            beta_sin = torch.tensor(
+                [-0.0818, -0.0809, -0.0424, -0.0176, -0.0079, -0.0043, -0.0026, -0.0017],
+                device=self.device,
+            )
+            return relu_x + do_fs * _fourier_series(abs_x, terms, period, beta_sin=beta_sin)
+        return orig_gelu(self)
+
+    def shaft_silu(self):
+        if cfg.functions.silu.method == "fourier":
+            period = getattr(cfg.functions.silu, "fs_period", 16)
+            width = period / 2
+            terms = getattr(cfg.functions.silu, "fs_terms", 12)
+            relu_x = self.relu()
+            abs_x = 2 * relu_x - self
+            do_fs = abs_x < width
+            beta_sin = torch.tensor(
+                [
+                    -0.1299, -0.1220, -0.0743, -0.0394, -0.0216, -0.0118,
+                    -0.0074, -0.0044, -0.0033, -0.0021, -0.0018, -0.0011,
+                ],
+                device=self.device,
+            )
+            return relu_x + do_fs * _fourier_series(abs_x, terms, period, beta_sin=beta_sin)
+        return orig_silu(self)
+
+    def shaft_softmax(self, dim, **kwargs):
+        if cfg.functions.softmax.method == "ode":
+            if self.dim() == 0:
+                return self.new(torch.ones_like(self.data))
+            if self.size(dim) == 1:
+                return self.new(torch.ones_like(self.data))
+            iter_num = int(getattr(cfg.functions.softmax, "ode_iter_num", 16))
+            clip = bool(getattr(cfg.functions.softmax, "ode_clip", True))
+            upper = float(getattr(cfg.functions.softmax, "ode_ub", 12))
+            lower = float(getattr(cfg.functions.softmax, "ode_lb", -4))
+            logits = self.clone()
+            if clip:
+                diff = curl.cat([logits - upper, lower - logits]).relu().split(logits.size(0))
+                logits = logits + diff[1] - diff[0]
+            x = logits / iter_num
+            g = logits.new(torch.ones_like(logits.data) / logits.size(dim), device=logits.device)
+            for _ in range(iter_num):
+                g = g + (x - g.mul(x).sum(dim=dim, keepdim=True)) * g
+            return g
+        return orig_softmax(self, dim, **kwargs)
+
+    approx_mod.gelu = CrypTensor.gelu = shaft_gelu
+    approx_mod.silu = CrypTensor.silu = shaft_silu
+    approx_mod.softmax = CrypTensor.softmax = shaft_softmax
+    approx_mod._shaft_installed = True
+
+
 def _crypten_worker(a):
     import torch
     import curl
     import curl.communicator as comm
     from curl.config import cfg
 
+    _install_shaft_into_curl()
     cfg.load_config(a["config_path"])
     device = a["device"]
     cuda = str(device).startswith("cuda")
@@ -316,7 +432,7 @@ def _crypten_worker(a):
     )
 
 
-def run_crypten(crypten_root, device, tmp_dir, modes, bench_args):
+def run_crypten(crypten_root, device, tmp_dir, modes, bench_args, prix_root=None):
     _patch_crypten_repo(crypten_root)
     sys.path.insert(0, crypten_root)
     orig_set_start = mp.set_start_method
@@ -327,7 +443,7 @@ def run_crypten(crypten_root, device, tmp_dir, modes, bench_args):
     for key, _title, cfg_name, n_eval in MODES:
         if key not in modes:
             continue
-        cfg_path = _merged_config(crypten_root, cfg_name, tmp_dir, "crypten")
+        cfg_path = _merged_config(crypten_root, cfg_name, tmp_dir, "crypten", fallback_root=prix_root)
         part = os.path.join(tmp_dir, f"_crypten_{key}.json")
         args = AttrDict(
             config_path=cfg_path, out_path=part, device=device, mode=key, multi_gpu=False, **bench_args
@@ -435,9 +551,12 @@ if __name__ == "__main__":
     )
 
     if args.framework in ("prix", "crypten"):
-        runner = run_prix if args.framework == "prix" else run_crypten
-        root = args.prix_root if args.framework == "prix" else args.crypten_root
-        res = runner(root, args.device, tmp_dir, modes, bench_args)
+        if args.framework == "prix":
+            res = run_prix(args.prix_root, args.device, tmp_dir, modes, bench_args)
+        else:
+            res = run_crypten(
+                args.crypten_root, args.device, tmp_dir, modes, bench_args, prix_root=args.prix_root
+            )
         data.setdefault(args.framework, {}).update(res)
         with open(args.out, "w") as f:
             json.dump(data, f, indent=2)

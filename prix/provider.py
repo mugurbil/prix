@@ -162,6 +162,7 @@ class TupleProvider:
         "B2A_rng",
         "generate_one_hot",
         "egk_trunc_pr_rng",
+        "generate_trig_triple",
     ]
 
     _DEFAULT_CACHE_PATH = os.path.normpath(
@@ -477,12 +478,36 @@ def _tfp_egk_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, l_minus_m, m, is_rank0
     return diff[0], diff[1], diff[2]
 
 
-def _wrap_shares(shares, ptypes, device=None):
+@functools.partial(
+    jax.jit,
+    static_argnames=("s_loc", "s0", "s1", "shape", "period_scaled", "period_f", "terms", "scale", "is_rank0"),
+)
+def _tfp_trig_triple_jit(c_loc, c0, c1, s_loc, s0, s1, shape, period_scaled, period_f, terms, scale, is_rank0):
+    n0 = int(np.prod(shape)) if len(shape) > 0 else 1
+    uv_shape = (terms,) + shape
+    n_uv = terms * n0
+    tot = n0 + 2 * n_uv
+    diff_all = _sm64_raw(s0, c0, (tot,)) - _sm64_raw(s1, c1, (tot,))
+    diff_t = diff_all[:n0].reshape(shape)
+    diff_u = diff_all[n0 : n0 + n_uv].reshape(uv_shape)
+    diff_v = diff_all[n0 + n_uv :].reshape(uv_shape)
+    if is_rank0:
+        t = _sm64_raw(s_loc, c_loc, shape) & jnp.int64((1 << 61) - 1)
+        t_mod = jnp.mod(t, jnp.int64(period_scaled)).astype(jnp.float32) / jnp.float32(scale)
+        ks = jnp.arange(1, terms + 1, dtype=jnp.float32) * jnp.float32(2.0 * np.pi / period_f)
+        angles = jnp.tensordot(ks, t_mod, axes=0)
+        u = jnp.round(jnp.sin(angles) * jnp.float32(scale)).astype(DATATYPE)
+        v = jnp.round(jnp.cos(angles) * jnp.float32(scale)).astype(DATATYPE)
+        return diff_t + t, diff_u + u, diff_v + v
+    return diff_t, diff_u, diff_v
+
+
+def _wrap_shares(shares, ptypes, device=None, precision=0):
     from prix.array import Array, Ptype, SENTINEL
 
     out = []
     for s, pt in zip(shares, ptypes):
-        res = Array(src=SENTINEL, precision=0, device=device, ptype=Ptype(pt))
+        res = Array(src=SENTINEL, precision=precision, device=device, ptype=Ptype(pt))
         res.share = to_jax(s, device=device, dtype=DATATYPE)
         out.append(res)
     return tuple(out)
@@ -693,6 +718,27 @@ class TrustedFirstParty(TupleProvider):
             raise RuntimeError("prix.init() must be called before generating permutations")
         return generate_permutation(tensor_size, generator=gen, device=device)
 
+    def generate_trig_triple(self, size, period, terms, device=None):
+        """Generate trigonometric triple (t, sin(k*t), cos(k*t)) for SHAFT Fourier series."""
+        shape = tuple(size)
+        n0 = int(np.prod(shape)) if len(shape) > 0 else 1
+        terms_int = int(terms)
+        n_uv = terms_int * n0
+        prec = int(cfg.encoder.precision_bits)
+        scale = 1 << prec
+        period_f = float(period)
+        period_scaled = int(round(period_f * scale))
+        is_rank0 = self.rank == 0
+        c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(
+            n0 + 2 * n_uv, n0 if is_rank0 else 0
+        )
+        shares = _tfp_trig_triple_jit(
+            c_loc, c0, c1, s_loc, sd0, sd1, shape, period_scaled, period_f, terms_int, scale, is_rank0
+        )
+        return _wrap_shares(
+            shares, ("arithmetic", "arithmetic", "arithmetic"), device=device, precision=prec
+        )
+
 
 class TrustedThirdParty(TupleProvider):
     """Trusted Third Party provider communicating with a dedicated TTPServer process."""
@@ -853,6 +899,30 @@ class TrustedThirdParty(TupleProvider):
         r_p = Array.from_shares(r_p, precision=0, device=device)
         b = Array.from_shares(b, precision=0, device=device)
         return r, r_p, b
+
+    def generate_trig_triple(self, size, period, terms, device=None):
+        from prix.array import Array
+
+        if device is None:
+            device = self.device
+        generator = TTPClient.get().get_generator(device=device)
+        prec = int(cfg.encoder.precision_bits)
+        shape = tuple(size)
+        uv_shape = (int(terms),) + shape
+
+        t = generate_random_ring_element(shape, generator=generator, device=device)
+        if comm.get().get_rank() == 0:
+            u = TTPClient.get().ttp_request("trig_triple_u", device, shape, float(period), int(terms), prec)
+            v = TTPClient.get().ttp_request("trig_triple_v", device, shape, float(period), int(terms), prec)
+        else:
+            u = generate_random_ring_element(uv_shape, generator=generator, device=device)
+            v = generate_random_ring_element(uv_shape, generator=generator, device=device)
+
+        return (
+            Array.from_shares(t, precision=prec, device=device),
+            Array.from_shares(u, precision=prec, device=device),
+            Array.from_shares(v, precision=prec, device=device),
+        )
 
     @staticmethod
     def _init(device=None):
@@ -1028,6 +1098,25 @@ class TTPServer:
         else:
             r = (raw.view(jnp.uint64) & jnp.uint64((1 << int(exp)) - 1)).astype(DATATYPE)
         return r - self._get_additive_PRSS(size, remove_rank=True)
+
+    def trig_triple_u(self, size, period, terms, prec):
+        scale = 1 << int(prec)
+        period_scaled = int(round(float(period) * scale))
+        t = self._get_additive_PRSS(size)
+        t_mod = (t % jnp.int64(period_scaled)).astype(jnp.float32) / jnp.float32(scale)
+        ks = jnp.arange(1, int(terms) + 1, dtype=jnp.float32) * jnp.float32(2.0 * np.pi / float(period))
+        angles = jnp.tensordot(ks, t_mod, axes=0)
+        u = jnp.round(jnp.sin(angles) * jnp.float32(scale)).astype(DATATYPE)
+        v = jnp.round(jnp.cos(angles) * jnp.float32(scale)).astype(DATATYPE)
+        self._pending_trig_v = v
+        uv_shape = (int(terms),) + tuple(size)
+        return u - self._get_additive_PRSS(uv_shape, remove_rank=True)
+
+    def trig_triple_v(self, size, period, terms, prec):
+        v = self._pending_trig_v
+        self._pending_trig_v = None
+        uv_shape = (int(terms),) + tuple(size)
+        return v - self._get_additive_PRSS(uv_shape, remove_rank=True)
 
 
 _PROVIDER_INSTANCES = {}

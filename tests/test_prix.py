@@ -242,6 +242,52 @@ def _worker_ttp():
     np.testing.assert_allclose(
         x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), atol=0.1
     )
+    with cfg.temp_override({"functions.gelu.method": "fourier"}):
+        np.testing.assert_allclose(
+            x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), atol=5e-2
+        )
+
+
+def _worker_shaft_and_poly():
+    x_val = jnp.array([-3.5, -1.5, -0.5, 0.0, 0.5, 1.5, 3.5], dtype=jnp.float32)
+    x = prix.cryptensor(x_val)
+
+    # SHAFT Fourier-series approximations
+    with cfg.temp_override({"functions.gelu.method": "fourier"}):
+        np.testing.assert_allclose(
+            x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), atol=3e-2
+        )
+    with cfg.temp_override({"functions.silu.method": "fourier"}):
+        np.testing.assert_allclose(x.silu().get_plain_text(), jax.nn.silu(x_val), atol=4e-2)
+    with cfg.temp_override({"functions.erf.method": "fourier"}):
+        np.testing.assert_allclose(
+            x.erf().get_plain_text(), jax.scipy.special.erf(x_val), atol=6e-2
+        )
+    with cfg.temp_override({"functions.sigmoid_tanh.method": "fourier"}):
+        np.testing.assert_allclose(x.tanh().get_plain_text(), jnp.tanh(x_val), atol=6e-2)
+        np.testing.assert_allclose(
+            x.sigmoid().get_plain_text(), jax.nn.sigmoid(x_val), atol=6e-2
+        )
+
+    # Piecewise polynomial approximations
+    with cfg.temp_override({"functions.gelu.method": "poly"}):
+        np.testing.assert_allclose(
+            x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), atol=2e-2
+        )
+    with cfg.temp_override({"functions.silu.method": "poly"}):
+        np.testing.assert_allclose(x.silu().get_plain_text(), jax.nn.silu(x_val), atol=3e-2)
+    with cfg.temp_override({"functions.sigmoid_tanh.method": "poly"}):
+        np.testing.assert_allclose(x.tanh().get_plain_text(), jnp.tanh(x_val), atol=2e-2)
+        np.testing.assert_allclose(
+            x.sigmoid().get_plain_text(), jax.nn.sigmoid(x_val), atol=2e-2
+        )
+
+    # SHAFT constant-round ODE softmax
+    sm_val = jnp.array([[-1.0, 0.0, 1.0, 2.0], [0.5, 1.5, -0.5, 0.0]], dtype=jnp.float32)
+    sm_in = prix.cryptensor(sm_val)
+    with cfg.temp_override({"functions.softmax.method": "ode"}):
+        sm_out = sm_in.softmax(dim=-1).get_plain_text()
+    np.testing.assert_allclose(sm_out, jax.nn.softmax(sm_val, axis=-1), atol=5e-2)
 
 
 def _worker_nn_and_llms():
@@ -349,6 +395,12 @@ class TestPrix(unittest.TestCase):
             os.path.dirname(prix.__file__), "..", "configs", "fission.yaml"
         )
         _run_mpc(_worker_nn_and_llms, world_size=2, evaluator_size=1, cfg_file=fission_cfg)
+
+    def test_09_shaft_and_poly(self):
+        shaft_cfg = os.path.join(
+            os.path.dirname(prix.__file__), "..", "configs", "shaft.yaml"
+        )
+        _run_mpc(_worker_shaft_and_poly, cfg_file=shaft_cfg)
 
 
 if __name__ == "__main__":

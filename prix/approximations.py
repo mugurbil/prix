@@ -26,11 +26,12 @@ import prix.communicator as comm
 from prix.config import cfg
 from prix.encoder import DATATYPE, resolve_device, to_jax
 from prix.evaluator import EvaluatorClient, check_supported as check_evaluator_supported
-from prix.random import PRNGGenerator, _invert_permutation, chebyshev_series
+from prix.random import PRNGGenerator, _invert_permutation, chebyshev_series, fourier_series
 
 __all__ = [
     "LookupTables",
     "permute_reveal_evaluate_share",
+    "_fourier_series",
     "exp",
     "log",
     "reciprocal",
@@ -1118,13 +1119,21 @@ def sin(self):
     return cossin(self)[1]
 
 
+def _ltz_and_abs_lt(self, width):
+    """Computes (self < 0, |self| < width) in a single batched _ltz() call."""
+    ltz_all = prix.stack([self, self - width, -self - width])._ltz()
+    return ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+
+
 def sigmoid(self):
     """Computes the sigmoid function."""
     method = cfg.functions.sigmoid_tanh.method
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        ltz = self._ltz()
+        ltz, check = _ltz_and_abs_lt(
+            self, 2 ** cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits - 1
+        )
         sgn = 1 - 2 * ltz
         abs_val = sgn * self
         if method == "haar":
@@ -1153,7 +1162,6 @@ def sigmoid(self):
             )
         eval_val = ltz + sgn * lut
         limit = 1 - ltz
-        check = abs_val < (2 ** cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits - 1)
         return limit + check * (eval_val - limit)
     elif method in ("haar-lut-only", "bior-lut-only"):
         luts = LookupTables(self.device)
@@ -1204,10 +1212,163 @@ def sigmoid(self):
             pos_output = denominator.reciprocal()
 
         return pos_output.where(1 - ltz, 1 - pos_output)
+    elif method == "poly":
+        return tanh(self.div(2)).div(2) + 0.5
+    elif method == "fourier":
+        period = getattr(cfg.functions.sigmoid_tanh, "sigmoid_fs_period", 16)
+        width = period / 2.0
+        terms = getattr(cfg.functions.sigmoid_tanh, "sigmoid_fs_terms", 8)
+        alpha, _, beta_sin = _cached_fourier_coeffs("sigmoid", float(width), int(terms))
+        return _fourier_series(self, terms, period, alpha=alpha, beta_sin=beta_sin)
     elif method == "fission":
         return permute_reveal_evaluate_share(self, "sigmoid")
     else:
         raise ValueError(f"Unrecognized method {method} for sigmoid")
+
+
+def _erf_np(x):
+    if _scipy_erf is not None:
+        return _scipy_erf(x)
+    return np.asarray(jax.scipy.special.erf(jnp.asarray(x, dtype=jnp.float64)))
+
+
+def _diff_gelu_np(x):
+    gelu_x = 0.5 * x * (1.0 + _erf_np(x / math.sqrt(2.0)))
+    relu_x = np.maximum(x, 0.0)
+    return np.sign(x) * (gelu_x - relu_x)
+
+
+def _diff_silu_np(x):
+    silu_x = x / (1.0 + np.exp(-x))
+    relu_x = np.maximum(x, 0.0)
+    return np.sign(x) * (silu_x - relu_x)
+
+
+@functools.lru_cache(maxsize=64)
+def _cached_fourier_coeffs(func_name, width, terms):
+    if func_name == "gelu" and width == 4.0 and terms == 8:
+        return (
+            0.0,
+            np.zeros(8, dtype=np.float32),
+            np.array(
+                [-0.0818, -0.0809, -0.0424, -0.0176, -0.0079, -0.0043, -0.0026, -0.0017],
+                dtype=np.float32,
+            ),
+        )
+    if func_name == "silu" and width == 8.0 and terms == 12:
+        return (
+            0.0,
+            np.zeros(12, dtype=np.float32),
+            np.array(
+                [
+                    -0.1299,
+                    -0.1220,
+                    -0.0743,
+                    -0.0394,
+                    -0.0216,
+                    -0.0118,
+                    -0.0074,
+                    -0.0044,
+                    -0.0033,
+                    -0.0021,
+                    -0.0018,
+                    -0.0011,
+                ],
+                dtype=np.float32,
+            ),
+        )
+    fn_map = {
+        "erf": _erf_np,
+        "tanh": np.tanh,
+        "sigmoid": lambda x: 1.0 / (1.0 + np.exp(-x)),
+        "gelu": _diff_gelu_np,
+        "silu": _diff_silu_np,
+    }
+    return fourier_series(fn_map[func_name], width, terms)
+
+
+@jax.jit
+def _fourier_linear_comb_jit(u_share, v_share, delta, k_arr, beta_sin_scaled):
+    angles = k_arr * jnp.expand_dims(delta, axis=0)
+    wv = jnp.round(jnp.sin(angles) * beta_sin_scaled).astype(DATATYPE)
+    wu = jnp.round(jnp.cos(angles) * beta_sin_scaled).astype(DATATYPE)
+    return jnp.sum(v_share * wv + u_share * wu, axis=0)
+
+
+@jax.jit
+def _fourier_linear_comb_cos_jit(u_share, v_share, delta, k_arr, beta_sin_scaled, beta_cos_scaled):
+    angles = k_arr * jnp.expand_dims(delta, axis=0)
+    s = jnp.sin(angles)
+    c = jnp.cos(angles)
+    wv = jnp.round(s * beta_sin_scaled + c * beta_cos_scaled).astype(DATATYPE)
+    wu = jnp.round(c * beta_sin_scaled - s * beta_cos_scaled).astype(DATATYPE)
+    return jnp.sum(v_share * wv + u_share * wu, axis=0)
+
+
+def _fourier_series(self, terms, period, alpha=None, beta_cos=None, beta_sin=None):
+    """Evaluates a Fourier series at secret-shared tensor `self` in 1 round using trigonometric triples."""
+    if beta_sin is None and beta_cos is None:
+        raise ValueError("At least one of beta_sin or beta_cos must be provided")
+
+    x = self
+    if x.precision > cfg.encoder.precision_bits:
+        x = x.egk_trunc_pr(62, x.precision - cfg.encoder.precision_bits)
+        x.precision = cfg.encoder.precision_bits
+
+    terms_int = int(terms)
+    period_f = float(period)
+    scale_f = float(1 << x.precision)
+    period_scaled = int(round(period_f * scale_f))
+    provider = prix.get_default_provider()
+    t, u, v = provider.generate_trig_triple(x.size(), period_f, terms_int, device=x.device)
+
+    delta_int = to_jax(comm.get().all_reduce((x - t).share), device=x.device, dtype=DATATYPE)
+    delta = jnp.mod(delta_int, jnp.int64(period_scaled)).astype(jnp.float32) / jnp.float32(scale_f)
+    bcast_shape = (terms_int,) + (1,) * x.dim()
+    k_arr = to_jax(
+        np.arange(1, terms_int + 1, dtype=np.float32).reshape(bcast_shape)
+        * np.float32(2.0 * math.pi / period_f),
+        device=x.device,
+        dtype=jnp.float32,
+    )
+    if beta_sin is not None:
+        beta_sin_scaled = to_jax(
+            np.asarray(beta_sin, dtype=np.float32).reshape(bcast_shape) * scale_f,
+            device=x.device,
+            dtype=jnp.float32,
+        )
+    else:
+        beta_sin_scaled = jnp.zeros(bcast_shape, dtype=jnp.float32)
+
+    if beta_cos is None:
+        sum_share = _fourier_linear_comb_jit(u.share, v.share, delta, k_arr, beta_sin_scaled)
+    else:
+        beta_cos_scaled = to_jax(
+            np.asarray(beta_cos, dtype=np.float32).reshape(bcast_shape) * scale_f,
+            device=x.device,
+            dtype=jnp.float32,
+        )
+        sum_share = _fourier_linear_comb_cos_jit(
+            u.share, v.share, delta, k_arr, beta_sin_scaled, beta_cos_scaled
+        )
+
+    res = x.shallow_copy()
+    res.share = sum_share
+    res.precision = x.precision
+    if res.precision > 0:
+        trunc_method = cfg.encoder.trunc_method.prod
+        if trunc_method == "crypten":
+            res = res.div_(2 ** res.precision)
+        elif trunc_method == "egk":
+            res = res.egk_trunc_pr(62, res.precision)
+        elif trunc_method == "fission":
+            res.precision = 2 * res.precision
+        else:
+            raise ValueError(f"Unsupported truncation method {trunc_method}")
+
+    if alpha is not None and float(alpha) != 0.0:
+        res = res + float(alpha)
+    return res
 
 
 def _chebyshev_polynomials(self, terms):
@@ -1233,7 +1394,10 @@ def tanh(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        sgn = self.sign()
+        ltz, check = _ltz_and_abs_lt(
+            self, 2 ** cfg.functions.sigmoid_tanh.tanh_lut_max_bits - 1
+        )
+        sgn = 1 - 2 * ltz
         abs_val = sgn * self
         if method == "haar":
             st_truncation = (
@@ -1257,7 +1421,6 @@ def tanh(self):
             else:
                 msb, lsb = abs_val.egk_truncmod_pr(62, st_truncation)
             lut = msb.evaluate_bior_lut(luts.get_lut("tanh_bior", self.device), lsb, st_truncation)
-        check = abs_val < (2 ** cfg.functions.sigmoid_tanh.tanh_lut_max_bits - 1)
         return sgn * (1 - check + lut * check)
     elif method in ("haar-lut-only", "bior-lut-only"):
         luts = LookupTables(self.device)
@@ -1295,6 +1458,18 @@ def tanh(self):
         tanh_polys_flipped = tanh_polys.unsqueeze(dim=-1).transpose(0, -1).squeeze(dim=0)
         out = tanh_polys_flipped.matmul(coeffs)
         return out.hardtanh()
+    elif method == "poly":
+        ltz, do_poly = _ltz_and_abs_lt(self, 2.95)
+        sgn = 1 - 2 * ltz
+        abs_x = sgn * self
+        poly_x = abs_x.polynomial([1.1950192, -0.49313435, 0.0737858, -0.00147019]) - 0.01758266
+        return sgn * (do_poly * (poly_x - 1) + 1)
+    elif method == "fourier":
+        period = getattr(cfg.functions.sigmoid_tanh, "tanh_fs_period", 16)
+        width = period / 2.0
+        terms = getattr(cfg.functions.sigmoid_tanh, "tanh_fs_terms", 8)
+        _, _, beta_sin = _cached_fourier_coeffs("tanh", float(width), int(terms))
+        return _fourier_series(self, terms, period, beta_sin=beta_sin)
     elif method == "fission":
         return permute_reveal_evaluate_share(self, "tanh")
     else:
@@ -1360,13 +1535,21 @@ def erf(self):
             return msb.evaluate_bior_lut(
                 luts.get_lut("erf_bior_lut_only", self.device), lsb, truncation
             )
-    elif method == "Taylor":
+    elif method in ("Taylor", "taylor"):
         iters = cfg.functions.erf.iterations
         output = self.clone()
         for n in range(1, iters + 1):
             multiplier = ((-1) ** n) / (math.factorial(n) * (2 * n + 1))
             output = output.add(self.pos_pow(2 * n + 1).mul(multiplier))
         return output.mul(2.0 / math.sqrt(math.pi))
+    elif method == "tanh":
+        return tanh(math.sqrt(4.0 / math.pi) * (self + 0.044715 * self.pow(3)))
+    elif method == "fourier":
+        period = getattr(cfg.functions.erf, "fs_period", 16)
+        width = period / 2.0
+        terms = getattr(cfg.functions.erf, "fs_terms", 5)
+        _, _, beta_sin = _cached_fourier_coeffs("erf", float(width), int(terms))
+        return _fourier_series(self, terms, period, beta_sin=beta_sin)
     elif method == "fission":
         return permute_reveal_evaluate_share(self, "erf")
     else:
@@ -1379,9 +1562,8 @@ def gelu(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        # One comparison + one multiplication for both |x| and relu(x):
-        # with m = x * [x < 0]:  |x| = x - 2m,  relu(x) = x - m.
-        neg_part = self * self._ltz()
+        ltz, check = _ltz_and_abs_lt(self, 2 ** cfg.functions.gelu.lut_max_bits)
+        neg_part = self * ltz
         abs_val = self - 2 * neg_part
         relu_val = self - neg_part
         if method == "haar":
@@ -1406,7 +1588,6 @@ def gelu(self):
             else:
                 msb, lsb = abs_val.egk_truncmod_pr(62, truncation)
             lut = msb.evaluate_bior_lut(luts.get_lut("gelu_bior", self.device), lsb, truncation)
-        check = abs_val < (2 ** cfg.functions.gelu.lut_max_bits)
         return relu_val - lut * check
     elif method in ("haar-lut-only", "bior-lut-only"):
         luts = LookupTables(self.device)
@@ -1437,6 +1618,23 @@ def gelu(self):
             )
     elif method == "erf":
         return self * (1 + (self / math.sqrt(2)).erf()) / 2
+    elif method == "poly":
+        ltz, do_poly = _ltz_and_abs_lt(self, 3)
+        neg_part = self * ltz
+        abs_x = self - 2 * neg_part
+        relu_x = self - neg_part
+        poly_x = abs_x.polynomial([-0.55386347, 0.5658561, -0.19719836, 0.02328962]) + 0.00410626
+        return relu_x + do_poly * poly_x
+    elif method == "fourier":
+        period = getattr(cfg.functions.gelu, "fs_period", 8)
+        width = period / 2.0
+        terms = getattr(cfg.functions.gelu, "fs_terms", 8)
+        ltz, do_fs = _ltz_and_abs_lt(self, width)
+        neg_part = self * ltz
+        abs_x = self - 2 * neg_part
+        relu_x = self - neg_part
+        _, _, beta_sin = _cached_fourier_coeffs("gelu", float(width), int(terms))
+        return relu_x + do_fs * _fourier_series(abs_x, terms, period, beta_sin=beta_sin)
     elif method == "fission":
         return permute_reveal_evaluate_share(self, "gelu")
     else:
@@ -1449,9 +1647,8 @@ def silu(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        # One comparison + one multiplication for both |x| and relu(x):
-        # with m = x * [x < 0]:  |x| = x - 2m,  relu(x) = x - m.
-        neg_part = self * self._ltz()
+        ltz, check = _ltz_and_abs_lt(self, 2 ** cfg.functions.silu.lut_max_bits - 1)
+        neg_part = self * ltz
         abs_val = self - 2 * neg_part
         relu_val = self - neg_part
         if method == "haar":
@@ -1476,7 +1673,6 @@ def silu(self):
             else:
                 msb, lsb = abs_val.egk_truncmod_pr(62, truncation)
             lut = msb.evaluate_bior_lut(luts.get_lut("silu_bior", self.device), lsb, truncation)
-        check = abs_val < (2 ** cfg.functions.silu.lut_max_bits - 1)
         return relu_val - lut * check
     elif method in ("haar-lut-only", "bior-lut-only"):
         luts = LookupTables(self.device)
@@ -1507,6 +1703,23 @@ def silu(self):
             )
     elif method == "sigmoid":
         return self * self.sigmoid()
+    elif method == "poly":
+        ltz, do_poly = _ltz_and_abs_lt(self, 6)
+        neg_part = self * ltz
+        abs_x = self - 2 * neg_part
+        relu_x = self - neg_part
+        poly_x = abs_x.polynomial([-0.47465521, 0.27018027, -0.05269808, 0.00348313]) - 0.00951912
+        return relu_x + do_poly * poly_x
+    elif method == "fourier":
+        period = getattr(cfg.functions.silu, "fs_period", 16)
+        width = period / 2.0
+        terms = getattr(cfg.functions.silu, "fs_terms", 12)
+        ltz, do_fs = _ltz_and_abs_lt(self, width)
+        neg_part = self * ltz
+        abs_x = self - 2 * neg_part
+        relu_x = self - neg_part
+        _, _, beta_sin = _cached_fourier_coeffs("silu", float(width), int(terms))
+        return relu_x + do_fs * _fourier_series(abs_x, terms, period, beta_sin=beta_sin)
     elif method == "fission":
         return permute_reveal_evaluate_share(self, "silu")
     else:
@@ -1531,6 +1744,25 @@ def softmax(self, dim=-1, **kwargs):
         with cfg.temp_override({"functions.reciprocal.all_pos": True}):
             inv_denominator = numerator.sum(dim, keepdim=True).reciprocal()
         return numerator * inv_denominator
+    elif method == "ode":
+        iter_num = int(getattr(cfg.functions.softmax, "ode_iter_num", 16))
+        clip = bool(getattr(cfg.functions.softmax, "ode_clip", True))
+        upper = float(getattr(cfg.functions.softmax, "ode_ub", 12))
+        lower = float(getattr(cfg.functions.softmax, "ode_lb", -4))
+
+        logits = self
+        if clip:
+            diff = prix.stack([logits - upper, lower - logits]).relu()
+            logits = logits + diff[1] - diff[0]
+
+        x = logits.div(iter_num)
+        g = self.new(
+            jnp.full(self.shape, 1.0 / self.size(dim), dtype=jnp.float32),
+            device=self.device,
+        )
+        for _ in range(iter_num):
+            g = g + (x - g.mul(x).sum(dim=dim, keepdim=True)) * g
+        return g
     elif method == "fission":
         if dim not in (-1, self.dim() - 1):
             raise ValueError(f"Dimension {dim} not supported for fission softmax")
@@ -1939,6 +2171,24 @@ def polynomial(self, coeffs, func="mul"):
         terms = prix.cat([terms, new_terms])
 
     terms = terms[: coeffs.shape[0]]
+    if not isinstance(coeffs, prix.Array) and cfg.encoder.trunc_method.prod != "fission":
+        bcast_shape = (coeffs.shape[0],) + (1,) * (terms.dim() - 1)
+        coeffs_enc = prix.encoder.encode(
+            jnp.reshape(jnp.asarray(coeffs, dtype=jnp.float32), bcast_shape),
+            precision=terms.precision,
+            device=terms.device,
+        )
+        res = self.shallow_copy()
+        res.share = jnp.sum(terms.share * coeffs_enc, axis=0)
+        res.precision = terms.precision
+        if res.precision > 0:
+            trunc_method = cfg.encoder.trunc_method.prod
+            if trunc_method == "crypten":
+                res = res.div_(2 ** res.precision)
+            elif trunc_method == "egk":
+                res = res.egk_trunc_pr(62, res.precision)
+        return res
+
     for _ in range(terms.dim() - 1):
         coeffs = jnp.expand_dims(coeffs, 1) if not isinstance(coeffs, prix.Array) else coeffs.unsqueeze(1)
 
