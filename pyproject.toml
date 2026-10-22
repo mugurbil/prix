@@ -1,18 +1,34 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "prix"
 version = "0.1.0"
-description = "Private Machine Learning and LLM Inference via Secure Multi-Party Computation in JAX"
+description = "PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
+authors = [
+    {name = "Mehmet Ugurbil", email = "mugurbil@gmail.com"}
+]
+keywords = ["mpc", "privacy", "jax", "transformers", "llm", "cryptography", "wavelets"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security :: Cryptography",
+]
 dependencies = [
-    "jax>=0.5.1",
-    "jaxlib>=0.5.1",
-    "numpy>=1.26.4",
+    "jax>=0.4.30",
+    "jaxlib>=0.4.30",
+    "numpy>=1.26.0",
     "scipy>=1.10.0",
     "PyWavelets>=1.4.1",
     "pyyaml>=6.0",
@@ -20,6 +36,14 @@ dependencies = [
     "pandas>=1.5.0",
 ]
 
+[project.urls]
+Homepage = "https://github.com/mugurbil/prix"
+Repository = "https://github.com/mugurbil/prix"
+Issues = "https://github.com/mugurbil/prix/issues"
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["prix*"]
+
+[tool.setuptools.package-data]
+"prix.config" = ["*.yaml"]

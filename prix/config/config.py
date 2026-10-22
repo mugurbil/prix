@@ -49,8 +49,14 @@ class ConfigNode(dict):
 class PrixConfig:
     """Configuration object used to store configurable parameters for PriX."""
 
-    _DEFAULT_CONFIG_PATH = os.path.normpath(
+    _REPO_CONFIG_PATH = os.path.normpath(
         os.path.join(os.path.dirname(__file__), "../../configs/default.yaml")
+    )
+    _PKG_CONFIG_PATH = os.path.normpath(
+        os.path.join(os.path.dirname(__file__), "default.yaml")
+    )
+    _DEFAULT_CONFIG_PATH = (
+        _REPO_CONFIG_PATH if os.path.exists(_REPO_CONFIG_PATH) else _PKG_CONFIG_PATH
     )
 
     def __init__(self, config_file=None):
