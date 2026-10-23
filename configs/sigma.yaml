@@ -44,14 +44,14 @@ functions:
     bior_size_bits: 6
     lut_max_bits: 6
   inv_sqrt:
-    method: "tailored_haar"
+    method: "haar"
     haar_size_bits: 10
     bior_size_bits: 10
     lut_max_bits: 4
     tailored_0_lut_max_bits: 0
     tailored_0_haar_size_bits: 10
-    tailored_1_lut_max_bits: 8
-    tailored_1_haar_size_bits: 8
+    tailored_1_lut_max_bits: 4
+    tailored_1_haar_size_bits: 10
   sigmoid_tanh:
     method: "haar"
     terms: 32

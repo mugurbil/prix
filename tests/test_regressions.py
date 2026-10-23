@@ -122,6 +122,37 @@ def _sigma_fss_checks():
     }
 
 
+def _wave_fss_lut_checks():
+    c = prix.comm.get()
+    c.set_verbosity(True)
+    x_np = np.linspace(-3.5, 3.5, 128, dtype=np.float32)
+    x = prix.array(x_np, src=0)
+
+    c.reset_communication_stats()
+    y_bior = x.gelu()
+    bior_rounds, bior_bytes = c.comm_rounds, c.comm_bytes
+    bior_out = np.asarray(y_bior.reconstruct())
+
+    with prix.cfg.temp_override({"functions.gelu.method": "haar-lut-only", "functions.gelu.haar_size_bits": 8}):
+        c.reset_communication_stats()
+        y_haar = x.gelu()
+        haar_rounds, haar_bytes = c.comm_rounds, c.comm_bytes
+        haar_out = np.asarray(y_haar.reconstruct())
+
+    with prix.cfg.temp_override({"encoder.trunc_method.lut": "wave_prob"}):
+        c.reset_communication_stats()
+        y_bior_prob = x.gelu()
+        bior_prob_rounds, bior_prob_bytes = c.comm_rounds, c.comm_bytes
+        bior_prob_out = np.asarray(y_bior_prob.reconstruct())
+
+    return {
+        "x_np": x_np,
+        "bior": (bior_rounds, bior_bytes, bior_out),
+        "haar": (haar_rounds, haar_bytes, haar_out),
+        "bior_prob": (bior_prob_rounds, bior_prob_bytes, bior_prob_out),
+    }
+
+
 def _split_nexp_and_dynamic_lut():
     x_np = np.linspace(-6.0, 0.0, 65, dtype=np.float32)
     x = prix.array(x_np, src=0)
@@ -215,7 +246,7 @@ class TestRegressions(unittest.TestCase):
         self.assertEqual(prix.cfg.encoder.trunc_method.prod, before)
 
     def test_multihead_attention_matches_plaintext(self):
-        for mode in ("sigma", "shaft", "fission"):
+        for mode in ("wave", "sigma", "shaft", "fission"):
             got, plain = prix.run(_mha_vs_plaintext, world_size=2, mode=mode, timeout=180)
             self.assertEqual(got.shape, plain.shape)
             np.testing.assert_allclose(got, plain, atol=2e-2, err_msg=mode)
@@ -293,7 +324,7 @@ class TestRegressions(unittest.TestCase):
 
     def test_dense_accuracy_and_range_invariants_all_modes(self):
         from scipy.special import erf
-        for mode, atol in (("lut", 0.08), ("sigma", 0.08), ("poly", 0.03), ("shaft", 0.07), ("crypten", 0.08), ("fission", 1e-3)):
+        for mode, atol in (("lut", 0.08), ("wave", 0.08), ("sigma", 0.08), ("poly", 0.03), ("shaft", 0.07), ("crypten", 0.08), ("fission", 1e-3)):
             res = prix.run(_dense_mode_sweep, world_size=2, mode=mode, timeout=180)
             g = res["grid"].astype(np.float64)
             logits = res["logits"].astype(np.float64)
@@ -381,6 +412,30 @@ class TestRegressions(unittest.TestCase):
         # Static-weight linear triple: only 4 indices (32B) + 4*64 one-hot (2048B) opened, not 64*16 table (8192B)
         self.assertEqual(emb_bytes, 4 * 8 + 4 * 64 * 8)
         np.testing.assert_allclose(emb_got, emb_plain, atol=1e-3)
+
+    def test_wave_fss_lut_protocol(self):
+        from scipy.special import erf
+        for prov in ("TFP", "TTP"):
+            with prix.cfg.temp_override({"mpc.provider": prov}):
+                res = prix.run(_wave_fss_lut_checks, world_size=2, mode="wave", timeout=180)
+            x64 = res["x_np"].astype(np.float64)
+            gelu_ref = 0.5 * x64 * (1.0 + erf(x64 / np.sqrt(2.0)))
+
+            bior_rounds, bior_bytes, bior_out = res["bior"]
+            self.assertEqual(bior_rounds, 2, f"{prov}:bior_rounds")
+            self.assertEqual(bior_bytes, 128 * 40, f"{prov}:bior_bytes")  # 40 B/elem (8B R1 + 32B R2)
+            np.testing.assert_allclose(bior_out, gelu_ref, atol=0.015, err_msg=f"{prov}:bior_acc")
+
+            haar_rounds, haar_bytes, haar_out = res["haar"]
+            self.assertEqual(haar_rounds, 2, f"{prov}:haar_rounds")
+            self.assertEqual(haar_bytes, 128 * 24, f"{prov}:haar_bytes")  # 24 B/elem (8B R1 + 16B R2)
+            np.testing.assert_allclose(haar_out, gelu_ref, atol=0.03, err_msg=f"{prov}:haar_acc")
+
+            bp_rounds, bp_bytes, bp_out = res["bior_prob"]
+            self.assertEqual(bp_rounds, 2, f"{prov}:bior_prob_rounds")
+            self.assertEqual(bp_bytes, 128 * 40, f"{prov}:bior_prob_bytes")
+            np.testing.assert_allclose(bp_out, gelu_ref, atol=0.25, err_msg=f"{prov}:bior_prob_acc")
+
 
 
 if __name__ == "__main__":

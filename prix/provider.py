@@ -1065,8 +1065,8 @@ class TrustedFirstParty(TupleProvider):
         g0 = prix.generators.get("prev")
         g1 = prix.generators.get("next")
         mode_s = str(mode)
-        k_glob = 5 if mode_s == "haar" else 9
-        k_przs = 4 if mode_s == "haar" else 10
+        k_glob = 5 if mode_s == "haar" else (7 if mode_s == "bior_prob" else 9)
+        k_przs = 4 if mode_s == "haar" else (9 if mode_s == "bior_prob" else 10)
         s_glob, c_glob = g_glob.next_offset(k_glob * n)
         s0, c0 = g0.next_offset(k_przs * n)
         s1, c1 = g1.next_offset(k_przs * n)
@@ -1345,7 +1345,8 @@ class TrustedThirdParty(TupleProvider):
         s_dpf_raw = generate_random_ring_element((n,), generator=generator, device=device)
         s_dpf = jax.lax.bitcast_convert_type(s_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
 
-        if mode_s == "haar":
+        if mode_s in ("haar", "bior_prob"):
+            bvr_rows = 3 if mode_s == "haar" else 8
             if comm.get().get_rank() == 0:
                 cw_dpf_i64 = TTPClient.get().ttp_request("wave_cw", device, shape, J_i, j_i, mode_s)
                 cw_dpf = jax.lax.bitcast_convert_type(cw_dpf_i64, jnp.uint64)
@@ -1361,7 +1362,7 @@ class TrustedThirdParty(TupleProvider):
                 cw_dpf = jax.lax.bitcast_convert_type(
                     to_jax(cw_dpf_i64, device=device, dtype=DATATYPE), jnp.uint64
                 )
-                bvr_sh = generate_random_ring_element((3, n), generator=generator, device=device)
+                bvr_sh = generate_random_ring_element((bvr_rows, n), generator=generator, device=device)
             return r_sh, s_dpf, cw_dpf, bvr_sh
         else:
             s_dcf_raw = generate_random_ring_element((n,), generator=generator, device=device)
@@ -1727,6 +1728,17 @@ class TTPServer:
             C = U * IP
             bvr_plain = jnp.stack([U, IP, C], axis=0)
             self._pending_wave_bvr = bvr_plain - self._get_additive_PRSS((3, n), remove_rank=True)
+        elif mode_s == "bior_prob":
+            U = generate_random_ring_element((n,))
+            A = generate_random_ring_element((n,))
+            B = generate_random_ring_element((n,))
+            X = generate_random_ring_element((n,))
+            AXmB = A * X - B
+            UX = U * X
+            UA = U * A
+            UAXmB = U * AXmB
+            bvr_plain = jnp.stack([U, A, B, X, AXmB, UX, UA, UAXmB], axis=0)
+            self._pending_wave_bvr = bvr_plain - self._get_additive_PRSS((8, n), remove_rank=True)
         else:
             s0_dcf_raw = generate_random_ring_element((n,), generator=self.generators[0])
             s1_dcf_raw = generate_random_ring_element((n,), generator=self.generators[1])

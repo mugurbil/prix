@@ -594,10 +594,10 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
     s1 = k1_0 & mask
     t0 = jnp.zeros_like(s0)
     t1 = jnp.ones_like(s1)
-    v_acc = jnp.zeros(alpha.shape, dtype=DATATYPE)
+    V = jnp.zeros(alpha.shape, dtype=DATATYPE)
 
     def body(i, carry):
-        s0, t0, s1, t1, v_acc, cw_all, v_cw_all = carry
+        s0, t0, s1, t1, V, cw_all, v_cw_all = carry
         shift = jnp.uint64(nbits - 1 - i)
         alpha_i = (alpha >> shift) & jnp.uint64(1)
         go_right = alpha_i == jnp.uint64(1)
@@ -609,27 +609,22 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
         s_lose_1 = jnp.where(go_right, s1L, s1R)
         s_cw = s_lose_0 ^ s_lose_1
 
-        v_lose_0 = jnp.where(go_right, v0L, v0R)
-        v_lose_1 = jnp.where(go_right, v1L, v1R)
-        t1_sign = jnp.where(t1 == jnp.uint64(1), jnp.int64(-1), jnp.int64(1))
-        v_cw = t1_sign * (v_lose_1 - v_lose_0 - v_acc + go_right.astype(DATATYPE))
-
-        v_keep_0 = jnp.where(go_right, v0R, v0L)
-        v_keep_1 = jnp.where(go_right, v1R, v1L)
-        v_acc = (
-            v_acc
-            - v_keep_1
-            + v_keep_0
-            + jnp.where(t1 == jnp.uint64(1), v_cw, jnp.int64(0))
-            - jnp.where(t0 == jnp.uint64(1), v_cw, jnp.int64(0))
-        )
-
         t_cw_L = t0L ^ t1L ^ alpha_i ^ jnp.uint64(1)
         t_cw_R = t0R ^ t1R ^ alpha_i
         cw_packed = s_cw | t_cw_L | (t_cw_R << jnp.uint64(1))
-
         cw_all = cw_all.at[i].set(cw_packed)
+
+        v0_lose = jnp.where(go_right, v0L, v0R)
+        v1_lose = jnp.where(go_right, v1L, v1R)
+        v0_keep = jnp.where(go_right, v0R, v0L)
+        v1_keep = jnp.where(go_right, v1R, v1L)
+
+        sign_t1 = jnp.where(t1 == jnp.uint64(1), jnp.int64(-1), jnp.int64(1))
+        target_lose = alpha_i.astype(DATATYPE)
+        v_cw = sign_t1 * (target_lose - V - (v0_lose - v1_lose))
         v_cw_all = v_cw_all.at[i].set(v_cw)
+
+        V_next = V + (v0_keep - v1_keep) + sign_t1 * v_cw
 
         s0_keep = jnp.where(go_right, s0R, s0L)
         s1_keep = jnp.where(go_right, s1R, s1L)
@@ -641,15 +636,15 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
         s1_next = s1_keep ^ jnp.where(t1 == jnp.uint64(1), s_cw, jnp.uint64(0))
         t0_next = t0_keep ^ (t0 & t_cw_keep)
         t1_next = t1_keep ^ (t1 & t_cw_keep)
-        return s0_next, t0_next, s1_next, t1_next, v_acc, cw_all, v_cw_all
+        return s0_next, t0_next, s1_next, t1_next, V_next, cw_all, v_cw_all
 
     cw_init = jnp.zeros((nbits,) + alpha.shape, dtype=jnp.uint64)
     v_cw_init = jnp.zeros((nbits,) + alpha.shape, dtype=DATATYPE)
-    s0_end, t0_end, s1_end, t1_end, v_acc_end, cw_all, v_cw_all = jax.lax.fori_loop(
-        0, nbits, body, (s0, t0, s1, t1, v_acc, cw_init, v_cw_init)
+    _, _, _, t1_end, V_end, cw_all, v_cw_all = jax.lax.fori_loop(
+        0, nbits, body, (s0, t0, s1, t1, V, cw_init, v_cw_init)
     )
-    t1_end_sign = jnp.where(t1_end == jnp.uint64(1), jnp.int64(-1), jnp.int64(1))
-    g_cw = t1_end_sign * (_convert_g(s1_end) - _convert_g(s0_end) - v_acc_end)
+    sign_t1_end = jnp.where(t1_end == jnp.uint64(1), jnp.int64(-1), jnp.int64(1))
+    g_cw = sign_t1_end * (-V_end)
     return cw_all, v_cw_all, g_cw
 
 
@@ -696,10 +691,8 @@ def dcf_eval_arith_jit(
         t_next = t_next_raw ^ (t & t_cw)
         return s_next, t_next, acc
 
-    s_end, t_end, acc = jax.lax.fori_loop(0, nbits, body, (s, t, acc))
-    acc = acc + sign * (
-        _convert_g(s_end) + jnp.where(t_end == jnp.uint64(1), g_cw, jnp.int64(0))
-    )
+    _, t_end, acc = jax.lax.fori_loop(0, nbits, body, (s, t, acc))
+    acc = acc + sign * jnp.where(t_end == jnp.uint64(1), g_cw, jnp.int64(0))
     return acc
 
 
@@ -840,6 +833,36 @@ def _tfp_wave_key_jit(
             r_sh = diff[0]
             bvr_sh = diff[1:4]
         return r_sh, s_dpf, cw_dpf, bvr_sh
+    elif mode == "bior_prob":
+        glob_raw = _sm64_raw(s_glob, c_glob, (7, n))
+        r_i64 = glob_raw[0]
+        r_u = jax.lax.bitcast_convert_type(r_i64, jnp.uint64)
+        k0_dpf = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
+        k1_dpf = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
+        U = glob_raw[3]
+        A = glob_raw[4]
+        B = glob_raw[5]
+        X = glob_raw[6]
+        AXmB = A * X - B
+        UX = U * X
+        UA = U * A
+        UAXmB = U * AXmB
+
+        r_J = r_u & two_J_mask
+        cw_dpf = dpf_gen_jit(r_J, k0_dpf, k1_dpf, J)
+        s_dpf = k0_dpf if is_rank0 else k1_dpf
+
+        p0 = _sm64_raw(s0, c0, (9, n))
+        p1 = _sm64_raw(s1, c1, (9, n))
+        diff = p0 - p1
+        bvr_plain = jnp.stack([U, A, B, X, AXmB, UX, UA, UAXmB], axis=0)
+        if is_rank0:
+            r_sh = diff[0] + r_i64
+            bvr_sh = diff[1:9] + bvr_plain
+        else:
+            r_sh = diff[0]
+            bvr_sh = diff[1:9]
+        return r_sh, s_dpf, cw_dpf, bvr_sh
     else:
         glob_raw = _sm64_raw(s_glob, c_glob, (9, n))
         r_i64 = glob_raw[0]
@@ -967,6 +990,43 @@ def _wave_bior_r1_jit(
     )
 
 
+@functools.partial(jax.jit, static_argnames=("party_id", "J", "j_depth"))
+def _wave_bior_prob_r1_jit(
+    x_open: jnp.ndarray,
+    x_lsb_sh: jnp.ndarray,
+    s_dpf: jnp.ndarray,
+    cw_dpf: jnp.ndarray,
+    luts: jnp.ndarray,
+    bvr_sh: jnp.ndarray,
+    party_id: int,
+    J: int,
+    j_depth: int,
+):
+    c0_table = luts[0]
+    c1_table = jnp.round((luts[1] - luts[0]) / float(1 << j_depth)).astype(DATATYPE)
+
+    x_u = jax.lax.bitcast_convert_type(x_open, jnp.uint64)
+    two_J_mask = jnp.uint64((1 << J) - 1)
+    x_J = x_u & two_J_mask
+    z_lo = jnp.zeros_like(x_u)
+
+    p = grotto_segment_parities_jit(x_J, z_lo, s_dpf, cw_dpf, party_id, J, 0)
+    v = p.astype(DATATYPE) if party_id == 0 else -p.astype(DATATYPE)
+    u_sh = jnp.sum(v, axis=0)
+    a_ip_sh = jnp.sum(v * c1_table[:, None], axis=0)
+    b_ip_sh = jnp.sum(v * c0_table[:, None], axis=0)
+
+    return jnp.stack(
+        [
+            u_sh + bvr_sh[0],
+            a_ip_sh + bvr_sh[1],
+            b_ip_sh + bvr_sh[2],
+            x_lsb_sh + bvr_sh[3],
+        ],
+        axis=0,
+    )
+
+
 @functools.partial(jax.jit, static_argnames=("j_depth", "is_rank0"))
 def _wave_bior_r2_jit(hat_4: jnp.ndarray, bvr_sh: jnp.ndarray, j_depth: int, is_rank0: bool):
     uu, aa, bb, xx = hat_4[0], hat_4[1], hat_4[2], hat_4[3]
@@ -992,16 +1052,20 @@ def _wave_bior_r2_jit(hat_4: jnp.ndarray, bvr_sh: jnp.ndarray, j_depth: int, is_
     return y_raw >> jnp.int64(j_depth)
 
 
-def wave_haar_lut(x, lut, truncation=0):
-    """
+def wave_haar_lut(x, lut, truncation=0, probabilistic=None):
+    r"""
     2-round Wave Haar LUT evaluation (\Pi^{LUT-Haar}, Figure 10 / `Haar.hpp`):
       - Round 1 (8 B/elem): open `x_open = r - a`, evaluate (J + j)-level Grotto DPF
-        segment parities with deterministic truncation by `truncation` bits.
+        segment parities with deterministic truncation by `truncation` bits (or J-level
+        DPF if `probabilistic=True` / `trunc_method.lut == 'wave_prob'`).
       - Round 2 (16 B/elem): Beaver multiplication `[u] * [ip]`.
     Total: 2 rounds, 24 B/elem.
     """
     from prix.array import Array, Ptype
     from prix.provider import get_default_provider
+
+    if probabilistic is None:
+        probabilistic = cfg.encoder.trunc_method.lut == "wave_prob"
 
     lut_jax = to_jax(lut, device=x.device, dtype=DATATYPE)
     size = int(lut_jax.shape[0])
@@ -1023,6 +1087,12 @@ def wave_haar_lut(x, lut, truncation=0):
     party_id = comm.get().get_rank()
     is_rank0 = party_id == 0
 
+    if probabilistic and j_depth > 0:
+        x_flat = x_flat >> jnp.int64(j_depth)
+        if is_rank0:
+            x_flat = x_flat + jnp.int64(1)
+        j_depth = 0
+
     r_sh, s_dpf, cw_dpf, bvr_sh = provider.generate_wave_key(
         shape, J=J, j_depth=j_depth, mode="haar", device=x.device
     )
@@ -1040,18 +1110,22 @@ def wave_haar_lut(x, lut, truncation=0):
     )
 
 
-def wave_bior_lut(x, luts, truncation):
-    """
+def wave_bior_lut(x, luts, truncation, probabilistic=None):
+    r"""
     2-round Wave Biorthogonal (5,3) LUT evaluation (\Pi^{LUT-bior(5,3)}, Figure 6 / `bior.hpp`):
       - Round 1 (8 B/elem): open `x_open = r - a`, evaluate (J + j)-level Grotto DPF
         segment parities for `([u], [a_ip], [b_ip])` and j-level arithmetic DCF for
-        exact `[x_lsb]` (deterministic truncation in 0 extra rounds).
+        exact `[x_lsb]` (or J-level DPF with local probabilistic truncation if
+        `probabilistic=True` / `trunc_method.lut == 'wave_prob'`).
       - Round 2 (32 B/elem): evaluate `[u * (a_ip * x_lsb + b_ip)]` via Wave's
         generalized Beaver 8-tuple (`beaver.cpp` / Appendix G).
     Total: 2 rounds, 40 B/elem (vs. 4 rounds, 40 B/elem in Curl).
     """
     from prix.array import Array, Ptype
     from prix.provider import get_default_provider
+
+    if probabilistic is None:
+        probabilistic = cfg.encoder.trunc_method.lut == "wave_prob"
 
     luts_jax = to_jax(luts, device=x.device, dtype=DATATYPE)
     size = int(luts_jax.shape[1])
@@ -1074,6 +1148,28 @@ def wave_bior_lut(x, luts, truncation):
     provider = get_default_provider()
     party_id = comm.get().get_rank()
     is_rank0 = party_id == 0
+
+    if probabilistic:
+        x_high_sh = x_flat >> jnp.int64(j_depth)
+        x_lsb_sh = x_flat & jnp.int64((1 << j_depth) - 1)
+        if is_rank0:
+            x_high_sh = x_high_sh + jnp.int64(1)
+            x_lsb_sh = x_lsb_sh - jnp.int64(1 << j_depth)
+        r_sh, s_dpf, cw_dpf, bvr_sh = provider.generate_wave_key(
+            shape, J=J, j_depth=0, mode="bior_prob", device=x.device
+        )
+        x_open = comm.get().all_reduce(r_sh - x_high_sh, op="sum")
+        hat_4_sh = _wave_bior_prob_r1_jit(
+            x_open, x_lsb_sh, s_dpf, cw_dpf, luts_jax, bvr_sh, party_id, J, j_depth
+        )
+        hat_4 = comm.get().all_reduce(hat_4_sh, op="sum")
+        y_sh = _wave_bior_r2_jit(hat_4, bvr_sh, j_depth, is_rank0)
+        return Array.from_shares(
+            y_sh.reshape(shape),
+            precision=cfg.encoder.precision_bits,
+            device=x.device,
+            ptype=Ptype.arithmetic,
+        )
 
     (
         r_sh,

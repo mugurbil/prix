@@ -799,8 +799,8 @@ def permute_reveal_evaluate_share(self, func, **extra):
 
 
 def _eval_haar_lut(x, lut_table, truncation):
-    """Evaluates a Haar Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut == 'wave'`) or Curl's protocol."""
-    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut == "wave":
+    """Evaluates a Haar Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`) or Curl's protocol."""
+    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob"):
         from prix import fss
 
         return fss.wave_haar_lut(x, lut_table, truncation=truncation)
@@ -812,8 +812,8 @@ def _eval_haar_lut(x, lut_table, truncation):
 
 
 def _eval_bior_lut(x, lut_table, truncation):
-    """Evaluates a Bior(5,3) Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut == 'wave'`) or Curl's protocol."""
-    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut == "wave":
+    """Evaluates a Bior(5,3) Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`) or Curl's protocol."""
+    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob"):
         from prix import fss
 
         return fss.wave_bior_lut(x, lut_table, truncation=truncation)

@@ -1738,7 +1738,7 @@ def _evaluate_lut(x, lut):
     size = int(lut.shape[0])
     if (
         comm.get().get_world_size() == 2
-        and cfg.encoder.trunc_method.lut == "wave"
+        and cfg.encoder.trunc_method.lut in ("wave", "wave_prob")
         and size > 0
         and (size & (size - 1)) == 0
     ):
