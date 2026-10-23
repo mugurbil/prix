@@ -30,7 +30,7 @@ Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) p
 | **API Ergonomics** | `crypten.cryptensor`, `@run_multiprocess`, `crypten.nn` | **`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn`** (plus drop-in `prix.cryptensor` alias) |
 | **Nonlinear Approximation Backends** | Polynomial / NR / limit only (or separate forks) | **5 built-in backends in 1 line** (`mode="lut" \| "poly" \| "shaft" \| "crypten" \| "fission"`) |
 | **Kernel Execution** | Eager PyTorch op-by-op launches | **`@jax.jit`-compiled local protocol steps** (fused carry-lookahead rounds, LUT gather, limb matmul, Fourier combination) |
-| **Performance (single host, CPU & GPU)** | Baseline (`1.0x`) | Lower latency in every configuration measured. LLM blocks: **2.8x–9.2x faster on CPU**, **2.0x–3.2x faster on GPU**. Primitives: 1.8x–20.8x on CPU, 1.4x–16.2x on GPU ([details](#benchmarks-prix-jax-vs-crypten-pytorch)) |
+| **Performance (single host, CPU & GPU)** | Baseline (`1.0x`) | Lower latency in every configuration measured. LLM blocks: **2.3x–7.8x faster on CPU**, **1.9x–3.1x faster on GPU**. Primitives: 1.1x–13.3x on CPU, 1.2x–11.9x on GPU ([details](#benchmarks-prix-jax-vs-crypten-pytorch)) |
 
 
 <p align="center"><img src="docs/figures/llm_latency.png" alt="End-to-end private inference latency of a GPT-2 block, CrypTen vs PriX, on CPU and GPU across five approximation modes" width="95%"/></p>
@@ -177,7 +177,7 @@ python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --m
 ## Benchmarks: PriX (JAX) vs. CrypTen (PyTorch)
 
 > [!NOTE]
-> **How to read these numbers.** Both frameworks run all parties as processes on **one host**. There is no network emulation. Both communicate over loopback TCP: CrypTen through `gloo`, PriX through its own peer-to-peer TCP transport (on CPU; the GPU runs predate it and used PriX's shared-memory transport). The [transport comparison](#how-much-does-the-transport-matter) below shows how much the transport matters. Each primitive is the median of 5 timed runs (after 2 warmups), and each LLM block is the median of 3 timed runs (after 1 warmup). Differences of roughly 10% or less are within noise. Benchmarks measure latency only; per-function accuracy is in [Accuracy and Valid Input Ranges](docs/modes_and_configuration.md#5-accuracy-and-valid-input-ranges). On the CrypTen side, the SHAFT functions follow the [SHAFT reference implementation](https://github.com/andeskyl/SHAFT), and the `poly` functions (PUMA has no CrypTen version) are ports of PriX's algorithms. See [`benchmarks/benchmark_prix_vs_crypten.py`](benchmarks/benchmark_prix_vs_crypten.py).
+> **How to read these numbers.** Both frameworks run all parties as processes on **one host**. There is no network emulation. Both communicate over loopback TCP: CrypTen through `gloo`, PriX through its own peer-to-peer TCP transport. The [transport comparison](#how-much-does-the-transport-matter) below shows how much the transport matters. Each primitive is the median of 5 timed runs (after 2 warmups), and each LLM block is the median of 3 timed runs (after 1 warmup). Differences of roughly 10% or less are within noise. Benchmarks measure latency only; per-function accuracy is in [Accuracy and Valid Input Ranges](docs/modes_and_configuration.md#5-accuracy-and-valid-input-ranges). On the CrypTen side, the SHAFT functions follow the [SHAFT reference implementation](https://github.com/andeskyl/SHAFT), and the `poly` functions (PUMA has no CrypTen version) are ports of PriX's algorithms. See [`benchmarks/benchmark_prix_vs_crypten.py`](benchmarks/benchmark_prix_vs_crypten.py).
 
 ### Charts
 
@@ -189,18 +189,20 @@ The darkest **Fission** cells partly reflect CPU contention from the extra evalu
 
 ### How much does the transport matter?
 
-CrypTen and PriX use different transports, so we ran PriX over each of its three transports in the same CPU session as the tables below: its default peer-to-peer TCP transport, CrypTen's own `torch.distributed`/`gloo` transport (by routing PriX's 2-party `all_reduce` through it), and shared memory. Nothing else in PriX changed, and the results are identical.
+CrypTen and PriX use different transports, so we ran PriX over each of its three transports in the same CPU and GPU sessions as the tables below: its default peer-to-peer TCP transport, CrypTen's own `torch.distributed`/`gloo` transport (by routing PriX's 2-party `all_reduce` through it), and shared memory. Nothing else in PriX changed, and the results are identical.
 
 <p align="center"><img src="docs/figures/transport_ablation.png" alt="Transport comparison: GPT-2 block latency for CrypTen and for PriX over gloo, its own TCP transport and shared memory, plus geometric-mean speedups for each PriX transport" width="95%"/></p>
 
-| PriX speedup over CrypTen (CPU, geomean) | PriX over TCP (default) | PriX over gloo (CrypTen's transport) | PriX over shared memory |
+| PriX speedup over CrypTen (geomean) | PriX over TCP (default) | PriX over gloo (CrypTen's transport) | PriX over shared memory |
 |---|---:|---:|---:|
-| Transformer blocks (25 configs) | **4.14x** | 3.14x | 4.31x |
-| Primitives (50 configs) | **2.89x** | 1.92x | 3.53x |
+| CPU · Transformer blocks (25 configs) | **4.14x** | 3.14x | 4.31x |
+| CPU · Primitives (50 configs) | **2.89x** | 1.92x | 3.53x |
+| GPU · Transformer blocks (25 configs) | **2.33x** | 2.17x | 2.46x |
+| GPU · Primitives (50 configs) | **2.69x** | 2.17x | 2.85x |
 
-- **Most of the speedup does not depend on the transport:** over CrypTen's own `gloo` transport, PriX is still 3.14x faster on Transformer blocks.
-- **CrypTen's `gloo` path is itself slow:** PriX's TCP transport is 1.32x faster than `gloo` on blocks and 1.51x on primitives.
-- **Shared memory adds little over TCP:** 4% on blocks and 22% on small, round-bound primitives (2% and 8% in a separate interleaved comparison). For openings above 16 MiB, TCP is faster, because shared memory falls back to pickled queues. That's why TCP is the default.
+- **Most of the speedup does not depend on the transport:** over CrypTen's own `gloo` transport, PriX is still 3.14x faster on Transformer blocks on CPU and 2.17x on GPU.
+- **CrypTen's `gloo` path is itself slow:** PriX's TCP transport is 1.32x faster than `gloo` on CPU blocks (1.51x on primitives) and 1.07x faster on GPU blocks (1.24x on primitives).
+- **Shared memory adds little over TCP:** 4–5% on blocks and 22% (CPU) / 6% (GPU) on small, round-bound primitives. For openings above 16 MiB, TCP is faster, because shared memory falls back to pickled queues. That's why TCP is the default.
 - **Communication is similar but not identical.** In `crypten` mode, rounds agree within one and bytes within 5% (a GPT-2 block takes 176 rounds and sends 80.1 MB with CrypTen versus 79.7 MB with PriX). Two PriX protocol changes explain most other differences: (1) its comparisons open the shared operand of each carry-lookahead AND once instead of twice (a TODO in CrypTen), cutting comparison traffic by about 20% with unchanged security; (2) in `shaft` mode it batches GeLU/SiLU's two comparisons into one, saving 8 rounds per block (98 vs. 106 for GPT-2) versus the SHAFT reference. In `lut` mode PriX uses 2 more rounds per block.
 
 Reproduce with `--comm-stats` and `--prix-transport tcp|gloo|shm` (results under `prix`, `prix_gloo`, `prix_shm`), then `python benchmarks/transport_ablation.py results.json --fig docs/figures/transport_ablation`. Per-workload results, including communication rounds and bytes, are in [`benchmarks/results/`](benchmarks/results).
@@ -253,7 +255,7 @@ AMD EPYC 7B12 (24 vCPUs), Python 3.13, JAX/jaxlib 0.12.0, PyTorch 2.14.1 (CPU). 
 
 ### 2. GPU Benchmarks (NVIDIA Tesla T4, CUDA)
 
-Google Colab, one Tesla T4. All five modes were measured in one session.
+Google Colab, one Tesla T4. PriX uses its default peer-to-peer TCP transport and CrypTen uses `gloo` over TCP. All five modes were measured in one session.
 
 <details>
 <summary><b>GPU tables: LLM latency, speedups, and primitives (click to expand)</b></summary>
@@ -261,39 +263,39 @@ Google Colab, one Tesla T4. All five modes were measured in one session.
 #### Private LLM Inference — all modes (ms)
 | Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT | PriX · SHAFT | CrypTen · Curl LUTs | PriX · Curl LUTs | CrypTen · Fission | PriX · Fission |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| BertTiny (2-Block, seq=16) | 2059.81 | 908.87 | 2002.88 | 773.85 | 1306.09 | 492.68 | 2102.56 | 660.26 | 415.48 | 155.49 |
-| BertBase (1-Block, seq=16) | 1729.39 | 773.28 | 1682.48 | 765.60 | 1372.00 | 657.27 | 1776.27 | 670.65 | 932.96 | 423.73 |
-| GPT2 (1-Block, seq=16) | 1715.69 | 802.80 | 1662.84 | 760.49 | 1335.14 | 629.89 | 1690.98 | 670.36 | 863.79 | 437.04 |
-| Llama (1-Block, d=768, seq=16) | 1684.07 | 638.33 | 1673.81 | 640.89 | 1316.48 | 501.02 | 1735.99 | 559.14 | 1016.31 | 350.65 |
-| ModernBert (1-Block, seq=16) | 1538.26 | 572.18 | 1433.70 | 547.52 | 1121.48 | 407.00 | 1503.04 | 484.17 | 704.84 | 240.73 |
+| BertTiny (2-Block, seq=16) | 1935.00 | 867.19 | 1815.61 | 826.13 | 1197.88 | 537.35 | 1968.48 | 639.19 | 396.46 | 155.38 |
+| BertBase (1-Block, seq=16) | 1662.57 | 761.04 | 1676.78 | 763.90 | 1321.44 | 650.66 | 1694.65 | 600.76 | 926.40 | 350.81 |
+| GPT2 (1-Block, seq=16) | 1663.77 | 712.28 | 1609.94 | 794.24 | 1290.56 | 645.33 | 1634.65 | 604.11 | 838.81 | 320.92 |
+| Llama (1-Block, d=768, seq=16) | 1632.13 | 739.13 | 1580.11 | 729.44 | 1286.35 | 603.96 | 1728.45 | 658.25 | 983.09 | 402.74 |
+| ModernBert (1-Block, seq=16) | 1445.26 | 686.65 | 1390.71 | 628.84 | 1085.58 | 568.86 | 1480.95 | 531.07 | 689.95 | 297.91 |
 
 #### PriX speedup over CrypTen — LLM inference on GPU
 | Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
-| BertTiny (2-Block, seq=16) | **2.27x** | **2.59x** | **2.65x** | **3.18x** | **2.67x** |
-| BertBase (1-Block, seq=16) | **2.24x** | **2.20x** | **2.09x** | **2.65x** | **2.20x** |
-| GPT2 (1-Block, seq=16) | **2.14x** | **2.19x** | **2.12x** | **2.52x** | **1.98x** |
-| Llama (1-Block, d=768, seq=16) | **2.64x** | **2.61x** | **2.63x** | **3.10x** | **2.90x** |
-| ModernBert (1-Block, seq=16) | **2.69x** | **2.62x** | **2.76x** | **3.10x** | **2.93x** |
+| BertTiny (2-Block, seq=16) | **2.23x** | **2.20x** | **2.23x** | **3.08x** | **2.55x** |
+| BertBase (1-Block, seq=16) | **2.18x** | **2.20x** | **2.03x** | **2.82x** | **2.64x** |
+| GPT2 (1-Block, seq=16) | **2.34x** | **2.03x** | **2.00x** | **2.71x** | **2.61x** |
+| Llama (1-Block, d=768, seq=16) | **2.21x** | **2.17x** | **2.13x** | **2.63x** | **2.44x** |
+| ModernBert (1-Block, seq=16) | **2.10x** | **2.21x** | **1.91x** | **2.79x** | **2.32x** |
 
 #### MPC Primitives & Nonlinearities on GPU (ms, CrypTen / PriX)
 | Benchmark | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
-| Private MatMul (128x128) | 14.21 / 4.94 (**2.88x**) | 13.32 / 4.20 (**3.17x**) | 11.26 / 4.15 (**2.71x**) | 17.66 / 12.22 (**1.45x**) | 16.60 / 3.57 (**4.65x**) |
-| Private Mul (128x128) | 4.60 / 2.55 (**1.80x**) | 5.40 / 2.49 (**2.17x**) | 4.69 / 2.76 (**1.70x**) | 9.77 / 5.62 (**1.74x**) | 8.56 / 2.68 (**3.19x**) |
-| Comparison / ReLU (32x64) | 50.83 / 14.04 (**3.62x**) | 54.01 / 13.82 (**3.91x**) | 45.08 / 13.98 (**3.22x**) | 44.58 / 13.73 (**3.25x**) | 73.41 / 13.67 (**5.37x**) |
-| Exp (32x64) | 32.79 / 18.03 (**1.82x**) | 84.77 / 29.61 (**2.86x**) | 33.40 / 18.02 (**1.85x**) | 70.83 / 25.49 (**2.78x**) | 7.41 / 1.73 (**4.28x**) |
-| Reciprocal (32x64) | 141.59 / 64.81 (**2.18x**) | 141.50 / 65.19 (**2.17x**) | 147.21 / 62.27 (**2.36x**) | 46.67 / 11.96 (**3.90x**) | 18.67 / 1.81 (**10.31x**) |
-| InvSqrt (32x64) | 89.88 / 43.79 (**2.05x**) | 96.30 / 39.39 (**2.44x**) | 91.43 / 41.59 (**2.20x**) | 195.46 / 12.08 (**16.18x**) | 19.51 / 1.75 (**11.15x**) |
-| GeLU (32x64) | 152.44 / 76.06 (**2.00x**) | 70.33 / 32.44 (**2.17x**) | 96.21 / 25.45 (**3.78x**) | 26.97 / 12.88 (**2.09x**) | 7.83 / 1.88 (**4.16x**) |
-| SiLU (32x64) | 148.35 / 57.28 (**2.59x**) | 71.20 / 32.45 (**2.19x**) | 94.54 / 29.58 (**3.20x**) | 27.53 / 12.71 (**2.17x**) | 7.10 / 1.62 (**4.38x**) |
-| Softmax (4x32x32) | 586.17 / 256.97 (**2.28x**) | 593.94 / 226.88 (**2.62x**) | 215.84 / 93.65 (**2.30x**) | 564.97 / 191.22 (**2.95x**) | 8.29 / 1.48 (**5.60x**) |
-| LayerNorm (4x32x64) | 104.48 / 46.18 (**2.26x**) | 107.81 / 42.79 (**2.52x**) | 104.40 / 47.23 (**2.21x**) | 184.10 / 24.14 (**7.63x**) | 8.85 / 2.17 (**4.08x**) |
+| Private MatMul (128x128) | 11.45 / 4.35 (**2.63x**) | 12.66 / 3.07 (**4.12x**) | 11.87 / 3.61 (**3.29x**) | 16.47 / 7.71 (**2.14x**) | 11.13 / 3.64 (**3.05x**) |
+| Private Mul (128x128) | 4.91 / 3.23 (**1.52x**) | 4.51 / 3.12 (**1.45x**) | 4.08 / 3.31 (**1.23x**) | 8.59 / 5.42 (**1.59x**) | 4.99 / 2.89 (**1.73x**) |
+| Comparison / ReLU (32x64) | 50.43 / 15.73 (**3.21x**) | 44.18 / 15.18 (**2.91x**) | 41.51 / 15.77 (**2.63x**) | 40.80 / 14.97 (**2.73x**) | 45.86 / 15.65 (**2.93x**) |
+| Exp (32x64) | 28.30 / 19.07 (**1.48x**) | 79.72 / 31.14 (**2.56x**) | 27.03 / 17.71 (**1.53x**) | 67.40 / 28.30 (**2.38x**) | 6.85 / 1.97 (**3.49x**) |
+| Reciprocal (32x64) | 129.92 / 65.24 (**1.99x**) | 134.66 / 68.01 (**1.98x**) | 137.68 / 69.79 (**1.97x**) | 56.21 / 12.59 (**4.47x**) | 17.61 / 1.48 (**11.87x**) |
+| InvSqrt (32x64) | 90.38 / 39.73 (**2.28x**) | 87.97 / 38.64 (**2.28x**) | 85.92 / 40.36 (**2.13x**) | 141.19 / 12.20 (**11.57x**) | 17.45 / 1.52 (**11.49x**) |
+| GeLU (32x64) | 150.42 / 73.75 (**2.04x**) | 68.45 / 37.10 (**1.84x**) | 92.71 / 29.91 (**3.10x**) | 23.39 / 12.35 (**1.89x**) | 6.81 / 1.71 (**3.98x**) |
+| SiLU (32x64) | 132.88 / 50.49 (**2.63x**) | 67.45 / 36.06 (**1.87x**) | 90.73 / 27.87 (**3.26x**) | 26.20 / 12.55 (**2.09x**) | 7.30 / 1.71 (**4.26x**) |
+| Softmax (4x32x32) | 551.32 / 251.27 (**2.19x**) | 586.34 / 252.38 (**2.32x**) | 199.67 / 106.15 (**1.88x**) | 507.15 / 200.35 (**2.53x**) | 7.23 / 1.74 (**4.15x**) |
+| LayerNorm (4x32x64) | 103.48 / 43.67 (**2.37x**) | 103.03 / 47.66 (**2.16x**) | 99.32 / 49.61 (**2.00x**) | 158.90 / 24.92 (**6.38x**) | 9.46 / 2.48 (**3.81x**) |
 
 </details>
 
 > [!NOTE]
-> As on CPU, CrypTen's `fission`-mode ReLU (73 ms) is slower than in the other modes (45–54 ms), even though the protocol is identical. PriX's MatMul is slower in `lut` mode (12.2 ms vs. 3.6–4.9 ms), where products use probabilistic truncation.
+> CrypTen's ReLU took 41–50 ms across the five modes; PriX's took 15–16 ms. PriX's MatMul is slower in `lut` mode (7.7 ms vs. 3.1–4.4 ms), where products use probabilistic truncation.
 
 
 
