@@ -6,22 +6,34 @@
 # LICENSE file in the root directory of this source tree.
 
 """
-Function Secret Sharing (FSS) primitives for 2-party MPC in PriX, following
-SIGMA (PETS 2024, "SIGMA: Secure GPT Inference with Function Secret Sharing"):
+Function Secret Sharing (FSS) protocols for 2-party MPC in PriX. All PRG trees are evaluated as
+fused XLA kernels over whole tensors; keys come from the provider (`TFP` simulated dealer or
+`TTP`). Module map:
 
-1. Distributed Point Function (`dpf_gen_jit`) and 1-word-per-level prefix
-   comparison (`dpf_eval_lt_jit`) computing binary shares of `1{z < alpha}`
-   without extra per-level value correction words via the divergence-bit
-   identity along the evaluation path.
-2. Signed 2's complement MSB / DReLU extraction (`fss_msb_eval_jit`) and
-   single-key 3-way shifted interval comparison (`fss_msb_eval_3way_jit`)
-   evaluating `(x < 0, |x| < width)` from a single opened `x_hat = x + r_in`
-   and a single DPF key.
-3. 64-to-1 bit-packed binary reveal (`reveal_packed_bits`) reducing single-bit
-   B2A communication by 64x (to 1 bit = 0.125 B per element).
-4. 2-round fused DReLU + multiplication (`fss_relu`, `fss_max_pairwise`, and
-   `fss_ltz_and_abs_lt`) computing `b * x` in the same round as the 1-bit B2A
-   reveal using the preprocessed product `w = rA * r_in`.
+Comparisons (SIGMA, PoPETs 2024):
+  - `dpf_gen_jit` / `dpf_eval_lt_jit`: DPF key generation and 1-word-per-level prefix
+    comparison `1{z < alpha}` (divergence-bit identity, no per-level value correction words).
+  - `fss_msb_eval_jit`, `fss_msb_eval_3way_jit`: signed MSB / DReLU and the single-key 3-way
+    interval test `(x < 0, |x| < w)` from one opened `x_hat = x + r_in`.
+  - `reveal_packed_bits`: 64-to-1 bit-packed B2A reveal (0.125 B / element).
+  - `fss_ltz`, `fss_relu`, `fss_max_pairwise`, `fss_ltz_and_abs_lt`: 2-round comparison
+    protocols; ReLU fuses `b * x` into the B2A round via the preprocessed `w = rA * r_in`.
+  - `get_fss_nbits`: effective comparison bit-width (`cfg.mpc.fss_bits`, SIGMA Sec. 5.4.1).
+
+Truncation:
+  - `dcf_gen_arith_jit` / `dcf_eval_arith_jit`: single-path arithmetic DCF.
+  - `sigma_tr_trunc`: SIGMA's 1-round faithful Truncate-Reduce (Theorem 4).
+
+Wavelet look-up tables (Wave, PoPETs 2025):
+  - `grotto_segment_parities_jit`: (J + j)-level Grotto DPF with exact bin truncation.
+  - `wave_haar_lut`: 2-round Haar (0th-order) LUT, 24 B / element.
+  - `wave_bior_lut`: 2-round bior(5,3) (1st-order) LUT, 40 B / element, with three indexing
+    variants selected by `cfg.encoder.lut_indexing`: "wave" (Grotto DPF + DCF), "wave_prob"
+    (local probabilistic split) and "sigma" (Truncate-Reduce + J-level DPF, 3 rounds).
+    Accepts per-window table stacks `(K, 2, size)` for range-extended evaluations.
+
+Dealer (TFP) key generation: `_tfp_dcf_key_jit`, `_tfp_wave_key_jit`, `_tfp_sigma_tr_key_jit`;
+preprocessing bytes are accounted through `prix.provider._acct_fss_key`.
 """
 
 import functools
