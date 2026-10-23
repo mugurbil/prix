@@ -1773,7 +1773,20 @@ def softmax(self, dim=-1, **kwargs):
         logits = self - maximum_value
         with cfg.temp_override({"functions.exp.all_neg": True}):
             numerator = logits.exp()
-        with cfg.temp_override({"functions.reciprocal.all_pos": True}):
+        # The denominator is a sum of L terms in (0, 1], so it lies in [1, L]. Widen the
+        # reciprocal LUT domain [0, 2^lut_max_bits) to cover L (SIGMA Sec. 5.2.3 sizes the
+        # inverse table from the softmax length), enlarging the table by the same factor so
+        # the knot spacing -- and hence the accuracy near 1 -- is unchanged. The reciprocal
+        # is only evaluated on the L-times-smaller reduced tensor, so the cost is negligible.
+        seq_len = int(self.size(dim))
+        need_bits = int(math.ceil(math.log2(seq_len + 1)))
+        rec_override = {"functions.reciprocal.all_pos": True}
+        extra = need_bits - int(cfg.functions.reciprocal.lut_max_bits)
+        if extra > 0:
+            rec_override["functions.reciprocal.lut_max_bits"] = need_bits
+            rec_override["functions.reciprocal.bior_size_bits"] = int(cfg.functions.reciprocal.bior_size_bits) + extra
+            rec_override["functions.reciprocal.haar_size_bits"] = int(cfg.functions.reciprocal.haar_size_bits) + extra
+        with cfg.temp_override(rec_override):
             inv_denominator = numerator.sum(dim, keepdim=True).reciprocal()
         return numerator * inv_denominator
     elif method == "ode":

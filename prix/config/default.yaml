@@ -45,8 +45,8 @@ functions:
   inv_sqrt:
     method: "bior"
     haar_size_bits: 16
-    bior_size_bits: 10
-    lut_max_bits: 4
+    bior_size_bits: 14   # 2^14 knots over [0, 2^8): spacing 1/64 (LayerNorm variance range; applied to L values per layer, so cheap)
+    lut_max_bits: 8
     tailored_0_lut_max_bits: 0
     tailored_0_haar_size_bits: 12
     tailored_1_lut_max_bits: 8
@@ -78,15 +78,15 @@ functions:
     fs_terms: 5
   gelu:
     method: "bior-lut-only"
-    haar_size_bits: 4
-    bior_size_bits: 4
+    haar_size_bits: 5
+    bior_size_bits: 5   # 32-knot bior(5,3): 4x lower interpolation error than 16 knots for ~+5% block time
     lut_max_bits: 3
     fs_period: 8
     fs_terms: 8
   silu:
     method: "bior-lut-only"
-    haar_size_bits: 4
-    bior_size_bits: 4
+    haar_size_bits: 5
+    bior_size_bits: 5   # 32-knot bior(5,3): 4x lower interpolation error than 16 knots for ~+5% block time
     lut_max_bits: 4
     fs_period: 16
     fs_terms: 12
@@ -104,7 +104,7 @@ mpc:
   active_security: False
   provider: "TFP"
   protocol: "fss"
-  fss_bits: 64
+  fss_bits: 48   # effective bit-width for FSS comparisons (SIGMA Sec. 5.4.1): exact for |x| < 2^(fss_bits-2), i.e. |x| < 2^30 at f=16; -24% PRG calls vs. 64
 nn:
   dpsmpc:
     protocol: "layer_estimation"

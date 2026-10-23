@@ -3,6 +3,7 @@
 FSS / wavelet-LUT mode benchmark for PriX on CPU or GPU (2 parties, simulated TFP dealer).
 
 Compares, on identical inputs:
+  default       mode="default"                             Wave bior(5,3) 32-knot tables + SIGMA TR indexing + EGK, 48-bit comparisons
   wave_det      mode="wave"  lut_indexing="wave"       2-rd bior(5,3) LUT, (J+j)-level Grotto DPF + j-level DCF
   wave_sigma_tr mode="wave"  lut_indexing="sigma"      3-rd bior(5,3) LUT, SIGMA 1-rd TR (j-level DCF) + J-level DPF
   wave_prob     mode="wave"  lut_indexing="wave_prob"  2-rd bior(5,3) LUT, local prob. split + J-level DPF
@@ -50,6 +51,7 @@ from prix.provider import get_preproc_stats, reset_preproc_stats  # noqa: E402
 
 VARIANTS = {
     # key: (mode, lut_indexing, truncation, title)
+    "default": ("default", None, None, 'PriX default (Wave bior(5,3) J=5 + SIGMA TR + EGK, fss_bits=48)'),
     "wave_det": ("wave", "wave", "egk", 'Wave (2-rd Grotto DPF+DCF, lut_indexing="wave")'),
     "wave_sigma_tr": ("wave", "sigma", "egk", 'Wave + SIGMA TR (3-rd, lut_indexing="sigma")'),
     "wave_prob": ("wave", "wave_prob", "egk", 'Wave-Prob (2-rd, lut_indexing="wave_prob")'),
@@ -184,11 +186,14 @@ def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
 
     for mname in models:
         d, h, ffn, L, n_layers = MODELS[mname]
+        np.random.seed(123)
         blk = TransformerBlock(d, h, ffn)
-        blk.encrypt()
         x_np = rng.normal(0.0, 0.5, size=(1, L, d)).astype(np.float32)
+        blk_ref = np.asarray(blk(x_np), dtype=np.float64)  # plaintext reference before encrypting
+        blk.encrypt()
         x = prix.array(x_np, src=0)
         out, st = _timed(lambda: blk(x), max(1, repeats // 2), c)
+        st.update(_err(out.reconstruct(), blk_ref))
         st.update({
             "n_layers": n_layers,
             "block_rounds": st["rounds"],
@@ -209,7 +214,7 @@ def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
         for name, st in res["sublayers"].items():
             print(f"  {name:18s}: {st['rounds']:3d} rds | {st['online_bytes_1p']/1e6:7.2f} MB | key {st['key_bytes_1p']/1e9:6.3f} GB ({st['key_bytes_1p_l128']/1e9:6.3f} GB @l128) | {st['time_s']:7.3f} s | MAE {st['mae']:.2e}", flush=True)
         for name, st in res["models"].items():
-            print(f"  {name:10s}: {st['total_rounds']:5d} rds | online {st['total_online_gb_1p']:6.3f} GB 1P | key {st['total_key_gb_1p']:7.3f} GB 1P ({st['total_key_gb_1p_l128']:7.3f} GB @l128) | {st['total_time_s']:7.2f} s ({st['block_time_s']:.2f} s/blk)", flush=True)
+            print(f"  {name:10s}: {st['total_rounds']:5d} rds | online {st['total_online_gb_1p']:6.3f} GB 1P | key {st['total_key_gb_1p']:7.3f} GB 1P ({st['total_key_gb_1p_l128']:7.3f} GB @l128) | {st['total_time_s']:7.2f} s ({st['block_time_s']:.2f} s/blk) | block MAE {st['mae']:.2e}", flush=True)
     return res
 
 
