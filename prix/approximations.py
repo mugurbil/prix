@@ -86,7 +86,7 @@ class _LazyLUTDict(dict):
         if LookupTables._initialized_precision != cfg.encoder.precision_bits:
             self.clear()
             LookupTables._initialized_precision = cfg.encoder.precision_bits
-        if not super().__contains__(key):
+        if key in LookupTables._BUILTIN_LUT_NAMES or not super().__contains__(key):
             LookupTables._build_lut_by_name(key, device=LookupTables._default_device)
         return super().__getitem__(key)
 
@@ -101,8 +101,22 @@ class LookupTables:
     """Singleton manager for wavelet-transformed Lookup Tables (Haar and Bior2.2)."""
 
     LUTs = _LazyLUTDict()
+    _mem_cache = {}
     _initialized_precision = None
     _default_device = None
+    _BUILTIN_LUT_NAMES = frozenset({
+        "exp_haar", "exp_bior", "nexp_low", "nexp_high", "nexp_haar", "nexp_bior",
+        "log_haar", "log_bior", "reciprocal_haar", "reciprocal_bior",
+        "sqrt_haar", "sqrt_bior", "inv_sqrt_haar", "inv_sqrt_bior",
+        "inv_sqrt_tailored_haar_0", "inv_sqrt_tailored_haar_1",
+        "sin_haar", "sin_bior", "sin_haar_lut_only", "sin_bior_lut_only",
+        "cos_haar", "cos_bior", "cos_haar_lut_only", "cos_bior_lut_only",
+        "sigmoid_haar", "sigmoid_bior", "sigmoid_haar_lut_only", "sigmoid_bior_lut_only",
+        "tanh_haar", "tanh_bior", "tanh_haar_lut_only", "tanh_bior_lut_only",
+        "erf_haar", "erf_bior", "erf_haar_lut_only", "erf_bior_lut_only",
+        "gelu_haar", "gelu_bior", "gelu_haar_lut_only", "gelu_bior_lut_only",
+        "silu_haar", "silu_bior", "silu_haar_lut_only", "silu_bior_lut_only",
+    })
 
     def __new__(cls, device=None, *args, **kwargs):
         it_id = "__it__"
@@ -198,6 +212,18 @@ class LookupTables:
 
     @classmethod
     def generate_haar(cls, max_bits, lut_bits, function, name, negative_values=False, device=None):
+        mem_key = (
+            "haar",
+            name,
+            int(cfg.encoder.precision_bits),
+            int(max_bits),
+            int(lut_bits),
+            bool(negative_values),
+            str(device),
+        )
+        if mem_key in cls._mem_cache:
+            dict.__setitem__(cls.LUTs, name, cls._mem_cache[mem_key])
+            return
         expected_shape = (2 ** (int(lut_bits) + int(bool(negative_values))),)
         cpath = None
         try:
@@ -207,6 +233,7 @@ class LookupTables:
                 arr_i64 = jnp.asarray(cached, dtype=DATATYPE)
                 if device is not None:
                     arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+                cls._mem_cache[mem_key] = arr_i64
                 dict.__setitem__(cls.LUTs, name, arr_i64)
                 return
         except Exception:
@@ -226,10 +253,23 @@ class LookupTables:
         arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
         if device is not None:
             arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+        cls._mem_cache[mem_key] = arr_i64
         dict.__setitem__(cls.LUTs, name, arr_i64)
 
     @classmethod
     def generate_bior(cls, max_bits, lut_bits, function, name, negative_values=False, device=None):
+        mem_key = (
+            "bior",
+            name,
+            int(cfg.encoder.precision_bits),
+            int(max_bits),
+            int(lut_bits),
+            bool(negative_values),
+            str(device),
+        )
+        if mem_key in cls._mem_cache:
+            dict.__setitem__(cls.LUTs, name, cls._mem_cache[mem_key])
+            return
         expected_shape = (2, 2 ** (int(lut_bits) + int(bool(negative_values))))
         cpath = None
         try:
@@ -239,6 +279,7 @@ class LookupTables:
                 arr_i64 = jnp.asarray(cached, dtype=DATATYPE)
                 if device is not None:
                     arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+                cls._mem_cache[mem_key] = arr_i64
                 dict.__setitem__(cls.LUTs, name, arr_i64)
                 return
         except Exception:
@@ -272,6 +313,7 @@ class LookupTables:
         arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
         if device is not None:
             arr_i64 = jax.device_put(arr_i64, resolve_device(device))
+        cls._mem_cache[mem_key] = arr_i64
         dict.__setitem__(cls.LUTs, name, arr_i64)
 
     @classmethod
@@ -279,7 +321,7 @@ class LookupTables:
         if cls._initialized_precision != cfg.encoder.precision_bits:
             cls.LUTs.clear()
             cls._initialized_precision = cfg.encoder.precision_bits
-        if not dict.__contains__(cls.LUTs, name):
+        if name in cls._BUILTIN_LUT_NAMES or not dict.__contains__(cls.LUTs, name):
             cls._build_lut_by_name(name, device=device or cls._default_device)
         return dict.__getitem__(cls.LUTs, name)
 
@@ -315,11 +357,19 @@ class LookupTables:
                 device=device,
             )
         elif name in ("nexp_low", "nexp_high"):
-            size = cfg.functions.exp.neg_lut_size
-            full_low = np.exp(-np.linspace(1.0 / size, 1.0 / (2**4), size))
-            dict.__setitem__(cls.LUTs, "nexp_low", cls._to_jax_lut(full_low * scale, device=device))
-            full_high = np.exp(-np.linspace(1.0 * (2**4) / size, 2**4, size))
-            dict.__setitem__(cls.LUTs, "nexp_high", cls._to_jax_lut(full_high * scale, device=device))
+            size = int(cfg.functions.exp.neg_lut_size)
+            mem_key = ("split_nexp", int(cfg.encoder.precision_bits), size, str(device))
+            if mem_key not in cls._mem_cache:
+                idx = np.arange(size, dtype=np.float64)
+                full_low = np.exp(-idx * (16.0 / (size * size)))
+                full_high = np.exp(-idx * (16.0 / size))
+                cls._mem_cache[mem_key] = (
+                    cls._to_jax_lut(full_low * scale, device=device),
+                    cls._to_jax_lut(full_high * scale, device=device),
+                )
+            low_lut, high_lut = cls._mem_cache[mem_key]
+            dict.__setitem__(cls.LUTs, "nexp_low", low_lut)
+            dict.__setitem__(cls.LUTs, "nexp_high", high_lut)
         elif name == "nexp_haar":
             cls.generate_haar(
                 cfg.functions.exp.lut_max_bits,
@@ -755,14 +805,18 @@ def _nexp_lut(self, method):
     size = cfg.functions.exp.neg_lut_size
 
     if method == "split":
-        x = self.div(precision / (2**4) / size)
-        d = x < 1
+        size = int(size)
+        step = builtins.max(1, int((precision * 16) // (size * size)))
+        x = self.div(step)
+        d = self < 16
         bits = x.precision
         x.precision = 0
-        c = d * x + (1 - d) * (precision - 1)
+        c = d * x + (1 - d) * (size * size - 1)
         x.precision = bits
-        c0 = c
+        c0 = c.clone()
         c1 = c.div(size)
+        c0.precision = bits
+        c1.precision = bits
         t0 = c0.evaluate_lut(luts.get_lut("nexp_low", self.device))
         t1 = c1.evaluate_lut(luts.get_lut("nexp_high", self.device))
         return t0 * t1

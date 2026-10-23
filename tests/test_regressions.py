@@ -122,6 +122,21 @@ def _sigma_fss_checks():
     }
 
 
+def _split_nexp_and_dynamic_lut():
+    x_np = np.linspace(-6.0, 0.0, 65, dtype=np.float32)
+    x = prix.array(x_np, src=0)
+    with prix.cfg.temp_override({"functions.exp.method": "split", "functions.exp.all_neg": True}):
+        split_out = np.asarray(x.exp().reconstruct())
+    # Verify changing lut_max_bits dynamically via temp_override updates the LUT without manual cache clearing
+    g_np = np.array([-5.0, 5.0], dtype=np.float32)
+    g = prix.array(g_np, src=0)
+    with prix.cfg.temp_override({"functions.gelu.lut_max_bits": 2}):
+        _ = np.asarray(g.gelu().reconstruct())
+    with prix.cfg.temp_override({"functions.gelu.lut_max_bits": 3}):
+        g_wide = np.asarray(g.gelu().reconstruct())
+    return split_out, np.exp(x_np), g_wide
+
+
 class TestRegressions(unittest.TestCase):
     def test_large_return_value(self):
         out = prix.run(_large_return, world_size=2, timeout=180)
@@ -178,6 +193,11 @@ class TestRegressions(unittest.TestCase):
         p1 = LookupTables._cache_path("bior", "test", 4, 6, False, function=lambda x: x + 1.0)
         p2 = LookupTables._cache_path("bior", "test", 4, 6, False, function=lambda x: x + 2.0)
         self.assertNotEqual(p1, p2)
+
+    def test_split_nexp_and_dynamic_lut_override(self):
+        split_out, ref, g_wide = prix.run(_split_nexp_and_dynamic_lut, world_size=2, mode="lut", timeout=180)
+        np.testing.assert_allclose(split_out, ref, atol=0.07)
+        np.testing.assert_allclose(g_wide, np.array([0.0, 5.0], dtype=np.float32), atol=0.15)
 
     def test_sigma_fss_protocol(self):
         res = prix.run(_sigma_fss_checks, world_size=2, mode="sigma", timeout=180)
