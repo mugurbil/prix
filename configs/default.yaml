@@ -6,10 +6,10 @@ debug:
 encoder:
   precision_bits: 16
   truncation: "egk"      # fixed-point rescaling (>> f) after every product: egk | crypten | fission
-  lut_indexing: "egk"    # LUT input -> bin index (>> j) before lookup: egk | crypten | fission | wave | wave_prob | sigma
+  lut_indexing: "sigma"   # LUT input -> bin index (>> j) before lookup: egk | crypten | fission | wave | wave_prob | sigma
 functions:
   max:
-    method: "log_reduction"
+    method: "tree"
   exp:
     method: "bior"
     iterations: 8
@@ -103,7 +103,8 @@ functions:
 mpc:
   active_security: False
   provider: "TFP"
-  protocol: "beaver"
+  protocol: "fss"
+  fss_bits: 64
 nn:
   dpsmpc:
     protocol: "layer_estimation"

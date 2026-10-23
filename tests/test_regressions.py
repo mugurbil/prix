@@ -282,7 +282,7 @@ class TestRegressions(unittest.TestCase):
 
     def test_split_nexp_and_dynamic_lut_override(self):
         split_out, ref, g_wide, g_haar, s_blo = prix.run(
-            _split_nexp_and_dynamic_lut, world_size=2, mode="lut", timeout=180
+            _split_nexp_and_dynamic_lut, world_size=2, mode="curl", timeout=180
         )
         np.testing.assert_allclose(split_out, ref, atol=0.07)
         np.testing.assert_allclose(g_wide, np.array([0.0, 5.0], dtype=np.float32), atol=0.15)
@@ -324,7 +324,7 @@ class TestRegressions(unittest.TestCase):
 
     def test_dense_accuracy_and_range_invariants_all_modes(self):
         from scipy.special import erf
-        for mode, atol in (("lut", 0.08), ("wave", 0.08), ("sigma", 0.08), ("poly", 0.03), ("shaft", 0.07), ("crypten", 0.08), ("fission", 1e-3)):
+        for mode, atol in (("curl", 0.08), ("wave", 0.08), ("sigma", 0.08), ("poly", 0.03), ("shaft", 0.07), ("crypten", 0.08), ("fission", 1e-3)):
             res = prix.run(_dense_mode_sweep, world_size=2, mode=mode, timeout=180)
             g = res["grid"].astype(np.float64)
             logits = res["logits"].astype(np.float64)
@@ -338,8 +338,8 @@ class TestRegressions(unittest.TestCase):
             sm_ref = ex / np.sum(ex, axis=-1, keepdims=True)
             ln_ref = (ln_in - ln_in.mean(-1, keepdims=True)) / np.sqrt(ln_in.var(-1, keepdims=True) + 1e-5)
 
-            gelu_atol = 0.25 if mode in ("lut", "sigma") else atol
-            silu_atol = 0.50 if mode in ("lut", "sigma") else atol
+            gelu_atol = 0.25 if mode in ("curl", "sigma") else atol
+            silu_atol = 0.50 if mode in ("curl", "sigma") else atol
             self.assertLess(float(np.median(np.abs(res["gelu"] - gelu_ref))), 0.03, f"{mode}:gelu_med")
             self.assertLess(float(np.median(np.abs(res["silu"] - silu_ref))), 0.03, f"{mode}:silu_med")
             np.testing.assert_allclose(res["gelu"], gelu_ref, atol=gelu_atol, err_msg=f"{mode}:gelu")

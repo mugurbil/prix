@@ -74,11 +74,11 @@ When you use a separate **Trusted Third Party (`TTP`) dealer** (`cfg.mpc.provide
 #### With a non-colluding `TTP` dealer (`--provider TTP`):
 ```bash
 # Terminal 1 (Party 0)
-python3 examples/multi_party_tcp.py --rank 0 --mode lut --provider TTP
+python3 examples/multi_party_tcp.py --rank 0 --mode curl --provider TTP
 # Terminal 2 (Party 1)
-python3 examples/multi_party_tcp.py --rank 1 --mode lut --provider TTP
+python3 examples/multi_party_tcp.py --rank 1 --mode curl --provider TTP
 # Terminal 3 (TTP dealer, rank 2)
-python3 examples/multi_party_tcp.py --rank 2 --mode lut --provider TTP
+python3 examples/multi_party_tcp.py --rank 2 --mode curl --provider TTP
 ```
 
 #### With a Fission hybrid evaluator (`--mode fission`):

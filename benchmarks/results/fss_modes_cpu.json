@@ -2,10 +2,6 @@
   "wave_det": {
     "title": "Wave (2-rd Grotto DPF+DCF, trunc_method.lut=\"wave\")",
     "mode": "wave",
-    "trunc_method": {
-      "prod": "egk",
-      "lut": "wave"
-    },
     "primitives": {
       "gelu": {
         "rounds": 2,
@@ -182,15 +178,15 @@
         "block_time_s": 2.7891924650175497,
         "total_time_s": 33.470309580210596
       }
+    },
+    "config": {
+      "truncation": "egk",
+      "lut_indexing": "wave"
     }
   },
   "wave_sigma_tr": {
     "title": "Wave + SIGMA TR (3-rd, trunc_method.lut=\"sigma\")",
     "mode": "wave",
-    "trunc_method": {
-      "prod": "egk",
-      "lut": "sigma"
-    },
     "primitives": {
       "gelu": {
         "rounds": 3,
@@ -367,15 +363,15 @@
         "block_time_s": 1.0071824939805083,
         "total_time_s": 12.0861899277661
       }
+    },
+    "config": {
+      "truncation": "egk",
+      "lut_indexing": "sigma"
     }
   },
   "wave_prob": {
     "title": "Wave-Prob (2-rd, trunc_method.lut=\"wave_prob\")",
     "mode": "wave",
-    "trunc_method": {
-      "prod": "egk",
-      "lut": "wave_prob"
-    },
     "primitives": {
       "gelu": {
         "rounds": 2,
@@ -552,15 +548,15 @@
         "block_time_s": 0.8865141500136815,
         "total_time_s": 10.638169800164178
       }
+    },
+    "config": {
+      "truncation": "egk",
+      "lut_indexing": "wave_prob"
     }
   },
   "sigma": {
     "title": "SIGMA (mode=\"sigma\")",
     "mode": "sigma",
-    "trunc_method": {
-      "prod": "egk",
-      "lut": "sigma"
-    },
     "primitives": {
       "gelu": {
         "rounds": 6,
@@ -737,15 +733,15 @@
         "block_time_s": 2.2145598320057616,
         "total_time_s": 26.57471798406914
       }
+    },
+    "config": {
+      "truncation": "egk",
+      "lut_indexing": "sigma"
     }
   },
   "curl": {
     "title": "Curl (mode=\"lut\")",
-    "mode": "lut",
-    "trunc_method": {
-      "prod": "egk",
-      "lut": "egk"
-    },
+    "mode": "curl",
     "primitives": {
       "gelu": {
         "rounds": 4,
@@ -922,15 +918,15 @@
         "block_time_s": 0.927040065987967,
         "total_time_s": 11.124480791855603
       }
+    },
+    "config": {
+      "truncation": "egk",
+      "lut_indexing": "egk"
     }
   },
   "shaft": {
     "title": "SHAFT (mode=\"shaft\")",
     "mode": "shaft",
-    "trunc_method": {
-      "prod": "crypten",
-      "lut": "crypten"
-    },
     "primitives": {
       "gelu": {
         "rounds": 11,
@@ -1107,6 +1103,10 @@
         "block_time_s": 1.505939892027527,
         "total_time_s": 18.071278704330325
       }
+    },
+    "config": {
+      "truncation": "crypten",
+      "lut_indexing": "crypten"
     }
   },
   "_env": {

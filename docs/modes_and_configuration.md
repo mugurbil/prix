@@ -8,7 +8,8 @@ PriX supports seven nonlinear approximation paradigms out of the box, selectable
 
 | Mode Name | Config File | Truncation | Nonlinear Approximations | Reference |
 |---|---|---|---|---|
-| **`"curl"`** *(default; alias `"lut"`)* | [`configs/default.yaml`](../configs/default.yaml) | `[EGK+20]` probabilistic (`egk`) | Biorthogonal-2.2 & Haar Wavelet LUTs (one-hot correlations) for `exp`, `log`, `reciprocal`, `sqrt`, `inv_sqrt`, `sigmoid`, `tanh`, `erf`, `gelu`, `silu` | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) |
+| **`"default"`** *(what you get with no `mode`)* | [`configs/default.yaml`](../configs/default.yaml) | `[EGK+20]` for products (`truncation="egk"`) + SIGMA's 1-round faithful Truncate-Reduce for LUT indexing (`lut_indexing="sigma"`); both are secure 2PC protocols (no local truncation) | Wave's $\text{bior}(5,3)$ & Haar FSS Wavelet LUTs (identical tables and accuracy to `"wave"`), evaluated as a $J$-level DPF after the single-path TR DCF: 3 rounds per LUT, $2\times$–$6\times$ less local compute and $15\%$–$30\%$ smaller keys than 2-round `"wave"` | Wave (PoPETs 2025) + SIGMA (PoPETs 2024) |
+| **`"curl"`** | [`configs/curl.yaml`](../configs/curl.yaml) | `[EGK+20]` probabilistic (`egk`) | Biorthogonal-2.2 & Haar Wavelet LUTs (one-hot correlations) for `exp`, `log`, `reciprocal`, `sqrt`, `inv_sqrt`, `sigmoid`, `tanh`, `erf`, `gelu`, `silu` | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) |
 | **`"wave"`** | [`configs/wave.yaml`](../configs/wave.yaml) | Deterministic DPF/DCF (`wave`) or probabilistic (`wave_prob`) for LUTs; `egk` or `crypten` for products | 2-round Function Secret Sharing (Grotto DPF segment parities + arithmetic DCF + generalized Beaver tuples) with $\text{bior}(5,3)$ & Haar Wavelet LUTs | [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083) |
 | **`"sigma"`** | [`configs/sigma.yaml`](../configs/sigma.yaml) | Faithful Truncate-Reduce (`lut_indexing="sigma"`) + `[EGK+20]` (`egk`) | Faithful SIGMA two-phase FSS protocols (DPF sign/clip comparisons + $\Pi^{\text{Select}}$ mux + 1-round $\Pi^{\text{TR}}_{n,f}$ + 2-round Grotto DPF 0th-order LUTs, two-table $2^8\times 2^8$ `nexp`, tailored `inv_sqrt`) | [**SIGMA (PoPETs 2024)**](https://doi.org/10.56553/popets-2024-0107) |
 | **`"poly"`** | [`configs/poly.yaml`](../configs/poly.yaml) | CrypTen (`crypten`) | Piecewise low-degree polynomials for `gelu`, `silu`, `exp`, `sigmoid`, `tanh`, `erf` (1 batched comparison + degree-4 polynomial, no LUTs) | [**PUMA (arXiv 2023)**](https://arxiv.org/abs/2307.12533), [**Nimbus (NeurIPS 2024)**](https://arxiv.org/abs/2411.15707) |
@@ -56,7 +57,7 @@ import prix
 
 @prix.mpc.run_multiprocess(world_size=2, mode="curl")
 def hybrid_curl_shaft():
-    # Base mode is "lut" (Curl Wavelet LUTs + EGK truncation);
+    # Base mode is "default" (Wave bior(5,3) FSS LUTs + SIGMA TR indexing + EGK truncation);
     # override GeLU and Softmax to use SHAFT's Fourier & ODE approximations:
     with prix.cfg.temp_override({
         "functions.gelu.method": "fourier",
@@ -95,7 +96,7 @@ def hybrid_curl_shaft():
 
 Each mode's approximations are only accurate on a limited input range, and **inputs outside that range are not clamped or flagged: they silently return wrong values.** The table shows the measured error of each function as shipped (default config of each mode, 2 parties, 10 repeats, compared with exact float64 results). Each cell is *median absolute error / typical worst error within one run*; ⚠ marks runs where some output was off by more than 1.
 
-| Function (tested inputs) | `crypten` | `poly` | `shaft` | `lut` (default) | `fission` |
+| Function (tested inputs) | `crypten` | `poly` | `shaft` | `curl` | `fission` |
 |---|---:|---:|---:|---:|---:|
 | exp, x ≤ 0 ([−8, 0]) | 4e-4 / 1e-3 | 2e-3 / 0.011 | 4e-4 / 2e-3 | 8e-3 / **0.66** | 4e-6 |
 | exp, mixed sign ([−4, 2]) | 1e-3 / 0.056 | 3e-3 / 0.011 | 1e-3 / 0.069 | 0.11 / **7.4 ⚠** | 5e-6 |
@@ -111,7 +112,7 @@ Each mode's approximations are only accurate on a limited input range, and **inp
 | LayerNorm (N(0.5, 2) inputs) | 9e-6 / 9e-5 | 9e-6 / 8e-5 | 1e-5 / 8e-5 | **0.55 / 19 ⚠** | 4e-6 |
 
 **Known limits:**
-- **`lut` (Curl defaults, identical to the Curl reference):**
+- **`curl` (Curl defaults, identical to the Curl reference):**
   - `inv_sqrt` only covers inputs in [0, 2) (`lut_max_bits: 1`), so **LayerNorm is wrong whenever a row's variance is 2 or more**.
   - GeLU only covers |x| < 4 (`lut_max_bits: 2`).
   - `exp` assumes non-positive inputs (`all_neg: True`), so positive inputs return about 0. It is coarse near 0 (error up to about 0.66).

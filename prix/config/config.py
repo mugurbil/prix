@@ -128,9 +128,8 @@ class PrixConfig:
     )
 
     _PRESET_FILES = {
-        "default": "default.yaml",
-        "lut": "default.yaml",  # legacy alias of "curl"
-        "curl": "default.yaml",
+        "default": "default.yaml",  # Wave bior(5,3) FSS LUTs + SIGMA TR indexing + EGK product truncation
+        "curl": "curl.yaml",
         "wave": "wave.yaml",
         "sigma": "sigma.yaml",
         "fss": "sigma.yaml",

@@ -28,7 +28,7 @@ MODES = [
     ("crypten", "CrypTen\napprox."),
     ("poly", "Piecewise\npoly"),
     ("shaft", "SHAFT"),
-    ("lut", "Curl\nLUTs"),
+    ("curl", "Curl\nLUTs"),
     ("fission", "Fission"),
 ]
 MODELS = [

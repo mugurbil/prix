@@ -470,7 +470,7 @@ class TestPrix(unittest.TestCase):
         self.assertEqual(method, "poly")
 
     def test_10_researcher_ergonomics(self):
-        for mode in ("crypten", "shaft", "lut", "fission"):
+        for mode in ("crypten", "shaft", "curl", "fission"):
             prix.set_mode(mode)
         prix.set_mode("default")
 

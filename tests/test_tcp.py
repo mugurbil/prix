@@ -101,7 +101,7 @@ class TestWire(unittest.TestCase):
 
 class TestTCPTransport(unittest.TestCase):
     def test_modes_over_tcp(self):
-        for mode in ("crypten", "lut", "fission"):
+        for mode in ("crypten", "curl", "fission"):
             _check(self, prix.run(_workload, world_size=2, mode=mode, transport="tcp", timeout=300))
 
     def test_shared_memory_transport_still_works(self):

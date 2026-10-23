@@ -13,7 +13,7 @@ NDSS 2025). Both frameworks are benchmarked in five approximation modes:
                                                        (configs/poly.yaml)
   shaft    - SHAFT constant-round Fourier-series activations & ODE softmax
                                                        (configs/shaft.yaml)
-  lut      - Curl wavelet look-up tables                (configs/default.yaml)
+  curl     - Curl wavelet look-up tables                (configs/curl.yaml)
   fission  - Fission hybrid plaintext evaluator         (configs/fission.yaml)
 
 Each mode's YAML is deep-merged on top of the framework's default.yaml (so every
@@ -39,7 +39,7 @@ MODES = [
     ("crypten", "CrypTen approximations", "approximations.yaml", 0),
     ("poly", "PUMA/Nimbus piecewise poly", "poly.yaml", 0),
     ("shaft", "SHAFT (Fourier + ODE)", "shaft.yaml", 0),
-    ("lut", "Curl wavelet LUTs", "default.yaml", 0),
+    ("curl", "Curl wavelet LUTs", "curl.yaml", 0),
     ("fission", "Fission evaluator", "fission.yaml", 1),
 ]
 MODE_KEYS = [m[0] for m in MODES]
@@ -285,7 +285,7 @@ def _patch_crypten_repo(crypten_root):
             txt = txt.replace(target, replacement)
         open(init_p, "w").write(txt)
 
-    for cfg_rel in ["configs/default.yaml", "configs/fission.yaml"]:
+    for cfg_rel in ["configs/curl.yaml", "configs/fission.yaml"]:
         cfg_p = os.path.join(crypten_root, cfg_rel)
         if os.path.exists(cfg_p):
             txt = open(cfg_p).read()

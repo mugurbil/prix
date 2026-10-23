@@ -18,9 +18,9 @@ import os
 
 import numpy as np
 
-MODES = ["crypten", "poly", "shaft", "lut", "fission"]
+MODES = ["crypten", "poly", "shaft", "curl", "fission"]
 MODE_LABELS = {"crypten": "CrypTen approx.", "poly": "Piecewise poly", "shaft": "SHAFT",
-               "lut": "Curl LUTs", "fission": "Fission"}
+               "curl": "Curl LUTs", "fission": "Fission"}
 RUNS = ("crypten", "prix", "prix_gloo", "prix_shm")
 
 

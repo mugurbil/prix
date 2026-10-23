@@ -96,7 +96,8 @@ for mode in ["crypten", "poly", "shaft", "curl", "sigma", "wave", "fission"]:
 
 | `mode` | Nonlinearities & Truncation | Paper & Reference Code |
 |---|---|---|
-| **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) · [jimouris/curl](https://github.com/jimouris/curl) |
+| **`"default"`** *(no `mode` given)* | Wave's $\text{bior}(5,3)$ & Haar FSS Wavelet LUTs with **SIGMA's 1-round faithful Truncate-Reduce** for LUT indexing (`lut_indexing="sigma"`) and `[EGK+20]` product truncation (`truncation="egk"`) — the fastest preset that uses only secure (non-local) truncations; same tables and accuracy as `"wave"` at 3 rounds/LUT with $2\times$–$6\times$ less local compute (`configs/default.yaml`) | Wave (PoPETs 2025) + SIGMA (PoPETs 2024), see Section 6.3 of the paper |
+| **`"curl"`** | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/curl.yaml`) | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) · [jimouris/curl](https://github.com/jimouris/curl) |
 | **`"wave"`** | 2-round Function Secret Sharing (DPF/DCF + Grotto segment parities) + $\text{bior}(5,3)$ & Haar Wavelet LUTs with deterministic (`lut_indexing="wave"`) or probabilistic (`lut_indexing="wave_prob"`) truncation (`configs/wave.yaml`) | [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083) |
 | **`"sigma"`** | Faithful SIGMA two-phase FSS protocols (DPF sign/clip comparisons + $\Pi^{\text{Select}}$ mux + 1-round $\Pi^{\text{TR}}_{n,f}$ + 2-round Grotto DPF 0th-order LUTs, two-table $2^8\times 2^8$ `nexp`, tailored `inv_sqrt`; `configs/sigma.yaml`) | [**SIGMA (PoPETs 2024)**](https://doi.org/10.56553/popets-2024-0107) · [mpc-msri/EzPC](https://github.com/mpc-msri/EzPC) |
 | **`"poly"`** | Piecewise low-degree polynomials for `gelu`, `silu`, `exp`, `tanh`, `sigmoid`, `erf` (1 batched comparison + degree-4 polynomial, no LUTs, `configs/poly.yaml`) | [**PUMA (arXiv 2023)**](https://arxiv.org/abs/2307.12533) · [secretflow/spu](https://github.com/secretflow/spu) |
@@ -205,7 +206,7 @@ CrypTen and PriX use different transports, so we ran PriX over each of its three
 - **Most of the speedup does not depend on the transport:** over CrypTen's own `gloo` transport, PriX is still 3.14x faster on Transformer blocks on CPU and 2.17x on GPU.
 - **CrypTen's `gloo` path is itself slow:** PriX's TCP transport is 1.32x faster than `gloo` on CPU blocks (1.51x on primitives) and 1.07x faster on GPU blocks (1.24x on primitives).
 - **Shared memory adds little over TCP:** 4–5% on blocks and 22% (CPU) / 6% (GPU) on small, round-bound primitives. For openings above 16 MiB, TCP is faster, because shared memory falls back to pickled queues. That's why TCP is the default.
-- **Communication is similar but not identical.** In `crypten` mode, rounds agree within one and bytes within 5% (a GPT-2 block takes 176 rounds and sends 80.1 MB with CrypTen versus 79.7 MB with PriX). Two PriX protocol changes explain most other differences: (1) its comparisons open the shared operand of each carry-lookahead AND once instead of twice (a TODO in CrypTen), cutting comparison traffic by about 20% with unchanged security; (2) in `shaft` mode it batches GeLU/SiLU's two comparisons into one, saving 8 rounds per block (98 vs. 106 for GPT-2) versus the SHAFT reference. In `lut` mode PriX uses 2 more rounds per block.
+- **Communication is similar but not identical.** In `crypten` mode, rounds agree within one and bytes within 5% (a GPT-2 block takes 176 rounds and sends 80.1 MB with CrypTen versus 79.7 MB with PriX). Two PriX protocol changes explain most other differences: (1) its comparisons open the shared operand of each carry-lookahead AND once instead of twice (a TODO in CrypTen), cutting comparison traffic by about 20% with unchanged security; (2) in `shaft` mode it batches GeLU/SiLU's two comparisons into one, saving 8 rounds per block (98 vs. 106 for GPT-2) versus the SHAFT reference. In `curl` mode PriX uses 2 more rounds per block.
 
 Reproduce with `--comm-stats` and `--prix-transport tcp|gloo|shm` (results under `prix`, `prix_gloo`, `prix_shm`), then `python benchmarks/transport_ablation.py results.json --fig docs/figures/transport_ablation`. Per-workload results, including communication rounds and bytes, are in [`benchmarks/results/`](benchmarks/results).
 
@@ -297,7 +298,7 @@ Google Colab, one Tesla T4. PriX uses its default peer-to-peer TCP transport and
 </details>
 
 > [!NOTE]
-> CrypTen's ReLU took 41–50 ms across the five modes; PriX's took 15–16 ms. PriX's MatMul is slower in `lut` mode (7.7 ms vs. 3.1–4.4 ms), where products use probabilistic truncation.
+> CrypTen's ReLU took 41–50 ms across the five modes; PriX's took 15–16 ms. PriX's MatMul is slower in `curl` mode (7.7 ms vs. 3.1–4.4 ms), where products use probabilistic truncation.
 
 ---
 

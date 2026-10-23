@@ -16,7 +16,7 @@
   - `"tcp"` (default): direct peer-to-peer TCP over loopback, the same code path as a multi-host deployment. `tls={"certfile", "keyfile", "cafile"}` enables mutual TLS. See [Transports](transports.md).
   - `"shm"`: shared memory between local processes, a single-host simulation shortcut.
 - **`prix.set_mode(mode, device=None)`**
-  Switches PriX's active configuration preset (`"curl"` / `"default"` / legacy `"lut"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`) and refreshes wavelet lookup tables if already initialized.
+  Switches PriX's active configuration preset (`"default"` (Wave + SIGMA TR), `"wave"`, `"curl"`, `"sigma"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`) and refreshes wavelet lookup tables if already initialized.
 - **`prix.init(rank=0, world_size=1, evaluator_size=0, ..., device=None, mode=None, cfg_file=None, transport=None, peers=None, tls=None, session=None)`**
   Initializes the communicator, PRNG streams, wavelet lookup tables, and optional TTP/Evaluator clients for a single worker process. For multi-host runs pass `transport="tcp"` and `peers` (one `"host:port"` per process in rank order: parties, then the TTP if used, then evaluators).
 - **`prix.serve(rank, world_size, evaluator_size=0, mode=None, cfg_file=None, **transport_kwargs)`**
