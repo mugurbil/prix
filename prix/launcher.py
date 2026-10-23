@@ -153,7 +153,7 @@ class MultiProcessLauncher:
             caller_config = copy.deepcopy(object.__getattribute__(cfg, "config"))
             cfg.load_config(cfg_file)
 
-        if evaluator_size == 0 and getattr(cfg.encoder.trunc_method, "prod", None) == "fission":
+        if evaluator_size == 0 and getattr(cfg.encoder, "truncation", None) == "fission":
             evaluator_size = 1
 
         os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")

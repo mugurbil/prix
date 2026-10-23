@@ -189,7 +189,7 @@ def main() -> None:
     parser.add_argument("--rank", type=int, default=int(os.environ.get("RANK", -1)),
                         help="Rank of this process (0..world_size-1 for parties; >=world_size for TTP/evaluator).")
     parser.add_argument("--world-size", type=int, default=2, help="Number of MPC computing parties.")
-    parser.add_argument("--mode", default="shaft", choices=["lut", "poly", "shaft", "crypten", "fission"],
+    parser.add_argument("--mode", default="shaft", choices=["curl", "lut", "poly", "shaft", "crypten", "fission"],
                         help="MPC approximation mode.")
     parser.add_argument("--provider", default="TFP", choices=["TFP", "TTP"],
                         help="Correlated randomness provider (TFP or TTP).")

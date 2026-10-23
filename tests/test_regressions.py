@@ -139,7 +139,7 @@ def _wave_fss_lut_checks():
         haar_rounds, haar_bytes = c.comm_rounds, c.comm_bytes
         haar_out = np.asarray(y_haar.reconstruct())
 
-    with prix.cfg.temp_override({"encoder.trunc_method.lut": "wave_prob"}):
+    with prix.cfg.temp_override({"encoder.lut_indexing": "wave_prob"}):
         c.reset_communication_stats()
         y_bior_prob = x.gelu()
         bior_prob_rounds, bior_prob_bytes = c.comm_rounds, c.comm_bytes
@@ -241,9 +241,9 @@ class TestRegressions(unittest.TestCase):
             np.testing.assert_allclose(got, ref, atol=1e-2, err_msg=name)
 
     def test_run_mode_does_not_change_caller_config(self):
-        before = prix.cfg.encoder.trunc_method.prod
+        before = prix.cfg.encoder.truncation
         prix.run(_large_return, world_size=2, mode="fission", timeout=180)
-        self.assertEqual(prix.cfg.encoder.trunc_method.prod, before)
+        self.assertEqual(prix.cfg.encoder.truncation, before)
 
     def test_multihead_attention_matches_plaintext(self):
         for mode in ("wave", "sigma", "shaft", "fission"):

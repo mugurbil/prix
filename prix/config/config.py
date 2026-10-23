@@ -28,12 +28,15 @@ class ConfigNode(dict):
         return value
 
     def __getattr__(self, name):
+        if name == "trunc_method" and ("truncation" in self or "lut_indexing" in self):
+            return _LegacyTruncMethod(self)
         try:
             return self[name]
         except KeyError as exc:
             raise AttributeError(f"Config has no attribute '{name}'") from exc
 
     def __setattr__(self, name, value):
+        name = _LEGACY_KEYS.get(name, name)
         if "." in name:
             keys = name.split(".")
             node = self
@@ -44,6 +47,60 @@ class ConfigNode(dict):
             node[keys[-1]] = self._wrap(value)
         else:
             self[name] = self._wrap(value)
+
+
+# `encoder.trunc_method.{prod,lut}` was renamed to `encoder.{truncation,lut_indexing}`:
+#   - truncation:   fixed-point rescaling (>> f) after every product (matmul / mul / square)
+#   - lut_indexing: how a secret LUT input is reduced to its bin index (>> j) *before* lookup;
+#                   in FSS modes this is fused into the LUT protocol itself (wave / wave_prob / sigma).
+# Old keys keep working (read and write) through the alias below.
+_LEGACY_KEYS = {
+    "encoder.trunc_method.prod": "encoder.truncation",
+    "encoder.trunc_method.lut": "encoder.lut_indexing",
+    "trunc_method.prod": "truncation",
+    "trunc_method.lut": "lut_indexing",
+}
+
+
+class _LegacyTruncMethod:
+    """Read/write view exposing `encoder.truncation` / `encoder.lut_indexing` as `trunc_method.prod` / `.lut`."""
+
+    def __init__(self, encoder_node):
+        object.__setattr__(self, "_node", encoder_node)
+
+    def __getattr__(self, name):
+        if name == "prod":
+            return self._node.get("truncation")
+        if name == "lut":
+            return self._node.get("lut_indexing")
+        raise AttributeError(name)
+
+    def __setattr__(self, name, value):
+        if name == "prod":
+            self._node["truncation"] = value
+        elif name == "lut":
+            self._node["lut_indexing"] = value
+        else:
+            raise AttributeError(name)
+
+    def __getitem__(self, name):
+        return self.__getattr__(name)
+
+    def get(self, name, default=None):
+        try:
+            return self.__getattr__(name)
+        except AttributeError:
+            return default
+
+
+def _normalize_legacy(config_dict):
+    """Rewrites a loaded YAML dict from `encoder.trunc_method.{prod,lut}` to `encoder.{truncation,lut_indexing}`."""
+    enc = (config_dict or {}).get("encoder")
+    if isinstance(enc, dict) and isinstance(enc.get("trunc_method"), dict):
+        tm = enc.pop("trunc_method")
+        enc.setdefault("truncation", tm.get("prod"))
+        enc.setdefault("lut_indexing", tm.get("lut"))
+    return config_dict
 
 
 def _deep_merge(base, override):
@@ -72,7 +129,7 @@ class PrixConfig:
 
     _PRESET_FILES = {
         "default": "default.yaml",
-        "lut": "default.yaml",
+        "lut": "default.yaml",  # legacy alias of "curl"
         "curl": "default.yaml",
         "wave": "wave.yaml",
         "sigma": "sigma.yaml",
@@ -96,7 +153,7 @@ class PrixConfig:
 
     @classmethod
     def resolve_config_path(cls, config_file=None):
-        """Resolves a preset name ('lut', 'shaft', 'crypten', 'fission') or file path."""
+        """Resolves a preset name ('curl', 'wave', 'sigma', 'poly', 'shaft', 'crypten', 'fission') or file path."""
         if config_file is None:
             return cls._DEFAULT_CONFIG_PATH
         key = str(config_file).strip().lower()
@@ -111,13 +168,13 @@ class PrixConfig:
         return config_file
 
     def load_config(self, config_file=None):
-        """Loads config from a preset name ('lut', 'shaft', 'crypten', 'fission') or yaml path."""
+        """Loads config from a preset name ('curl', 'wave', 'sigma', 'poly', 'shaft', 'crypten', 'fission') or yaml path."""
         resolved = self.resolve_config_path(config_file)
         with open(self._DEFAULT_CONFIG_PATH, "r", encoding="utf-8") as stream:
-            base_dict = yaml.safe_load(stream)
+            base_dict = _normalize_legacy(yaml.safe_load(stream))
         if os.path.abspath(resolved) != os.path.abspath(self._DEFAULT_CONFIG_PATH):
             with open(resolved, "r", encoding="utf-8") as stream:
-                override_dict = yaml.safe_load(stream)
+                override_dict = _normalize_legacy(yaml.safe_load(stream))
             config_dict = _deep_merge(base_dict, override_dict)
         else:
             config_dict = base_dict
@@ -125,14 +182,14 @@ class PrixConfig:
         return self
 
     def set_mode(self, mode):
-        """Switches PriX's MPC approximation backend ('lut', 'shaft', 'crypten', 'fission')."""
+        """Switches PriX's MPC approximation backend ('curl', 'wave', 'sigma', 'poly', 'shaft', 'crypten', 'fission')."""
         return self.load_config(mode)
 
     def set_config(self, config):
         if isinstance(config, PrixConfig):
             object.__setattr__(self, "config", copy.deepcopy(config.config))
         elif isinstance(config, dict):
-            object.__setattr__(self, "config", ConfigNode(copy.deepcopy(config)))
+            object.__setattr__(self, "config", ConfigNode(_normalize_legacy(copy.deepcopy(config))))
         else:
             object.__setattr__(self, "config", config)
 

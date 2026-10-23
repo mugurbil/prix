@@ -5,9 +5,8 @@ debug:
   validation_mode: False
 encoder:
   precision_bits: 16
-  trunc_method:
-    prod: "fission"
-    lut: "fission"
+  truncation: "fission"      # fixed-point rescaling (>> f) after every product: egk | crypten | fission
+  lut_indexing: "fission"    # LUT input -> bin index (>> j) before lookup: egk | crypten | fission | wave | wave_prob | sigma
 functions:
   max:
     method: "log_reduction"

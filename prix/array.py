@@ -483,7 +483,7 @@ class Array:
                     return result
                 if (
                     op == "mul"
-                    and cfg.encoder.trunc_method.prod == "crypten"
+                    and cfg.encoder.truncation == "crypten"
                     and comm.get().get_world_size() <= 2
                 ):
                     y_int = int(round((1 << result.precision) * float(y)))
@@ -493,7 +493,7 @@ class Array:
 
             if (
                 not additive_func
-                and cfg.encoder.trunc_method.prod == "fission"
+                and cfg.encoder.truncation == "fission"
                 and result.precision > cfg.encoder.precision_bits
             ):
                 result = result.egk_trunc_pr(62, result.precision - cfg.encoder.precision_bits)
@@ -522,7 +522,7 @@ class Array:
                 )
             else:
                 y_arg = y
-                if cfg.encoder.trunc_method.prod == "fission":
+                if cfg.encoder.truncation == "fission":
                     if result.precision > cfg.encoder.precision_bits:
                         result = result.egk_trunc_pr(
                             62, result.precision - cfg.encoder.precision_bits
@@ -536,7 +536,7 @@ class Array:
                 do_local_trunc = (
                     result.precision > 0
                     and y.precision > 0
-                    and cfg.encoder.trunc_method.prod == "crypten"
+                    and cfg.encoder.truncation == "crypten"
                     and comm.get().get_world_size() <= 2
                     and op in ("mul", "matmul")
                 )
@@ -551,7 +551,7 @@ class Array:
         if not additive_func:
             if public:
                 if self.precision > 0:
-                    method = cfg.encoder.trunc_method.prod
+                    method = cfg.encoder.truncation
                     if method == "crypten":
                         return result.div_(2 ** result.precision)
                     elif method == "egk":
@@ -565,7 +565,7 @@ class Array:
                     result.precision = self.precision
             else:
                 if result.precision > 0 and y.precision > 0:
-                    method = cfg.encoder.trunc_method.prod
+                    method = cfg.encoder.truncation
                     if method == "crypten":
                         return result.div_(2 ** result.precision)
                     elif method == "egk":
@@ -635,7 +635,7 @@ class Array:
         # Public @ Private:
         result = self.clone()
         if (
-            cfg.encoder.trunc_method.prod == "fission"
+            cfg.encoder.truncation == "fission"
             and result.precision > cfg.encoder.precision_bits
         ):
             result = result.egk_trunc_pr(62, result.precision - cfg.encoder.precision_bits)
@@ -643,7 +643,7 @@ class Array:
         other_enc = encode(other, precision=result.precision, device=self.device)
         result.share = jnp.matmul(other_enc, result.share)
         if self.precision > 0:
-            method = cfg.encoder.trunc_method.prod
+            method = cfg.encoder.truncation
             if method == "crypten":
                 return result.div_(2 ** result.precision)
             elif method == "egk":
@@ -727,7 +727,7 @@ class Array:
         return self.clone().neg_()
 
     def square_(self):
-        method = cfg.encoder.trunc_method.prod
+        method = cfg.encoder.truncation
         do_local_trunc = (
             self.precision > 0
             and method != "egk"
@@ -1740,7 +1740,7 @@ def _evaluate_lut(x, lut):
     size = int(lut.shape[0])
     if (
         comm.get().get_world_size() == 2
-        and cfg.encoder.trunc_method.lut in ("wave", "wave_prob")
+        and cfg.encoder.lut_indexing in ("wave", "wave_prob")
         and size > 0
         and (size & (size - 1)) == 0
     ):

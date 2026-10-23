@@ -799,17 +799,17 @@ def permute_reveal_evaluate_share(self, func, **extra):
 
 
 def _eval_haar_lut(x, lut_table, truncation):
-    """Evaluates a Haar Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`), SIGMA's 3-round TR + DPF-LUT protocol (`trunc_method.lut == 'sigma'`), or Curl's protocol."""
-    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob"):
+    """Evaluates a Haar Wavelet LUT using Wave's 2-round FSS protocol (`lut_indexing in ('wave', 'wave_prob')`), SIGMA's 3-round TR + DPF-LUT protocol (`lut_indexing == 'sigma'`), or Curl's protocol."""
+    if comm.get().get_world_size() == 2 and cfg.encoder.lut_indexing in ("wave", "wave_prob"):
         from prix import fss
 
         return fss.wave_haar_lut(x, lut_table, truncation=truncation)
-    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut == "sigma":
+    if comm.get().get_world_size() == 2 and cfg.encoder.lut_indexing == "sigma":
         from prix import fss
 
         msb = fss.sigma_tr_trunc(x, truncation) if truncation > 0 else x
         return fss.wave_haar_lut(msb, lut_table, truncation=0)
-    if cfg.encoder.trunc_method.lut == "crypten":
+    if cfg.encoder.lut_indexing == "crypten":
         msb = x.div(2 ** truncation)
     else:
         msb = x.egk_trunc_pr(62, truncation)
@@ -817,12 +817,12 @@ def _eval_haar_lut(x, lut_table, truncation):
 
 
 def _eval_bior_lut(x, lut_table, truncation):
-    """Evaluates a Bior(5,3) Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`), 3-round SIGMA TR + Wave Bior protocol (`trunc_method.lut == 'sigma'`), or Curl's protocol."""
-    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob", "sigma"):
+    """Evaluates a Bior(5,3) Wavelet LUT using Wave's 2-round FSS protocol (`lut_indexing in ('wave', 'wave_prob')`), 3-round SIGMA TR + Wave Bior protocol (`lut_indexing == 'sigma'`), or Curl's protocol."""
+    if comm.get().get_world_size() == 2 and cfg.encoder.lut_indexing in ("wave", "wave_prob", "sigma"):
         from prix import fss
 
         return fss.wave_bior_lut(x, lut_table, truncation=truncation)
-    if cfg.encoder.trunc_method.lut == "crypten":
+    if cfg.encoder.lut_indexing == "crypten":
         msb, lsb = x.divmod(2 ** truncation)
     else:
         msb, lsb = x.egk_truncmod_pr(62, truncation)
@@ -840,10 +840,10 @@ def _nexp_lut(self, method):
         step = builtins.max(1, int((precision * 16) // (size * size)))
         step_bits = int(round(math.log2(step))) if step > 1 else 0
         size_bits = int(round(math.log2(size)))
-        if cfg.encoder.trunc_method.lut == "crypten":
+        if cfg.encoder.lut_indexing == "crypten":
             x = self.div(step) if step > 1 else self.clone()
-        elif cfg.encoder.trunc_method.lut in ("sigma", "wave", "wave_prob"):
-            if step_bits > 0 and cfg.encoder.trunc_method.lut == "sigma":
+        elif cfg.encoder.lut_indexing in ("sigma", "wave", "wave_prob"):
+            if step_bits > 0 and cfg.encoder.lut_indexing == "sigma":
                 _ = comm.get().all_reduce(self.share)
             x = self.egk_trunc_pr(62, step_bits) if step_bits > 0 else self.clone()
         else:
@@ -919,7 +919,7 @@ def exp(self):
         is_neg, gt_neg5 = ltz_pair[0], ltz_pair[1]
         in_pos = 1 - is_neg
         in_neg = is_neg + gt_neg5 - 1
-        trunc_method = cfg.encoder.trunc_method.prod
+        trunc_method = cfg.encoder.truncation
         if trunc_method not in ("crypten", "egk"):
             # The fused combination below truncates by hand; other truncation schemes (e.g.
             # Fission's deferred truncation) go through the generic polynomial path.
@@ -1453,7 +1453,7 @@ def _fourier_series(self, terms, period, alpha=None, beta_cos=None, beta_sin=Non
     res.share = sum_share
     res.precision = x.precision
     if res.precision > 0:
-        trunc_method = cfg.encoder.trunc_method.prod
+        trunc_method = cfg.encoder.truncation
         if trunc_method == "crypten":
             res = res.div_(2 ** res.precision)
         elif trunc_method == "egk":
@@ -2245,7 +2245,7 @@ def polynomial(self, coeffs, func="mul"):
         terms = prix.cat([terms, new_terms])
 
     terms = terms[: coeffs.shape[0]]
-    if not isinstance(coeffs, prix.Array) and cfg.encoder.trunc_method.prod != "fission":
+    if not isinstance(coeffs, prix.Array) and cfg.encoder.truncation != "fission":
         bcast_shape = (coeffs.shape[0],) + (1,) * (terms.dim() - 1)
         coeffs_enc = prix.encoder.encode(
             jnp.reshape(jnp.asarray(coeffs, dtype=jnp.float32), bcast_shape),
@@ -2256,7 +2256,7 @@ def polynomial(self, coeffs, func="mul"):
         res.share = jnp.sum(terms.share * coeffs_enc, axis=0)
         res.precision = terms.precision
         if res.precision > 0:
-            trunc_method = cfg.encoder.trunc_method.prod
+            trunc_method = cfg.encoder.truncation
             if trunc_method == "crypten":
                 res = res.div_(2 ** res.precision)
             elif trunc_method == "egk":

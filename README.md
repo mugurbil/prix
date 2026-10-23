@@ -9,7 +9,7 @@
 
 **PriX** is a **modern, high-performance JAX/XLA drop-in alternative to [CrypTen (NeurIPS 2021)](https://proceedings.neurips.cc/paper/2021/hash/2754518221cfbc8d25c13a06a4cb8421-Abstract.html)** built for **Private Machine Learning and Private LLM / Transformer Research** via Secure Multi-Party Computation (MPC).
 
-Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.reconstruct()` / `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (tested on CPU and CUDA GPU)**—and switch between seven state-of-the-art MPC and Function Secret Sharing (FSS) approximation paradigms ([**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127), [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083), [**SIGMA (PoPETs 2024)**](https://doi.org/10.56553/popets-2024-0107), [**PUMA (2023)**](https://arxiv.org/abs/2307.12533), [**SHAFT (NDSS 2025)**](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="lut" | "wave" | "sigma" | "poly" | "shaft" | "crypten" | "fission"`).
+Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn.Module`, `.reconstruct()` / `.get_plain_text()`) while running on modern **Python 3.10–3.13** and **XLA (tested on CPU and CUDA GPU)**—and switch between seven state-of-the-art MPC and Function Secret Sharing (FSS) approximation paradigms ([**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127), [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083), [**SIGMA (PoPETs 2024)**](https://doi.org/10.56553/popets-2024-0107), [**PUMA (2023)**](https://arxiv.org/abs/2307.12533), [**SHAFT (NDSS 2025)**](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984), and [**Fission (IEEE CNS 2025)**](https://eprint.iacr.org/2025/653)) with a single argument (`mode="curl" | "wave" | "sigma" | "poly" | "shaft" | "crypten" | "fission"`).
 
 > [!WARNING]
 > **Research prototype — not yet suitable for protecting real secrets.**
@@ -28,7 +28,7 @@ Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) p
 |---|---|---|
 | **Python & Accelerator Support** | Archived (May 2025); needs patches for current Python / PyTorch | **Python 3.10–3.13**, **CPU & CUDA GPU** (tested) via `pip install prix-jax` |
 | **API Ergonomics** | `crypten.cryptensor`, `@run_multiprocess`, `crypten.nn` | **`prix.array`, `@prix.mpc.run_multiprocess`, `prix.nn`** (plus drop-in `prix.cryptensor` alias) |
-| **Nonlinear Approximation Backends** | Polynomial / NR / limit only (or separate forks) | **7 built-in backends in 1 line** (`mode="lut" \| "wave" \| "sigma" \| "poly" \| "shaft" \| "crypten" \| "fission"`) |
+| **Nonlinear Approximation Backends** | Polynomial / NR / limit only (or separate forks) | **7 built-in backends in 1 line** (`mode="curl" \| "wave" \| "sigma" \| "poly" \| "shaft" \| "crypten" \| "fission"`) |
 | **Kernel Execution** | Eager PyTorch op-by-op launches | **`@jax.jit`-compiled local protocol steps** (fused carry-lookahead rounds, DPF/DCF & Grotto prefix trees, LUT gather, limb matmul, Fourier combination) |
 | **Performance (single host, CPU & GPU)** | Baseline (`1.0x`) | Lower latency in every configuration measured. LLM blocks: **2.3x–7.8x faster on CPU**, **1.9x–3.1x faster on GPU**. Primitives: 1.1x–13.3x on CPU, 1.2x–11.9x on GPU ([details](#benchmarks-prix-jax-vs-crypten-pytorch)) |
 
@@ -89,7 +89,7 @@ def eval_gelu():
     x = prix.array([-2.0, -0.5, 0.0, 0.5, 2.0])
     return x.gelu().reconstruct()
 
-for mode in ["crypten", "poly", "shaft", "lut", "sigma", "wave", "fission"]:
+for mode in ["crypten", "poly", "shaft", "curl", "sigma", "wave", "fission"]:
     out = prix.run(eval_gelu, world_size=2, mode=mode)
     print(f"[{mode:>7}] GeLU:", out.round(4))
 ```
@@ -97,7 +97,7 @@ for mode in ["crypten", "poly", "shaft", "lut", "sigma", "wave", "fission"]:
 | `mode` | Nonlinearities & Truncation | Paper & Reference Code |
 |---|---|---|
 | **`"lut"`** *(default)* | Haar & Biorthogonal-2.2 Wavelet Look-Up Tables + `[EGK+20]` probabilistic truncation (`configs/default.yaml`) | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) · [jimouris/curl](https://github.com/jimouris/curl) |
-| **`"wave"`** | 2-round Function Secret Sharing (DPF/DCF + Grotto segment parities) + $\text{bior}(5,3)$ & Haar Wavelet LUTs with deterministic (`trunc_method.lut="wave"`) or probabilistic (`trunc_method.lut="wave_prob"`) truncation (`configs/wave.yaml`) | [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083) |
+| **`"wave"`** | 2-round Function Secret Sharing (DPF/DCF + Grotto segment parities) + $\text{bior}(5,3)$ & Haar Wavelet LUTs with deterministic (`lut_indexing="wave"`) or probabilistic (`lut_indexing="wave_prob"`) truncation (`configs/wave.yaml`) | [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083) |
 | **`"sigma"`** | Faithful SIGMA two-phase FSS protocols (DPF sign/clip comparisons + $\Pi^{\text{Select}}$ mux + 1-round $\Pi^{\text{TR}}_{n,f}$ + 2-round Grotto DPF 0th-order LUTs, two-table $2^8\times 2^8$ `nexp`, tailored `inv_sqrt`; `configs/sigma.yaml`) | [**SIGMA (PoPETs 2024)**](https://doi.org/10.56553/popets-2024-0107) · [mpc-msri/EzPC](https://github.com/mpc-msri/EzPC) |
 | **`"poly"`** | Piecewise low-degree polynomials for `gelu`, `silu`, `exp`, `tanh`, `sigmoid`, `erf` (1 batched comparison + degree-4 polynomial, no LUTs, `configs/poly.yaml`) | [**PUMA (arXiv 2023)**](https://arxiv.org/abs/2307.12533) · [secretflow/spu](https://github.com/secretflow/spu) |
 | **`"shaft"`** | 1-round trigonometric-triple Fourier-series GeLU / SiLU / Erf / Tanh / Sigmoid + constant-round Forward-Euler ODE Softmax (`configs/shaft.yaml`) | [**SHAFT (NDSS 2025)**](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/) · [andeskyl/SHAFT](https://github.com/andeskyl/SHAFT) |
@@ -123,7 +123,7 @@ class TinyMLP(nn.Module):
     def forward(self, x):
         return x + self.fc2(self.act(self.fc1(self.norm(x))))
 
-@prix.mpc.run_multiprocess(world_size=2, mode="lut")
+@prix.mpc.run_multiprocess(world_size=2, mode="curl")
 def run_private_mlp():
     model = TinyMLP(d_model=16, d_ff=64).encrypt(src=0)
     x = prix.randn(2, 8, 16)  # secret-shared random input (batch=2, seq=8, d=16)
@@ -148,7 +148,7 @@ print("Output shape:", run_private_mlp())
 ### Guides & Reference Docs
 - [**PriX Technical Report / Paper (PDF)**](paper/prix_arxiv.pdf) ([LaTeX source](paper/main.tex)) — *"PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX"*.
 - [**Quickstart & CrypTen Migration Guide**](docs/quickstart.md) — Side-by-side CrypTen-to-PriX cheat sheet, arithmetic vs. binary secret sharing, and `TFP` vs. `TTP` providers.
-- [**MPC Approximation Modes & Configuration Reference**](docs/modes_and_configuration.md) — Deep dive into `"lut"`, `"poly"`, `"shaft"`, `"crypten"`, and `"fission"` modes and how to mix-and-match methods via `prix.cfg`.
+- [**MPC Approximation Modes & Configuration Reference**](docs/modes_and_configuration.md) — Deep dive into `"curl"`, `"poly"`, `"shaft"`, `"crypten"`, and `"fission"` modes and how to mix-and-match methods via `prix.cfg`.
 - [**Transports & Multi-Host Deployment**](docs/transports.md) — Running across multiple terminals or multiple machines over peer-to-peer TCP (with optional mutual TLS), `TTP` / `fission` helper processes (`prix.serve`), LAN/WAN emulation (`tc netem`), and [`examples/multi_party_tcp.py`](examples/multi_party_tcp.py).
 - [**API Reference**](docs/api_reference.md) — Complete reference for top-level `prix` functions, `prix.Array` methods, and `prix.nn` neural network layers.
 
@@ -303,9 +303,9 @@ Google Colab, one Tesla T4. PriX uses its default peer-to-peer TCP transport and
 
 ### 3. Function Secret Sharing & Wavelets: Wave vs. SIGMA, Curl, and SHAFT
 
-In addition to the five CrypTen-compatible modes above, PriX implements 2-party **Function Secret Sharing (FSS)** in [`prix/fss.py`](prix/fss.py) for [**SIGMA (`mode="sigma"`)**](https://doi.org/10.56553/popets-2024-0107) and [**Wave (`mode="wave"`)**](https://doi.org/10.56553/popets-2025-0083), supporting both deterministic DPF/DCF LUT truncation (`trunc_method.lut="wave"`) and 0-round probabilistic share splitting (`trunc_method.lut="wave_prob"`). See **Section 6 of [`paper/prix_arxiv.pdf`](paper/prix_arxiv.pdf)** for the full study.
+In addition to the five CrypTen-compatible modes above, PriX implements 2-party **Function Secret Sharing (FSS)** in [`prix/fss.py`](prix/fss.py) for [**SIGMA (`mode="sigma"`)**](https://doi.org/10.56553/popets-2024-0107) and [**Wave (`mode="wave"`)**](https://doi.org/10.56553/popets-2025-0083), supporting both deterministic DPF/DCF LUT truncation (`lut_indexing="wave"`) and 0-round probabilistic share splitting (`lut_indexing="wave_prob"`). See **Section 6 of [`paper/prix_arxiv.pdf`](paper/prix_arxiv.pdf)** for the full study.
 
-| Model / Sublayer | Metric | **Wave (`mode="wave"`)** | **Wave-Prob (`trunc_method.lut="wave_prob", prod="crypten"`)** | **SIGMA (`mode="sigma"`)** | **Curl (`mode="lut"`)** | **SHAFT (`mode="shaft"`)** |
+| Model / Sublayer | Metric | **Wave (`mode="wave"`)** | **Wave-Prob (`lut_indexing="wave_prob", truncation="crypten"`)** | **SIGMA (`mode="sigma"`)** | **Curl (`mode="curl"`)** | **SHAFT (`mode="shaft"`)** |
 |---|---|---:|---:|---:|---:|---:|
 | **`BERT-base` GeLU** `(1, 128, 3072)` | Rounds / 2P Comm | **2 rds** / **31.46 MB** | **2 rds** / **31.46 MB** | 6 rds / 44.24 MB | 4 rds / **31.46 MB** | 11 rds / 427.82 MB |
 | | Local CPU Time / MAE | 1.77 s / 0.00190 | 0.195 s / 0.00977 | 2.91 s / **0.00038** | **0.10 s** / 0.00979 | 0.51 s / 0.00098 |
@@ -322,18 +322,18 @@ In addition to the five CrypTen-compatible modes above, PriX implements 2-party 
 | | Local CPU Time / Block MAE | 21.56 s / 0.0028 | **6.96 s** / 0.0191 | 33.85 s / 0.0017 | 9.77 s / 0.0190 | 11.01 s / **0.0015** |
 
 - **Wave vs. SIGMA (`mode="sigma"`):** `mode="sigma"` implements SIGMA's exact two-phase protocols (pre-LUT DPF sign/clip comparisons + $\Pi^{\text{Select}}$ mux + 1-round $\Pi^{\text{TR}}_{n,f}$ + 2-round DPF-LUT on $2^8\text{–}2^{10}$ step tables, two-table $2^8\times 2^8$ `nexp`, and tailored `inv_sqrt`, matching SIGMA Table 2, Table 3 & Table 5 communication: `56.3 B`/elem vs. `58 B` on GeLU/SiLU, `0.265 GB` vs. `0.26 GB` 1P on 12L `BERT-base` GeLU, `0.341 GB` vs. `0.37 GB` 1P on Softmax, and `0.984 GB` vs. `0.99 GB` 1P on `BERT-base`). Because **Wave** encodes the full activation domain directly into compactly supported 1st-order $\text{bior}(5,3)$ wavelet tables ($16\text{–}32$ intervals) and folds exact bin truncation into the $(J+\mathfrak{j})$-level DPF + $\mathfrak{j}$-level arithmetic DCF, Wave eliminates SIGMA's pre-LUT comparisons, muxes, and $\Pi^{\text{TR}}$ round—cutting Transformer rounds by **$1.48\times$** (`58` vs. `86` rounds/block; `2` vs. `6` on GeLU/SiLU; `23` vs. `31` on Softmax), online communication by **$21\%\text{–}39\%$** (`1.551 GB` vs. `1.968 GB` on `BERT-base`; `34.82 MB` vs. `56.82 MB` on Softmax), and local CPU runtime by **$1.5\times\text{–}4.1\times$** (`43.0s` vs. `72.4s` on `BERT-base`; `7.9ms` vs. `32.4ms` on SiLU).
-- **Wave vs. Curl (`mode="lut"`):** Wave cuts Transformer rounds by **$2.4\times$** (`58` vs. `139` rounds/block) and total communication by **$4.0\times$** (`1.55 GB` vs. `6.23 GB` on `BERT-base`), while eliminating off-by-1 probabilistic knot boundary jumps.
+- **Wave vs. Curl (`mode="curl"`):** Wave cuts Transformer rounds by **$2.4\times$** (`58` vs. `139` rounds/block) and total communication by **$4.0\times$** (`1.55 GB` vs. `6.23 GB` on `BERT-base`), while eliminating off-by-1 probabilistic knot boundary jumps.
 - **Wave & SIGMA vs. SHAFT (`mode="shaft"`):** SHAFT's Fourier series requires 11 comparison rounds on unbounded activations (`GeLU`/`SiLU`), sending **$5.6\times\text{–}7.1\times$ more traffic** (`11.02 GB` vs. `1.97 GB` for SIGMA and `1.55 GB` for Wave on `BERT-base`) and **$1.16\times\text{–}1.72\times$ more rounds** (`1,200` vs. `1,032` and `696`).
-- **Deterministic vs. Probabilistic Truncation (`trunc_method.lut="wave"` vs. `"wave_prob"`, `trunc_method.prod="egk"` vs. `"crypten"`):** Switching `trunc_method.lut` to `"wave_prob"` removes the $\mathfrak{j}$-level DPF tail and arithmetic DCF, accelerating local GeLU by **$9.6\times$** and `BERT-base` by **$3.3\times$** (`15.36s`, faster than both SHAFT and Curl even in local CPU compute), at the cost of $5\times\text{–}13\times$ higher LUT boundary error (matching Curl). Conversely, 0-round signed `int64` product shift (`trunc_method.prod="crypten"`) has a 1-ULP LSB carry and MSB wrap probability $\frac{|Z|}{2^{64}} = \frac{|x \cdot y|\cdot 2^{2f}}{2^{64}}$ ($\sim 10^{-10}$ on small single-block tensors, but prone to catastrophic $\pm 2^{32}$ spikes on large activations, $N \ge 3$ parties, or after modular-wrapping protocols; see Section 6.3 of the paper).
+- **Deterministic vs. Probabilistic Truncation (`lut_indexing="wave"` vs. `"wave_prob"`, `truncation="egk"` vs. `"crypten"`):** Switching `encoder.lut_indexing` to `"wave_prob"` removes the $\mathfrak{j}$-level DPF tail and arithmetic DCF, accelerating local GeLU by **$9.6\times$** and `BERT-base` by **$3.3\times$** (`15.36s`, faster than both SHAFT and Curl even in local CPU compute), at the cost of $5\times\text{–}13\times$ higher LUT boundary error (matching Curl). Conversely, 0-round signed `int64` product shift (`truncation="crypten"`) has a 1-ULP LSB carry and MSB wrap probability $\frac{|Z|}{2^{64}} = \frac{|x \cdot y|\cdot 2^{2f}}{2^{64}}$ ($\sim 10^{-10}$ on small single-block tensors, but prone to catastrophic $\pm 2^{32}$ spikes on large activations, $N \ge 3$ parties, or after modular-wrapping protocols; see Section 6.3 of the paper).
 
-#### Preprocessing key size & Wave with SIGMA's Truncate-Reduce (`mode="wave"`, `trunc_method.lut="sigma"`)
+#### Preprocessing key size & Wave with SIGMA's Truncate-Reduce (`mode="wave"`, `lut_indexing="sigma"`)
 
 > [!WARNING]
 > All latencies above are **online-phase** numbers with a **simulated dealer** (`provider=TFP`): both parties expand the same PRG seeds, so FSS correction words, Beaver tuples and masks are derived locally and **no key material is transmitted**. This matches the convention of CrypTen's `TrustedFirstParty` and of the online columns in the SIGMA/Wave papers, but it is **not a secure deployment** and it hides the dealer's key-transfer cost. SIGMA's published *GPU* latencies include host→device key transfer, so PriX's device-local timings must not be compared against them—compare rounds, online bytes, key bytes and accuracy instead.
 
 `prix.provider.get_preproc_stats()` reports the key bytes one party would receive from a real dealer (seed correction words re-counted at $\lambda=128$, i.e. 16 B / DPF level, for comparability with SIGMA/Orca). The accounting reproduces SIGMA Table 2 (`1,488 B` vs. `1.43 KB` on GeLU, `1,888 B` vs. `1.93 KB` on Rsqrt). Run [`benchmarks/benchmark_fss_modes.py`](benchmarks/benchmark_fss_modes.py) (`--device cuda` for GPU; Colab: [`examples/prix_fss_wave_sigma_gpu_colab.ipynb`](examples/prix_fss_wave_sigma_gpu_colab.ipynb)) to reproduce:
 
-| `BERT-base` (12L, $L=128$), per party | **Wave** (`lut="wave"`) | **Wave + SIGMA TR** (`lut="sigma"`) | **Wave-Prob** (`lut="wave_prob"`) | **SIGMA** | **Curl** | **SHAFT** |
+| `BERT-base` (12L, $L=128$), per party | **Wave** (`lut_indexing="wave"`) | **Wave + SIGMA TR** (`lut_indexing="sigma"`) | **Wave-Prob** (`lut_indexing="wave_prob"`) | **SIGMA** | **Curl** | **SHAFT** |
 |---|---:|---:|---:|---:|---:|---:|
 | Online rounds | **696** | 756 | **696** | 1,032 | 1,668 | 1,200 |
 | Online bytes (1P) | **0.775 GB** | 0.832 GB | **0.775 GB** | 0.984 GB | 3.117 GB | 5.512 GB |
@@ -351,7 +351,7 @@ In addition to the five CrypTen-compatible modes above, PriX implements 2-party 
 PriX implements and accelerates the protocols and nonlinear approximations introduced in the following works:
 
 - **CrypTen (`mode="crypten"`)** — Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim, and Laurens van der Maaten. *"CrypTen: Secure Multi-Party Computation Meets Machine Learning."* **NeurIPS 2021** ([Paper](https://arxiv.org/abs/2109.00984) · [Code](https://github.com/facebookresearch/CrypTen)).
-- **Curl (`mode="lut"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1127](https://eprint.iacr.org/2024/1127) · [Code](https://github.com/jimouris/curl)).
+- **Curl (`mode="curl"`)** — Manuel B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, José Reis, Shubho Sengupta, and Miguel de Vega. *"Curl: Private LLMs through Wavelet-Encoded Look-Up Tables."* **CAMLIS 2024** ([ePrint 2024/1127](https://eprint.iacr.org/2024/1127) · [Code](https://github.com/jimouris/curl)).
 - **Wave (`mode="wave"`)** — José Reis, Mehmet Ugurbil, Sameer Wagh, Ryan Henry, and Miguel de Vega. *"Wave Hello to Privacy: Efficient Mixed-Mode MPC using Wavelet Transforms."* **PoPETs 2025** ([Paper](https://doi.org/10.56553/popets-2025-0083)).
 - **SIGMA (`mode="sigma"`)** — Kanav Gupta, Neha Jawalkar, Ananta Mukherjee, Nishanth Chandran, Divya Gupta, Ashish Panwar, and Rahul Sharma. *"SIGMA: Secure GPT Inference with Function Secret Sharing."* **PoPETs 2024** ([Paper](https://doi.org/10.56553/popets-2024-0107) · [Code](https://github.com/mpc-msri/EzPC)).
 - **PUMA (`mode="poly"`)** — Ye Dong, Wen-jie Lu, Yancheng Zheng, Haoqi Wu, Derun Zhao, Jin Tan, Zhicong Huang, Cheng Hong, Tao Wei, and Wenguang Chen. *"PUMA: Secure Inference of LLaMA-7B in Five Minutes."* **arXiv 2023** ([arXiv:2307.12533](https://arxiv.org/abs/2307.12533) · [Code](https://github.com/secretflow/spu)).

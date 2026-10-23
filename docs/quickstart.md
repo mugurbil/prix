@@ -19,14 +19,14 @@ pip install -U "jax[cuda12]" prix-jax
 
 ## 2. Side-by-Side: Migrating from CrypTen to PriX
 
-PriX preserves CrypTen's familiar entrypoints while running on JAX/XLA and supporting 5 built-in MPC approximation backends (`"lut"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`):
+PriX preserves CrypTen's familiar entrypoints while running on JAX/XLA and supporting 5 built-in MPC approximation backends (`"curl"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`):
 
 | Concept | CrypTen (PyTorch) | PriX (JAX/XLA) |
 |---|---|---|
 | **Import** | `import crypten` | `import prix` |
-| **Initialize** | `crypten.init()` | `prix.init(mode="lut")` *(or handled by `@prix.mpc.run_multiprocess`)* |
+| **Initialize** | `crypten.init()` | `prix.init(mode="curl")` *(or handled by `@prix.mpc.run_multiprocess`)* |
 | **Multi-process decorator** | `@crypten.mpc.run_multiprocess(world_size=2)` | `@prix.mpc.run_multiprocess(world_size=2, mode="shaft")` |
-| **Functional runner** | `MultiProcessLauncher(2, fn).start()` | `result = prix.run(fn, world_size=2, mode="lut")` |
+| **Functional runner** | `MultiProcessLauncher(2, fn).start()` | `result = prix.run(fn, world_size=2, mode="curl")` |
 | **Encrypt tensor** | `crypten.cryptensor(x, src=0)` | `prix.array(x, src=0)` *(alias: `prix.cryptensor(x, src=0)`)* |
 | **Decrypt tensor** | `x_enc.get_plain_text()` | `x_enc.reconstruct()` *(alias: `x_enc.get_plain_text()`)* |
 | **Reveal raw ring element** | `x_enc.reveal()` | `x_enc.reveal()` |
@@ -48,7 +48,7 @@ When running with `world_size=2`, every `prix.Array` (`prix.array`) is split acr
 ```python
 import prix
 
-@prix.mpc.run_multiprocess(world_size=2, mode="lut")
+@prix.mpc.run_multiprocess(world_size=2, mode="curl")
 def demo():
     # Party 0 provides x; Party 1 provides y
     x = prix.array([1.0, -2.0, 3.0], src=0)
@@ -72,7 +72,7 @@ def multiply():
     y = prix.array([0.5, 4.0, -1.0], src=1)
     return (x * y).reconstruct()
 
-prix.set_mode("lut")  # choose the preset first...
+prix.set_mode("curl")  # choose the preset first...
 with prix.cfg.temp_override({"mpc.provider": "TTP"}):  # ...then override individual settings
     out = prix.run(multiply, world_size=2)  # no mode= here: mode= would reload the whole preset
 ```

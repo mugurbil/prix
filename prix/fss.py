@@ -1154,7 +1154,7 @@ def wave_haar_lut(x, lut, truncation=0, probabilistic=None):
     2-round Wave Haar LUT evaluation (\Pi^{LUT-Haar}, Figure 10 / `Haar.hpp`):
       - Round 1 (8 B/elem): open `x_open = r - a`, evaluate (J + j)-level Grotto DPF
         segment parities with deterministic truncation by `truncation` bits (or J-level
-        DPF if `probabilistic=True` / `trunc_method.lut == 'wave_prob'`).
+        DPF if `probabilistic=True` / `lut_indexing == 'wave_prob'`).
       - Round 2 (16 B/elem): Beaver multiplication `[u] * [ip]`.
     Total: 2 rounds, 24 B/elem.
     """
@@ -1162,7 +1162,7 @@ def wave_haar_lut(x, lut, truncation=0, probabilistic=None):
     from prix.provider import get_default_provider
 
     if probabilistic is None:
-        probabilistic = cfg.encoder.trunc_method.lut == "wave_prob"
+        probabilistic = cfg.encoder.lut_indexing == "wave_prob"
 
     lut_jax = to_jax(lut, device=x.device, dtype=DATATYPE)
     size = int(lut_jax.shape[0])
@@ -1213,7 +1213,7 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
       - Round 1 (8 B/elem): open `x_open = r - a`, evaluate (J + j)-level Grotto DPF
         segment parities for `([u], [a_ip], [b_ip])` and j-level arithmetic DCF for
         exact `[x_lsb]` (or J-level DPF with local probabilistic truncation if
-        `probabilistic=True` / `trunc_method.lut == 'wave_prob'`).
+        `probabilistic=True` / `lut_indexing == 'wave_prob'`).
       - Round 2 (32 B/elem): evaluate `[u * (a_ip * x_lsb + b_ip)]` via Wave's
         generalized Beaver 8-tuple (`beaver.cpp` / Appendix G).
     Total: 2 rounds, 40 B/elem (vs. 4 rounds, 40 B/elem in Curl).
@@ -1222,7 +1222,7 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
     from prix.provider import get_default_provider
 
     if probabilistic is None:
-        probabilistic = cfg.encoder.trunc_method.lut == "wave_prob"
+        probabilistic = cfg.encoder.lut_indexing == "wave_prob"
 
     luts_jax = to_jax(luts, device=x.device, dtype=DATATYPE)
     size = int(luts_jax.shape[1])
@@ -1246,8 +1246,8 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
     party_id = comm.get().get_rank()
     is_rank0 = party_id == 0
 
-    if probabilistic or cfg.encoder.trunc_method.lut == "sigma":
-        if cfg.encoder.trunc_method.lut == "sigma" and not probabilistic:
+    if probabilistic or cfg.encoder.lut_indexing == "sigma":
+        if cfg.encoder.lut_indexing == "sigma" and not probabilistic:
             x_high_sh = sigma_tr_trunc(x, j_depth).share.reshape(-1)
             x_lsb_sh = x_flat - (x_high_sh << jnp.int64(j_depth))
         else:

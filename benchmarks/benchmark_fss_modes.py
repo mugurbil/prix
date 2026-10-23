@@ -3,11 +3,11 @@
 FSS / wavelet-LUT mode benchmark for PriX on CPU or GPU (2 parties, simulated TFP dealer).
 
 Compares, on identical inputs:
-  wave_det      mode="wave"  trunc_method.lut="wave"       2-rd bior(5,3) LUT, (J+j)-level Grotto DPF + j-level DCF
-  wave_sigma_tr mode="wave"  trunc_method.lut="sigma"      3-rd bior(5,3) LUT, SIGMA 1-rd TR (j-level DCF) + J-level DPF
-  wave_prob     mode="wave"  trunc_method.lut="wave_prob"  2-rd bior(5,3) LUT, local prob. split + J-level DPF
+  wave_det      mode="wave"  lut_indexing="wave"       2-rd bior(5,3) LUT, (J+j)-level Grotto DPF + j-level DCF
+  wave_sigma_tr mode="wave"  lut_indexing="sigma"      3-rd bior(5,3) LUT, SIGMA 1-rd TR (j-level DCF) + J-level DPF
+  wave_prob     mode="wave"  lut_indexing="wave_prob"  2-rd bior(5,3) LUT, local prob. split + J-level DPF
   sigma         mode="sigma"                               SIGMA (PoPETs'24) 0th-order Haar LUT protocols
-  curl          mode="lut"                                 Curl 4-rd bior(5,3) LUTs (pre-expanded one-hot + EGK trunc)
+  curl          mode="curl"                                Curl 4-rd bior(5,3) LUTs (pre-expanded one-hot + EGK trunc)
   shaft         mode="shaft"                               SHAFT Fourier activations + ODE softmax
 
 For every benchmark we report:
@@ -49,12 +49,12 @@ from prix.config import cfg  # noqa: E402
 from prix.provider import get_preproc_stats, reset_preproc_stats  # noqa: E402
 
 VARIANTS = {
-    # key: (mode, trunc_method.lut, trunc_method.prod, title)
-    "wave_det": ("wave", "wave", "egk", 'Wave (2-rd Grotto DPF+DCF, trunc_method.lut="wave")'),
-    "wave_sigma_tr": ("wave", "sigma", "egk", 'Wave + SIGMA TR (3-rd, trunc_method.lut="sigma")'),
-    "wave_prob": ("wave", "wave_prob", "egk", 'Wave-Prob (2-rd, trunc_method.lut="wave_prob")'),
+    # key: (mode, lut_indexing, truncation, title)
+    "wave_det": ("wave", "wave", "egk", 'Wave (2-rd Grotto DPF+DCF, lut_indexing="wave")'),
+    "wave_sigma_tr": ("wave", "sigma", "egk", 'Wave + SIGMA TR (3-rd, lut_indexing="sigma")'),
+    "wave_prob": ("wave", "wave_prob", "egk", 'Wave-Prob (2-rd, lut_indexing="wave_prob")'),
     "sigma": ("sigma", "sigma", "egk", 'SIGMA (mode="sigma")'),
-    "curl": ("lut", None, None, 'Curl (mode="lut")'),
+    "curl": ("curl", None, None, 'Curl (mode="curl")'),
     "shaft": ("shaft", None, None, 'SHAFT (mode="shaft")'),
 }
 
@@ -128,13 +128,13 @@ def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
     mode, lut_trunc, prod_trunc, title = VARIANTS[key]
     prix.set_mode(mode)
     if lut_trunc is not None:
-        cfg.encoder.trunc_method.lut = lut_trunc
+        cfg.encoder.lut_indexing = lut_trunc
     if prod_trunc is not None:
-        cfg.encoder.trunc_method.prod = prod_trunc
+        cfg.encoder.truncation = prod_trunc
     c = prix.comm.get()
     c.set_verbosity(True)
     rng = np.random.RandomState(42)
-    res = {"title": title, "mode": mode, "trunc_method": dict(cfg.encoder.trunc_method), "primitives": {}, "sublayers": {}, "models": {}}
+    res = {"title": title, "mode": mode, "config": {"truncation": cfg.encoder.truncation, "lut_indexing": cfg.encoder.lut_indexing}, "primitives": {}, "sublayers": {}, "models": {}}
 
     if not skip_primitives:
         prim_inputs = {
