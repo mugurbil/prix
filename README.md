@@ -1,4 +1,4 @@
-<p align="center"><img width="35%" src="https://raw.githubusercontent.com/mugurbil/prix/main/prix.png" alt="PriX logo" /></p>
+<p align="center"><img width="35%" src="prix.png" alt="PriX logo" /></p>
 
 [![PyPI version](https://img.shields.io/pypi/v/prix-jax.svg)](https://pypi.org/project/prix-jax/)
 [![Tests](https://github.com/mugurbil/prix/actions/workflows/tests.yml/badge.svg)](https://github.com/mugurbil/prix/actions/workflows/tests.yml)
@@ -32,7 +32,7 @@ Original [CrypTen (NeurIPS 2021)](https://github.com/facebookresearch/CrypTen) p
 | **Performance (single host, CPU & GPU)** | Baseline (`1.0x`) | Lower latency in every configuration measured. LLM blocks: **2.8x–9.2x faster on CPU**, **2.0x–3.2x faster on GPU**. Primitives: 1.8x–20.8x on CPU, 1.4x–16.2x on GPU ([details](#benchmarks-prix-jax-vs-crypten-pytorch)) |
 
 
-<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/llm_latency.png" alt="End-to-end private inference latency of a GPT-2 block, CrypTen vs PriX, on CPU and GPU across five approximation modes" width="95%"/></p>
+<p align="center"><img src="docs/figures/llm_latency.png" alt="End-to-end private inference latency of a GPT-2 block, CrypTen vs PriX, on CPU and GPU across five approximation modes" width="95%"/></p>
 
 ---
 
@@ -179,9 +179,9 @@ python3 benchmarks/benchmark_prix_vs_crypten.py --crypten-root /path/to/curl --m
 
 ### Charts
 
-<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/llm_speedup.png" alt="Heatmap of PriX speedup over CrypTen on five Transformer blocks across five approximation modes, CPU and GPU" width="95%"/></p>
+<p align="center"><img src="docs/figures/llm_speedup.png" alt="Heatmap of PriX speedup over CrypTen on five Transformer blocks across five approximation modes, CPU and GPU" width="95%"/></p>
 
-<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/primitive_speedup.png" alt="Heatmap of PriX speedup over CrypTen on ten MPC primitives across five approximation modes, CPU and GPU" width="95%"/></p>
+<p align="center"><img src="docs/figures/primitive_speedup.png" alt="Heatmap of PriX speedup over CrypTen on ten MPC primitives across five approximation modes, CPU and GPU" width="95%"/></p>
 
 The darkest **Fission** cells partly reflect CPU contention from the extra evaluator process on the CrypTen side (see the notes below). Regenerate the charts from the raw results in [`benchmarks/results/`](benchmarks/results) with `python benchmarks/plot_results.py`.
 
@@ -189,7 +189,7 @@ The darkest **Fission** cells partly reflect CPU contention from the extra evalu
 
 To separate PriX's compiled computation from its faster local transport, we reran PriX with its 2-party `all_reduce` routed through `torch.distributed`/`gloo` over loopback TCP, the same transport CrypTen uses. Nothing else in PriX changed, and the results are identical. All three configurations ran back to back on the CPU host below, in all five modes.
 
-<p align="center"><img src="https://raw.githubusercontent.com/mugurbil/prix/main/docs/figures/transport_ablation.png" alt="Transport ablation: GPT-2 block latency for CrypTen, PriX over gloo, and PriX over shared memory, plus geometric-mean speedups with and without the transport difference" width="95%"/></p>
+<p align="center"><img src="docs/figures/transport_ablation.png" alt="Transport ablation: GPT-2 block latency for CrypTen, PriX over gloo, and PriX over shared memory, plus geometric-mean speedups with and without the transport difference" width="95%"/></p>
 
 | Geometric mean (CPU) | Overall (CrypTen / PriX) | Same transport (CrypTen / PriX over gloo) | Transport alone | Transport's share (log scale) |
 |---|---:|---:|---:|---:|
