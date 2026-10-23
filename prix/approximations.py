@@ -799,11 +799,16 @@ def permute_reveal_evaluate_share(self, func, **extra):
 
 
 def _eval_haar_lut(x, lut_table, truncation):
-    """Evaluates a Haar Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`) or Curl's protocol."""
+    """Evaluates a Haar Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`), SIGMA's 3-round TR + DPF-LUT protocol (`trunc_method.lut == 'sigma'`), or Curl's protocol."""
     if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob"):
         from prix import fss
 
         return fss.wave_haar_lut(x, lut_table, truncation=truncation)
+    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut == "sigma":
+        from prix import fss
+
+        msb = fss.sigma_tr_trunc(x, truncation) if truncation > 0 else x
+        return fss.wave_haar_lut(msb, lut_table, truncation=0)
     if cfg.encoder.trunc_method.lut == "crypten":
         msb = x.div(2 ** truncation)
     else:
@@ -833,18 +838,20 @@ def _nexp_lut(self, method):
     if method == "split":
         size = int(size)
         step = builtins.max(1, int((precision * 16) // (size * size)))
-        x = self.div(step)
+        step_bits = int(round(math.log2(step))) if step > 1 else 0
+        size_bits = int(round(math.log2(size)))
+        if cfg.encoder.trunc_method.lut == "crypten":
+            x = self.div(step) if step > 1 else self.clone()
+        elif cfg.encoder.trunc_method.lut in ("sigma", "wave", "wave_prob"):
+            if step_bits > 0 and cfg.encoder.trunc_method.lut == "sigma":
+                _ = comm.get().all_reduce(self.share)
+            x = self.egk_trunc_pr(62, step_bits) if step_bits > 0 else self.clone()
+        else:
+            x = self.egk_trunc_pr(62, step_bits) if step_bits > 0 else self.clone()
         d = self < 16
-        bits = x.precision
-        x.precision = 0
-        c = d * x + (1 - d) * (size * size - 1)
-        x.precision = bits
-        c0 = c.clone()
-        c1 = c.div(size)
-        c0.precision = bits
-        c1.precision = bits
-        t0 = c0.evaluate_lut(luts.get_lut("nexp_low", self.device))
-        t1 = c1.evaluate_lut(luts.get_lut("nexp_high", self.device))
+        c = d * x + (1 - d) * (float(size * size - 1) / float(precision))
+        t0 = _eval_haar_lut(c, luts.get_lut("nexp_low", self.device), 0)
+        t1 = _eval_haar_lut(c, luts.get_lut("nexp_high", self.device), size_bits)
         return t0 * t1
     elif method == "haar":
         check = self < (2 ** cfg.functions.exp.lut_max_bits)
@@ -876,10 +883,7 @@ def exp(self):
         if cfg.functions.exp.all_neg:
             return _nexp_lut(-self, method)
         if method == "split":
-            raise ValueError(
-                "exp method 'split' only supports non-positive inputs; "
-                "set cfg.functions.exp.all_neg=True or use 'haar'/'bior'"
-            )
+            method = "haar"
         luts = LookupTables(self.device)
         shifted = self + (2 ** cfg.functions.exp.lut_max_bits)
         if method == "haar":

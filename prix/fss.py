@@ -1052,6 +1052,100 @@ def _wave_bior_r2_jit(hat_4: jnp.ndarray, bvr_sh: jnp.ndarray, j_depth: int, is_
     return y_raw >> jnp.int64(j_depth)
 
 
+@functools.partial(jax.jit, static_argnames=("shape", "j_depth", "is_rank0"))
+def _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, j_depth: int, is_rank0: bool):
+    """
+    Vectorized, JIT-compiled TFP dealer for SIGMA's 1-round faithful Truncate-Reduce
+    (Pi^TR_{n,f}, Theorem 4 / Wave Figure 5): generates mask `r_tr`, its high/low shares,
+    and a single-path `j_depth`-level arithmetic DCF key for `1{x_hat_lo < r_lo}`.
+    """
+    n = int(np.prod(shape)) if len(shape) > 0 else 1
+    two_j_mask = jnp.uint64((1 << j_depth) - 1)
+    glob_raw = _sm64_raw(s_glob, c_glob, (3, n))
+    r_i64 = glob_raw[0]
+    r_u = jax.lax.bitcast_convert_type(r_i64, jnp.uint64)
+    k0_dcf = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
+    k1_dcf = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
+
+    r_lo = r_u & two_j_mask
+    r_hi_i64 = jax.lax.bitcast_convert_type(r_u >> jnp.uint64(j_depth), DATATYPE)
+    cw_dcf, v_cw_dcf, g_cw_dcf = dcf_gen_arith_jit(r_lo, k0_dcf, k1_dcf, j_depth)
+    s_dcf = k0_dcf if is_rank0 else k1_dcf
+
+    p0 = _sm64_raw(s0, c0, (2, n))
+    p1 = _sm64_raw(s1, c1, (2, n))
+    diff = p0 - p1
+    if is_rank0:
+        r_sh = diff[0] + r_i64
+        r_hi_sh = diff[1] + r_hi_i64
+    else:
+        r_sh = diff[0]
+        r_hi_sh = diff[1]
+    return r_sh, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf
+
+
+@functools.partial(jax.jit, static_argnames=("party_id", "j_depth"))
+def _sigma_tr_eval_jit(
+    x_hat: jnp.ndarray,
+    r_hi_sh: jnp.ndarray,
+    s_dcf: jnp.ndarray,
+    cw_dcf: jnp.ndarray,
+    v_cw_dcf: jnp.ndarray,
+    g_cw_dcf: jnp.ndarray,
+    party_id: int,
+    j_depth: int,
+):
+    x_hat_u = jax.lax.bitcast_convert_type(x_hat, jnp.uint64)
+    two_j_mask = jnp.uint64((1 << j_depth) - 1)
+    x_hat_lo = x_hat_u & two_j_mask
+    x_hat_hi = jax.lax.bitcast_convert_type(x_hat_u >> jnp.uint64(j_depth), DATATYPE)
+    carry_sh = dcf_eval_arith_jit(x_hat_lo, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, party_id, j_depth)
+    if party_id == 0:
+        return x_hat_hi - r_hi_sh - carry_sh
+    return -r_hi_sh - carry_sh
+
+
+def sigma_tr_trunc(x, truncation: int):
+    """
+    SIGMA's 1-round faithful Truncate-Reduce (Pi^TR_{n,f}, Theorem 4):
+    truncates `x` by `truncation` bits using 1 online round (8 B/elem) and a single-path
+    `truncation`-level arithmetic DCF evaluation (`truncation` PRG calls).
+    """
+    from prix.array import Array, Ptype
+
+    j_depth = int(truncation)
+    if j_depth <= 0:
+        return x
+    shape = x.size()
+    x_flat = x.share.reshape(-1)
+    n = int(x_flat.size)
+    if n == 0:
+        return x
+    import prix
+
+    party_id = comm.get().get_rank()
+    is_rank0 = party_id == 0
+    g_glob = prix.generators.get("global")
+    g0 = prix.generators.get("prev")
+    g1 = prix.generators.get("next")
+    s_glob, c_glob = g_glob.next_offset(3 * n)
+    s0, c0 = g0.next_offset(2 * n)
+    s1, c1 = g1.next_offset(2 * n)
+    r_sh, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf = _tfp_sigma_tr_key_jit(
+        c_glob, c0, c1, s_glob, s0, s1, shape, j_depth, is_rank0
+    )
+    x_hat = comm.get().all_reduce(x_flat + r_sh, op="sum")
+    msb_sh = _sigma_tr_eval_jit(
+        x_hat, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, party_id, j_depth
+    )
+    return Array.from_shares(
+        msb_sh.reshape(shape),
+        precision=x.precision,
+        device=x.device,
+        ptype=Ptype.arithmetic,
+    )
+
+
 def wave_haar_lut(x, lut, truncation=0, probabilistic=None):
     r"""
     2-round Wave Haar LUT evaluation (\Pi^{LUT-Haar}, Figure 10 / `Haar.hpp`):

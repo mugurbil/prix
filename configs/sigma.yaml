@@ -7,12 +7,12 @@ encoder:
   precision_bits: 16
   trunc_method:
     prod: "egk"
-    lut: "wave"
+    lut: "sigma"
 functions:
   max:
     method: "tree"
   exp:
-    method: "haar"
+    method: "split"
     iterations: 8
     haar_size_bits: 8
     bior_size_bits: 5
@@ -44,7 +44,7 @@ functions:
     bior_size_bits: 6
     lut_max_bits: 6
   inv_sqrt:
-    method: "haar"
+    method: "tailored_haar"
     haar_size_bits: 10
     bior_size_bits: 10
     lut_max_bits: 4
@@ -78,17 +78,17 @@ functions:
     fs_period: 16
     fs_terms: 5
   gelu:
-    method: "haar-lut-only"
+    method: "haar"
     haar_size_bits: 8
     bior_size_bits: 4
-    lut_max_bits: 3
+    lut_max_bits: 2
     fs_period: 8
     fs_terms: 8
   silu:
-    method: "haar-lut-only"
-    haar_size_bits: 8
+    method: "haar"
+    haar_size_bits: 10
     bior_size_bits: 4
-    lut_max_bits: 4
+    lut_max_bits: 3
     fs_period: 16
     fs_terms: 12
   softmax:
