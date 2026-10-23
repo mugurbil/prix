@@ -6,6 +6,18 @@ Donald Beaver.
 \newblock In {\em Advances in Cryptology -- CRYPTO '91}, pages 420--432.
   Springer, 1991.
 
+\bibitem{boyle2015function}
+Elette Boyle, Niv Gilboa, and Yuval Ishai.
+\newblock Function secret sharing.
+\newblock In {\em Advances in Cryptology -- EUROCRYPT 2015}, volume 9057 of
+  {\em Lecture Notes in Computer Science}, pages 337--367. Springer, 2015.
+
+\bibitem{boyle2016function}
+Elette Boyle, Niv Gilboa, and Yuval Ishai.
+\newblock Function secret sharing: Improvements and extensions.
+\newblock In {\em ACM SIGSAC Conference on Computer and Communications Security
+  (CCS)}, pages 1292--1303, 2016.
+
 \bibitem{bradbury2018jax}
 James Bradbury, Roy Frostig, Peter Hawkins, Matthew~James Johnson, Chris Leary,
   Dougal Maclaurin, George Necula, Adam Paszke, Jake Vander{P}las, Skye
@@ -156,6 +168,13 @@ Manuel~B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, Jos{\'e}
   Information Security (CAMLIS)}, pages 1--31, 2024.
 \newblock Cryptology ePrint Archive, Paper 2024/1127,
   \url{https://eprint.iacr.org/2024/1127}.
+
+\bibitem{storrier2023grotto}
+Kyle Storrier, Adithya Vadapalli, Allan Lyons, and Ryan Henry.
+\newblock Grotto: Screaming fast $(2 + 1)$-pc for $\mathbb{Z}_{2^n}$ via (2,
+  2)-dpfs.
+\newblock In {\em ACM SIGSAC Conference on Computer and Communications Security
+  (CCS)}, pages 2143--2157, 2023.
 
 \bibitem{tan2021cryptgpu}
 Sijun Tan, Brian Knott, Yuan Tian, and David~J. Wu.

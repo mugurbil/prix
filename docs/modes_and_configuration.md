@@ -1,14 +1,16 @@
 # MPC Approximation Modes & Configuration Reference
 
-PriX supports five nonlinear approximation paradigms out of the box, selectable via `mode="lut" | "poly" | "shaft" | "crypten" | "fission"` in `prix.run`, `@prix.mpc.run_multiprocess`, `prix.init`, or `prix.set_mode`.
+PriX supports seven nonlinear approximation paradigms out of the box, selectable via `mode="lut" | "wave" | "sigma" | "poly" | "shaft" | "crypten" | "fission"` in `prix.run`, `@prix.mpc.run_multiprocess`, `prix.init`, or `prix.set_mode`.
 
 ---
 
-## 1. Overview of the Five Modes
+## 1. Overview of the Seven Modes
 
 | Mode Name | Config File | Truncation | Nonlinear Approximations | Reference |
 |---|---|---|---|---|
-| **`"lut"`** *(default)* | [`configs/default.yaml`](../configs/default.yaml) | `[EGK+20]` probabilistic (`egk`) | Biorthogonal-2.2 & Haar Wavelet LUTs for `exp`, `log`, `reciprocal`, `sqrt`, `inv_sqrt`, `sigmoid`, `tanh`, `erf`, `gelu`, `silu` | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) |
+| **`"lut"`** *(default)* | [`configs/default.yaml`](../configs/default.yaml) | `[EGK+20]` probabilistic (`egk`) | Biorthogonal-2.2 & Haar Wavelet LUTs (one-hot correlations) for `exp`, `log`, `reciprocal`, `sqrt`, `inv_sqrt`, `sigmoid`, `tanh`, `erf`, `gelu`, `silu` | [**Curl (CAMLIS 2024)**](https://eprint.iacr.org/2024/1127) |
+| **`"wave"`** | [`configs/wave.yaml`](../configs/wave.yaml) | Deterministic DPF/DCF (`wave`) or probabilistic (`wave_prob`) for LUTs; `egk` or `crypten` for products | 2-round Function Secret Sharing (Grotto DPF segment parities + arithmetic DCF + generalized Beaver tuples) with $\text{bior}(5,3)$ & Haar Wavelet LUTs | [**Wave (PoPETs 2025)**](https://doi.org/10.56553/popets-2025-0083) |
+| **`"sigma"`** | [`configs/sigma.yaml`](../configs/sigma.yaml) | Grotto DPF + `[EGK+20]` (`egk`) | 2-round Function Secret Sharing (Grotto DPF prefix/segment parities) for comparisons and 0th-order Haar LUTs | [**SIGMA (PoPETs 2024)**](https://doi.org/10.56553/popets-2024-0107) |
 | **`"poly"`** | [`configs/poly.yaml`](../configs/poly.yaml) | CrypTen (`crypten`) | Piecewise low-degree polynomials for `gelu`, `silu`, `exp`, `sigmoid`, `tanh`, `erf` (1 batched comparison + degree-4 polynomial, no LUTs) | [**PUMA (arXiv 2023)**](https://arxiv.org/abs/2307.12533), [**Nimbus (NeurIPS 2024)**](https://arxiv.org/abs/2411.15707) |
 | **`"shaft"`** | [`configs/shaft.yaml`](../configs/shaft.yaml) | CrypTen (`crypten`) | 1-round trigonometric-triple Fourier series (`gelu`, `silu`, `erf`, `sigmoid`, `tanh`) + constant-round Forward-Euler ODE `softmax` | [**SHAFT (NDSS 2025)**](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/) |
 | **`"crypten"`** | [`configs/approximations.yaml`](../configs/approximations.yaml) | CrypTen (`crypten`) | Limit `exp`, Newton–Raphson `reciprocal`/`sqrt`/`inv_sqrt`, Taylor `erf`, sigmoid-based `silu`, standard `softmax` | [**CrypTen (NeurIPS 2021)**](https://arxiv.org/abs/2109.00984) |
@@ -23,8 +25,8 @@ Pass `mode=` to `@prix.mpc.run_multiprocess` or `prix.run`:
 ```python
 import prix
 
-@prix.mpc.run_multiprocess(world_size=2, mode="shaft")
-def run_shaft():
+@prix.mpc.run_multiprocess(world_size=2, mode="wave")
+def run_wave():
     x = prix.array([-1.5, 0.0, 1.5])
     return x.gelu().reconstruct()
 ```
@@ -32,6 +34,8 @@ def run_shaft():
 Or switch dynamically inside a process using `prix.set_mode`:
 ```python
 prix.set_mode("lut")      # Curl Wavelet LUTs
+prix.set_mode("wave")     # Wave 2-round FSS + bior(5,3)/Haar Wavelet LUTs
+prix.set_mode("sigma")    # SIGMA 2-round FSS comparisons + Haar LUTs
 prix.set_mode("poly")     # PUMA / Nimbus piecewise low-degree polynomials
 prix.set_mode("shaft")    # SHAFT Fourier + ODE
 prix.set_mode("crypten")  # CrypTen classic approximations
@@ -73,7 +77,8 @@ def hybrid_curl_shaft():
 |---|---|---|
 | `encoder.precision_bits` | `16` (int) | Fixed-point fractional precision bits ($2^{16} = 65536$). |
 | `encoder.trunc_method.prod` | `"egk"` \| `"crypten"` \| `"fission"` | Truncation protocol after private multiplications / matmuls. |
-| `encoder.trunc_method.lut` | `"egk"` \| `"crypten"` \| `"fission"` | Truncation protocol inside wavelet LUT interpolation. |
+| `encoder.trunc_method.lut` | `"egk"` \| `"wave"` \| `"wave_prob"` \| `"crypten"` \| `"fission"` | Truncation protocol inside wavelet LUT evaluation (`"wave"` = deterministic DPF/DCF; `"wave_prob"` = 0-round local split + $J$-level DPF). |
+| `mpc.protocol` | `"beaver"` \| `"fss"` | Underlying comparison & LUT protocol (`"fss"` uses 2-round Function Secret Sharing in `sigma` and `wave` modes). |
 | `mpc.provider` | `"TFP"` \| `"TTP"` | Correlated randomness dealer (`TrustedFirstParty` vs. `TrustedThirdParty`). |
 | `functions.exp.method` | `"bior"` \| `"haar"` \| `"split"` \| `"limit"` \| `"poly"` \| `"fission"` | Exponential approximation (`iterations`, `bior_size_bits`, `lut_max_bits`). |
 | `functions.reciprocal.method` | `"bior"` \| `"haar"` \| `"NR"` \| `"fission"` | Reciprocal $1/x$ (`nr_iters`, `bior_size_bits`, `lut_max_bits`). |
