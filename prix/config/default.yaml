@@ -43,10 +43,11 @@ functions:
     bior_size_bits: 6
     lut_max_bits: 6
   inv_sqrt:
-    method: "bior"
+    method: "bior_scaled"   # one bior(5,3) table T(v), v in [0, 2^16), evaluated on x*2^e for e in range_scales and selected with 2 FSS comparisons
+    range_scales: [16, 8, 0] # covers x in [2^-8, 2^16) with <= 4e-4 relative error (LayerNorm variance range of BERT/GPT-2/Llama)
     haar_size_bits: 16
-    bior_size_bits: 14   # 2^14 knots over [0, 2^8): spacing 1/64 (LayerNorm variance range; applied to L values per layer, so cheap)
-    lut_max_bits: 8
+    bior_size_bits: 12       # 2^12 knots over [0, 2^16): spacing 16, but every window is evaluated at v >= 256
+    lut_max_bits: 16
     tailored_0_lut_max_bits: 0
     tailored_0_haar_size_bits: 12
     tailored_1_lut_max_bits: 8

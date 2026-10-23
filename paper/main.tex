@@ -734,54 +734,54 @@ Three findings emerge from Tables~\ref{tab:wave_primitives} and~\ref{tab:wave_e2
 \multirow{3}{*}{$\operatorname{GeLU}$}
  & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
  & Key (B, $\lambda{=}128$) & 528 & 768 & 536 & \textbf{152} & 1,488 & 304 & 1,024 \\
- & Time / MAE & $6.0\,\text{ms}$ / $4.12\text{e}-4$ & $7.4\,\text{ms}$ / $1.75\text{e}-3$ & $5.7\,\text{ms}$ / $1.75\text{e}-3$ & $3.9\,\text{ms}$ / $8.62\text{e}-3$ & $14.8\,\text{ms}$ / $3.49\text{e}-4$ & $8.9\,\text{ms}$ / $8.96\text{e}-3$ & $13.7\,\text{ms}$ / $9.41\text{e}-4$ \\
+ & Time / MAE & $9.8\,\text{ms}$ / $4.12\text{e}-4$ & $7.4\,\text{ms}$ / $1.75\text{e}-3$ & $5.7\,\text{ms}$ / $1.75\text{e}-3$ & $3.9\,\text{ms}$ / $8.62\text{e}-3$ & $14.8\,\text{ms}$ / $3.49\text{e}-4$ & $8.9\,\text{ms}$ / $8.96\text{e}-3$ & $13.7\,\text{ms}$ / $9.41\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{SiLU}$}
  & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
  & Key (B, $\lambda{=}128$) & 552 & 808 & 560 & \textbf{152} & 1,496 & 304 & 1,088 \\
- & Time / MAE & $7.3\,\text{ms}$ / $7.68\text{e}-4$ & $6.9\,\text{ms}$ / $3.47\text{e}-3$ & $9.2\,\text{ms}$ / $3.47\text{e}-3$ & $4.2\,\text{ms}$ / $1.62\text{e}-2$ & $24.3\,\text{ms}$ / $4.96\text{e}-4$ & $8.9\,\text{ms}$ / $1.75\text{e}-2$ & $16.1\,\text{ms}$ / $8.55\text{e}-4$ \\
+ & Time / MAE & $7.1\,\text{ms}$ / $7.68\text{e}-4$ & $6.9\,\text{ms}$ / $3.47\text{e}-3$ & $9.2\,\text{ms}$ / $3.47\text{e}-3$ & $4.2\,\text{ms}$ / $1.62\text{e}-2$ & $24.3\,\text{ms}$ / $4.96\text{e}-4$ & $8.9\,\text{ms}$ / $1.75\text{e}-2$ & $16.1\,\text{ms}$ / $8.55\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$1/x$}
  & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 3 / 32.0 & 4 / 40.0 & 28 / 304.0 \\
  & Key (B, $\lambda{=}128$) & 560 & 776 & 560 & \textbf{200} & 504 & 2,096 & 528 \\
- & Time / MAE & $8.4\,\text{ms}$ / $8.55\text{e}-5$ & $32.3\,\text{ms}$ / $8.52\text{e}-5$ & $9.5\,\text{ms}$ / $8.51\text{e}-5$ & $6.3\,\text{ms}$ / $3.49\text{e}-4$ & $14.5\,\text{ms}$ / $5.36\text{e}-4$ & $7.1\,\text{ms}$ / $3.16\text{e}-4$ & $52.4\,\text{ms}$ / $8.01\text{e}-5$ \\
+ & Time / MAE & $10.2\,\text{ms}$ / $8.50\text{e}-5$ & $32.3\,\text{ms}$ / $8.52\text{e}-5$ & $9.5\,\text{ms}$ / $8.51\text{e}-5$ & $6.3\,\text{ms}$ / $3.49\text{e}-4$ & $14.5\,\text{ms}$ / $5.36\text{e}-4$ & $7.1\,\text{ms}$ / $3.16\text{e}-4$ & $52.4\,\text{ms}$ / $8.01\text{e}-5$ \\
 \midrule
 \multirow{3}{*}{$1/\sqrt{x}$}
- & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 10 / 104.1 & 4 / 40.0 & 17 / 184.0 \\
- & Key (B, $\lambda{=}128$) & 560 & 712 & 560 & \textbf{296} & 1,888 & 8,240 & 320 \\
- & Time / MAE & $237.5\,\text{ms}$ / $2.61\text{e}-5$ & $988.3\,\text{ms}$ / $2.64\text{e}-5$ & $216.9\,\text{ms}$ / $2.61\text{e}-5$ & $204.3\,\text{ms}$ / $8.47\text{e}-5$ & $40.4\,\text{ms}$ / $2.25\text{e}-4$ & $15.1\,\text{ms}$ / $1.11\text{e}-4$ & $42.1\,\text{ms}$ / $4.65\text{e}-4$ \\
+ & Rounds / Online (B) & 6 / 192.3 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 10 / 104.1 & 4 / 40.0 & 17 / 184.0 \\
+ & Key (B, $\lambda{=}128$) & 3,888 & 712 & 560 & \textbf{296} & 1,888 & 8,240 & 320 \\
+ & Time / MAE & $301.8\,\text{ms}$ / $1.88\text{e}-5$ & $988.3\,\text{ms}$ / $2.64\text{e}-5$ & $216.9\,\text{ms}$ / $2.61\text{e}-5$ & $204.3\,\text{ms}$ / $8.47\text{e}-5$ & $40.4\,\text{ms}$ / $2.25\text{e}-4$ & $15.1\,\text{ms}$ / $1.11\text{e}-4$ & $42.1\,\text{ms}$ / $4.65\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{GeLU}$ $(1,128,3072)$}
  & Rounds / Online (MB) & 3 / 18.9 & 2 / 15.7 & 3 / 18.9 & 2 / 15.7 & 6 / 22.1 & 4 / 15.7 & 11 / 213.9 \\
  & Key (GB, $\lambda{=}128$) & 0.208 & 0.302 & 0.211 & \textbf{0.060} & 0.585 & 0.119 & 0.403 \\
- & Time / MAE & $0.67\,\text{s}$ / $4.45\text{e}-4$ & $1.66\,\text{s}$ / $1.90\text{e}-3$ & $0.48\,\text{s}$ / $1.90\text{e}-3$ & $0.21\,\text{s}$ / $9.84\text{e}-3$ & $2.59\,\text{s}$ / $3.79\text{e}-4$ & $0.13\,\text{s}$ / $9.82\text{e}-3$ & $0.52\,\text{s}$ / $9.80\text{e}-4$ \\
+ & Time / MAE & $0.66\,\text{s}$ / $4.45\text{e}-4$ & $1.66\,\text{s}$ / $1.90\text{e}-3$ & $0.48\,\text{s}$ / $1.90\text{e}-3$ & $0.21\,\text{s}$ / $9.84\text{e}-3$ & $2.59\,\text{s}$ / $3.79\text{e}-4$ & $0.13\,\text{s}$ / $9.82\text{e}-3$ & $0.52\,\text{s}$ / $9.80\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{Softmax}$ $(1,12,128,128)$}
  & Rounds / Online (MB) & 25 / 19.0 & 23 / 17.4 & 25 / 19.0 & 23 / 17.4 & 31 / 28.4 & 98 / 155.9 & 41 / 173.0 \\
  & Key (GB, $\lambda{=}128$) & 0.418 & 0.564 & 0.518 & 0.442 & 0.526 & 0.312 & \textbf{0.271} \\
- & Time / MAE & $0.77\,\text{s}$ / $6.86\text{e}-5$ & $1.77\,\text{s}$ / $6.86\text{e}-5$ & $0.89\,\text{s}$ / $6.86\text{e}-5$ & $0.74\,\text{s}$ / $2.76\text{e}-4$ & $2.16\,\text{s}$ / $1.05\text{e}-5$ & $0.64\,\text{s}$ / $2.78\text{e}-4$ & $0.63\,\text{s}$ / $3.02\text{e}-4$ \\
+ & Time / MAE & $0.78\,\text{s}$ / $6.86\text{e}-5$ & $1.77\,\text{s}$ / $6.86\text{e}-5$ & $0.89\,\text{s}$ / $6.86\text{e}-5$ & $0.74\,\text{s}$ / $2.76\text{e}-4$ & $2.16\,\text{s}$ / $1.05\text{e}-5$ & $0.64\,\text{s}$ / $2.78\text{e}-4$ & $0.63\,\text{s}$ / $3.02\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{LayerNorm}$ $(1,128,768)$}
- & Rounds / Online (MB) & 9 / 4.7 & 8 / 4.7 & 9 / 4.7 & 8 / 4.7 & 16 / 4.7 & 10 / 4.7 & 20 / 2.4 \\
- & Key (GB, $\lambda{=}128$) & 0.007 & 0.007 & 0.007 & 0.007 & 0.007 & 0.008 & \textbf{0.005} \\
- & Time / MAE & $0.08\,\text{s}$ / $3.29\text{e}-5$ & $0.23\,\text{s}$ / $3.25\text{e}-5$ & $0.08\,\text{s}$ / $3.29\text{e}-5$ & $0.07\,\text{s}$ / $5.56\text{e}-5$ & $0.07\,\text{s}$ / $9.27\text{e}-4$ & $0.06\,\text{s}$ / $4.53\text{e}-5$ & $0.05\,\text{s}$ / $8.97\text{e}-4$ \\
+ & Rounds / Online (MB) & 12 / 4.7 & 8 / 4.7 & 9 / 4.7 & 8 / 4.7 & 16 / 4.7 & 10 / 4.7 & 20 / 2.4 \\
+ & Key (GB, $\lambda{=}128$) & 0.008 & 0.007 & 0.007 & 0.007 & 0.007 & 0.008 & \textbf{0.005} \\
+ & Time / MAE & $0.10\,\text{s}$ / $4.24\text{e}-5$ & $0.23\,\text{s}$ / $3.25\text{e}-5$ & $0.08\,\text{s}$ / $3.29\text{e}-5$ & $0.07\,\text{s}$ / $5.56\text{e}-5$ & $0.07\,\text{s}$ / $9.27\text{e}-4$ & $0.06\,\text{s}$ / $4.53\text{e}-5$ & $0.05\,\text{s}$ / $8.97\text{e}-4$ \\
 \midrule
 \multirow{4}{*}{\texttt{BERT-base} (12L)}
- & Rounds / Online 1P (GB) & 756 / 0.832 & 696 / 0.775 & 756 / 0.832 & 696 / 0.775 & 1,032 / 0.984 & 1,668 / 3.117 & 1,200 / 5.512 \\
- & Key 1P (GB, $\lambda{=}128$) & 8.06 & 10.94 & 9.30 & 6.57 & 13.89 & \textbf{6.43} & 9.12 \\
- & Time & $21.7\,\text{s}$ & $50.6\,\text{s}$ & $22.6\,\text{s}$ & \textbf{$17.7\,\text{s}$} & $65.9\,\text{s}$ & $18.0\,\text{s}$ & $20.5\,\text{s}$ \\
+ & Rounds / Online 1P (GB) & 828 / 0.833 & 696 / 0.775 & 756 / 0.832 & 696 / 0.775 & 1,032 / 0.984 & 1,668 / 3.117 & 1,200 / 5.512 \\
+ & Key 1P (GB, $\lambda{=}128$) & 8.07 & 10.94 & 9.30 & 6.57 & 13.89 & \textbf{6.43} & 9.12 \\
+ & Time & $24.2\,\text{s}$ & $50.6\,\text{s}$ & $22.6\,\text{s}$ & \textbf{$17.7\,\text{s}$} & $65.9\,\text{s}$ & $18.0\,\text{s}$ & $20.5\,\text{s}$ \\
  & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0191$ & $0.0017$ & $0.0191$ & $0.0015$ \\
 \midrule
 \multirow{4}{*}{\texttt{BERT-large} (24L)}
- & Rounds / Online 1P (GB) & 1,512 / 2.219 & 1,392 / 2.067 & 1,512 / 2.219 & 1,392 / 2.067 & 2,064 / 2.624 & 3,336 / 8.916 & 2,400 / 15.302 \\
- & Key 1P (GB, $\lambda{=}128$) & 21.48 & 29.18 & 24.79 & \textbf{17.52} & 37.03 & 17.74 & 24.92 \\
- & Time & $67.1\,\text{s}$ & $140.0\,\text{s}$ & $57.0\,\text{s}$ & \textbf{$49.4\,\text{s}$} & $189.4\,\text{s}$ & $55.3\,\text{s}$ & $61.8\,\text{s}$ \\
+ & Rounds / Online 1P (GB) & 1,656 / 2.220 & 1,392 / 2.067 & 1,512 / 2.219 & 1,392 / 2.067 & 2,064 / 2.624 & 3,336 / 8.916 & 2,400 / 15.302 \\
+ & Key 1P (GB, $\lambda{=}128$) & 21.50 & 29.18 & 24.79 & \textbf{17.52} & 37.03 & 17.74 & 24.92 \\
+ & Time & $65.3\,\text{s}$ & $140.0\,\text{s}$ & $57.0\,\text{s}$ & \textbf{$49.4\,\text{s}$} & $189.4\,\text{s}$ & $55.3\,\text{s}$ & $61.8\,\text{s}$ \\
  & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0192$ & $0.0016$ & $0.0192$ & $0.0015$ \\
 \midrule
 \multirow{4}{*}{\texttt{GPT-2} (12L, $L{=}64$)}
- & Rounds / Online 1P (GB) & 732 / 0.345 & 672 / 0.321 & 732 / 0.345 & 672 / 0.321 & 1,008 / 0.393 & 1,656 / 1.391 & 1,200 / 2.572 \\
- & Key 1P (GB, $\lambda{=}128$) & 2.75 & 3.76 & 3.07 & \textbf{1.94} & 5.34 & 2.56 & 4.08 \\
- & Time & $11.7\,\text{s}$ & $24.2\,\text{s}$ & $9.9\,\text{s}$ & \textbf{$8.5\,\text{s}$} & $27.6\,\text{s}$ & $12.9\,\text{s}$ & $12.3\,\text{s}$ \\
+ & Rounds / Online 1P (GB) & 804 / 0.345 & 672 / 0.321 & 732 / 0.345 & 672 / 0.321 & 1,008 / 0.393 & 1,656 / 1.391 & 1,200 / 2.572 \\
+ & Key 1P (GB, $\lambda{=}128$) & 2.76 & 3.76 & 3.07 & \textbf{1.94} & 5.34 & 2.56 & 4.08 \\
+ & Time & $12.2\,\text{s}$ & $24.2\,\text{s}$ & $9.9\,\text{s}$ & \textbf{$8.5\,\text{s}$} & $27.6\,\text{s}$ & $12.9\,\text{s}$ & $12.3\,\text{s}$ \\
  & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0193$ & $0.0015$ & $0.0194$ & $0.0015$ \\
 \bottomrule
 \end{tabular}%
@@ -791,7 +791,7 @@ Three findings emerge from Tables~\ref{tab:wave_primitives} and~\ref{tab:wave_e2
 Three observations follow from Table~\ref{tab:keysize}:
 \begin{enumerate}
     \item \textbf{Wave + SIGMA TR is the deterministic sweet spot on CPU.} It keeps the exact accuracy of 2-round Wave (identical MAE on every row) while cutting local compute by $2.0$--$4.6\times$ ($1.66 \to 0.49\,\text{s}$ on \texttt{BERT-base} $\operatorname{GeLU}$; $988 \to 217\,\text{ms}$ on $1/\sqrt{x}$; $50.6 \to 22.6\,\text{s}$ end-to-end \texttt{BERT-base}) and the preprocessing key by $15\%$--$30\%$ (the $\mathfrak{j}$ levels of the DPF become a single-path DCF), for one additional round per LUT ($+8.6\%$ rounds on \texttt{BERT-base}) and $+7\%$ online bytes. Against SIGMA it needs $1.36\times$ fewer rounds, $15\%$ less online traffic, $33\%$ less key material, and $2.9\times$ less CPU time; SIGMA retains the per-primitive accuracy edge on $\operatorname{GeLU}$/$\operatorname{SiLU}$ ($256$--$1024$-entry step tables vs.\ $16$-knot splines), which is why its block MAE ($0.0017$) beats 2-round Wave's ($0.0028$).
-    \item \textbf{The default preset closes the accuracy gap for free.} Once SIGMA-TR indexing removes the $2^J\mathfrak{j}$ Grotto term, a larger spline is cheap: doubling the $\operatorname{GeLU}$/$\operatorname{SiLU}$ tables to $2^5$ knots cuts their MAE $4.3\times$ ($1.75\text{e-}3 \to 4.1\text{e-}4$) for $+32\,\text{B}$ of key and no extra round or online byte, and SIGMA's effective-bit-width trick (comparisons over $48$ instead of $64$ bits, exact for $|x| < 2^{30}$) removes $24\%$ of the PRG calls in $\max$ and ReLU. The resulting \texttt{mode="default"} runs \texttt{BERT-base} in $21.7\,\text{s}$ with block MAE $\mathbf{0.0007}$---$2.1\times$ more accurate than SHAFT ($0.0015$), $2.4\times$ more accurate than SIGMA, $4\times$ more accurate than 2-round Wave, and $27\times$ more accurate than Curl---while sending $6.6\times$ less online traffic than SHAFT and using the smallest deterministic FSS key ($8.1\,\text{GB}$ per party).
+    \item \textbf{The default preset closes the accuracy gap for free.} Once SIGMA-TR indexing removes the $2^J\mathfrak{j}$ Grotto term, a larger spline is cheap: doubling the $\operatorname{GeLU}$/$\operatorname{SiLU}$ tables to $2^5$ knots cuts their MAE $4.3\times$ ($1.75\text{e-}3 \to 4.1\text{e-}4$) for $+32\,\text{B}$ of key and no extra round or online byte, and SIGMA's effective-bit-width trick (comparisons over $48$ instead of $64$ bits, exact for $|x| < 2^{30}$) removes $24\%$ of the PRG calls in $\max$ and ReLU. The resulting \texttt{mode="default"} runs \texttt{BERT-base} in $24.2\,\text{s}$ ($828$ rounds, including the range-extended $\operatorname{LayerNorm}$ of Section~\ref{sec:range}) with block MAE $\mathbf{0.0007}$---$2.1\times$ more accurate than SHAFT ($0.0015$), $2.4\times$ more accurate than SIGMA, $4\times$ more accurate than 2-round Wave, and $27\times$ more accurate than Curl---while sending $6.6\times$ less online traffic than SHAFT and using the smallest deterministic FSS key ($8.1\,\text{GB}$ per party).
     \item \textbf{Preprocessing is the dominant cost for every FSS protocol.} Even the smallest FSS key (Wave-Prob, $6.6\,\text{GB}$ per party for \texttt{BERT-base}) is $8.5\times$ the online traffic; SIGMA's $13.9\,\text{GB}$ is consistent with the $16.8\,\text{GB}$ (GPU) key reported in~\cite{gupta2024sigma}, Table~9. Reporting only online bytes therefore flatters all FSS schemes relative to Curl and SHAFT, whose Beaver-style preprocessing is $6.4$--$9.1\,\text{GB}$; the honest comparison is \emph{total} bytes per party, on which Wave-Prob ($7.3\,\text{GB}$), the default preset ($8.9\,\text{GB}$) and Curl ($9.5\,\text{GB}$) lead, followed by Wave + SIGMA TR ($10.1\,\text{GB}$), Wave ($11.7\,\text{GB}$), SHAFT ($14.6\,\text{GB}$) and SIGMA ($14.9\,\text{GB}$). Where PriX's SIGMA port is slower than SIGMA's C++: besides the missing \texttt{AES-NI}, it uses $f=16$ with $2^{8}$--$2^{10}$-entry tables instead of $f=12$ and 63-bit comparisons; the key-size agreement above shows the protocol structure is faithful.
 \end{enumerate}
 
@@ -801,7 +801,7 @@ Three observations follow from Table~\ref{tab:keysize}:
 While tuning the default preset we found that the Transformer-block error of \emph{every} LUT-based mode (Curl, SIGMA, Wave; block MAE $0.045$--$0.051$ in our first measurements, versus $0.0015$ for SHAFT) did not move at all when the $\operatorname{GeLU}$ and $\operatorname{Softmax}$ primitives were made $9$--$17\times$ more accurate. The cause was not approximation quality but \textbf{input range}: a wavelet LUT over $[0, 2^{b})$ silently wraps for inputs $\geq 2^b$. Two such violations occur in every Transformer block:
 \begin{itemize}
     \item \textbf{Softmax denominator.} $\sum_{j=1}^{L} e^{x_j - \max}$ is a sum of $L$ terms in $(0,1]$ and lies in $[1, L]$; with $L=128$ and near-uniform attention (every early layer, and any random-weight benchmark) it is $\approx 100$--$128$, while the reciprocal table covered $[0, 64)$. At logit scale $0.3$ the softmax rows summed to $9{,}903$ instead of $1$. Synthetic $\operatorname{Softmax}$ benchmarks with $\mathcal{U}(-4,4)$ logits (sums $\approx 16$) never trigger it, which is why primitive tables such as Table~\ref{tab:wave_e2e} looked fine. PriX now sizes the inverse table from the row length, $b = \lceil \log_2 (L+1) \rceil$, exactly as SIGMA does (\S5.2.3 of~\cite{gupta2024sigma}), enlarging the table by the same factor so knot spacing is unchanged; since the reciprocal acts on the $L\times$ smaller reduced tensor, the cost is negligible.
-    \item \textbf{LayerNorm variance.} $1/\sqrt{\sigma^2 + \epsilon}$ was tabulated over $[0, 16)$; residual-stream variances of $30$ returned $0.267$ instead of $0.183$. The default and Wave presets now cover $[0, 256)$ at the same $1/64$ spacing ($2^{14}$ knots); as $\operatorname{LayerNorm}$ evaluates it on $L$ values per layer, this costs $<1\%$ of block time.
+    \item \textbf{LayerNorm variance.} $1/\sqrt{\sigma^2 + \epsilon}$ was tabulated over $[0, 16)$; residual-stream variances of $30$ returned $0.267$ instead of $0.183$, and GPT-2's late layers reach variances in the thousands. A single uniform table cannot cover four decades, so the default preset now uses a \emph{range-extended} evaluation (\texttt{inv\_sqrt.method="bior\_scaled"}): since $x^{-1/2} = 2^{e/2}\,(2^{e}x)^{-1/2}$ for any public $e$, the parties evaluate one $2^{12}$-knot $\text{bior}(5,3)$ table $T_e(v) = 2^{e/2}v^{-1/2}$ over $v \in [0, 2^{16})$ on the three free share-scalings $2^{e}x$, $e \in \{16, 8, 0\}$, as a \emph{single} batched LUT call (all windows share $(J, \mathfrak{j})$, so this is one FSS evaluation with per-element tables), and select the window obliviously with two batched FSS comparisons against the public thresholds $1$ and $256$; the selector bits have precision $0$, so the multiplexer is one Beaver round. This covers $\sigma^2 \in [2^{-8}, 2^{16})$ with relative error $\leq 5\times 10^{-4}$ for $6$ rounds instead of $3$ ($+6$ rounds per Transformer block, $+9.5\%$) and $<1\%$ extra compute, as $\operatorname{LayerNorm}$ evaluates it on $L$ values per layer.
 \end{itemize}
 After these two fixes the block MAE of the default preset drops from $0.047$ to $0.0028$, and to $0.0007$ with the $32$-knot activations (Table~\ref{tab:keysize}); Curl's remaining $0.019$ is its probabilistic LUT indexing (Section~\ref{sec:trunc_discussion}). We flag this because the same range assumptions are present in the Curl and Wave reference implementations, and because a secure-inference benchmark that reports only per-primitive error on hand-picked input ranges can miss a $60\times$ end-to-end error.
 

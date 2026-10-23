@@ -102,6 +102,8 @@ class LookupTables:
 
     LUTs = _LazyLUTDict()
     _mem_cache = {}
+    # Cap on log2(#samples) used to build a bior table (see `generate_bior`).
+    _MAX_BIOR_SAMPLE_BITS = 24
     _initialized_precision = None
     _default_device = None
     _BUILTIN_LUT_NAMES = frozenset({
@@ -287,10 +289,19 @@ class LookupTables:
         scale = 2 ** cfg.encoder.precision_bits
         max_element = 2 ** max_bits
         depth = max_bits + cfg.encoder.precision_bits - lut_bits
+        # The bior2.2 approximation coefficients at level `depth` are local weighted averages of
+        # the function around each knot; sampling the function at 2^sample_bits points per unit
+        # instead of 2^f changes them only by the (negligible) smoothing error but lets us build
+        # tables over wide domains (e.g. [0, 2^16) for the range-extended inv_sqrt) without
+        # materialising 2^(max_bits + f) samples. The wavelet normalisation is then rescaled from
+        # 2^(depth_eff/2) to the 2^(depth/2) that the on-line protocol expects.
+        sample_bits = builtins.min(int(cfg.encoder.precision_bits), builtins.max(lut_bits - max_bits + 2, cls._MAX_BIOR_SAMPLE_BITS - max_bits))
+        sample_scale = 2 ** sample_bits
+        depth_eff = max_bits + sample_bits - lut_bits
         if negative_values:
-            xs = np.linspace(-max_element + 1.0 / scale, max_element, int(2 * max_element * scale))
+            xs = np.linspace(-max_element + 1.0 / sample_scale, max_element, int(2 * max_element * sample_scale))
             full = function(xs)
-            coeffs, *_ = pywt.wavedec(full, "bior2.2", level=depth)
+            coeffs, *_ = pywt.wavedec(full, "bior2.2", level=depth_eff)
             coeffs = np.stack(
                 [
                     np.roll(coeffs, -2)[: 2 ** (lut_bits + 1)],
@@ -298,16 +309,16 @@ class LookupTables:
                 ]
             )
         else:
-            xs = np.linspace(1.0 / scale, max_element, int(max_element * scale))
+            xs = np.linspace(1.0 / sample_scale, max_element, int(max_element * sample_scale))
             full = function(xs)
-            coeffs, *_ = pywt.wavedec(full, "bior2.2", level=depth)
+            coeffs, *_ = pywt.wavedec(full, "bior2.2", level=depth_eff)
             coeffs = np.stack(
                 [
                     np.roll(coeffs, -2)[: 2 ** lut_bits],
                     np.roll(coeffs, -3)[: 2 ** lut_bits],
                 ]
             )
-        arr_np = cls._to_int64_np((coeffs * scale) * (2 ** (depth * 0.5)))
+        arr_np = cls._to_int64_np((coeffs * scale) * (2 ** (depth - 0.5 * depth_eff)))
         if cpath is not None:
             cls._save_cached_lut(cpath, arr_np)
         arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
@@ -464,6 +475,17 @@ class LookupTables:
                 cfg.functions.inv_sqrt.bior_size_bits,
                 lambda x: np.reciprocal(np.sqrt(x)),
                 "inv_sqrt_bior",
+                device=device,
+            )
+        elif name.startswith("inv_sqrt_bior_s"):
+            # Window table for the range-extended inv_sqrt: T_e(v) = 2^(e/2) * v^(-1/2), so that
+            # x^(-1/2) = T_e(2^e x). Folding 2^(e/2) into the table keeps full output precision.
+            e = int(name[len("inv_sqrt_bior_s"):])
+            cls.generate_bior(
+                cfg.functions.inv_sqrt.lut_max_bits,
+                cfg.functions.inv_sqrt.bior_size_bits,
+                lambda x, _k=float(2 ** (e / 2)): _k * np.reciprocal(np.sqrt(x)),
+                name,
                 device=device,
             )
         elif name == "sin_haar":
@@ -1059,7 +1081,7 @@ def inv_sqrt(self):
     """Computes the inverse square root of the input."""
     method = cfg.functions.inv_sqrt.method
 
-    if method in ("haar", "bior", "tailored_haar"):
+    if method in ("haar", "bior", "bior_scaled", "tailored_haar"):
         luts = LookupTables(self.device)
         if method == "haar":
             truncation = (
@@ -1075,6 +1097,36 @@ def inv_sqrt(self):
                 - cfg.functions.inv_sqrt.bior_size_bits
             )
             return _eval_bior_lut(self, luts.get_lut("inv_sqrt_bior", self.device), truncation)
+        elif method == "bior_scaled":
+            # Range-extended 1/sqrt(x) from ONE bior(5,3) table T(v) over [0, 2^lut_max_bits):
+            #   x^{-1/2} = 2^{e/2} * T(2^e x)   for any public e,
+            # so we evaluate the same table (one batched LUT call, identical (J, j) for all copies)
+            # on x * 2^e for e in `range_scales` (descending), each copy covering a 2^e-shifted
+            # window of x, and select obliviously with FSS comparisons against the public
+            # thresholds 2^(lut_max_bits - e_k) that separate consecutive windows:
+            #   y = y_{e_0} + sum_k [x < t_k] * (y_{e_{k+1}} - y_{e_k}),  t_k = 2^(lut_max_bits - e_{k+1}).
+            # Scaling a share by a public power of two is free; the selector bits have precision 0,
+            # so the mux is a single Beaver round with no truncation. Cost: 1 batched LUT on
+            # len(scales) copies + 1 batched comparison (2 rounds) + 1 mux round.
+            scales = [int(e) for e in getattr(cfg.functions.inv_sqrt, "range_scales", [16, 8, 0])]
+            scales = sorted(set(scales), reverse=True)
+            max_bits = int(cfg.functions.inv_sqrt.lut_max_bits)
+            truncation = max_bits + cfg.encoder.precision_bits - cfg.functions.inv_sqrt.bior_size_bits
+            def _shl(arr, k):  # multiply a share by the public power of two 2^k: free, no truncation
+                return arr.from_shares(arr.share * (1 << k), precision=arr.precision, device=arr.device) if k else arr
+
+            if len(scales) == 1:
+                e = scales[0]
+                return _eval_bior_lut(_shl(self, e), luts.get_lut(f"inv_sqrt_bior_s{e}", self.device), truncation)
+            # Ascending order of e means descending x-windows: e_0 = 0 covers the largest x.
+            asc = sorted(scales)  # e.g. [0, 8, 16]
+            xs = prix.stack([_shl(self, e) for e in asc])
+            tables = jnp.stack([luts.get_lut(f"inv_sqrt_bior_s{e}", self.device) for e in asc])  # (K, 2, size)
+            ys = _eval_bior_lut(xs, tables, truncation)  # one batched LUT call, one table per window
+            thresholds = [float(2 ** (max_bits - asc[k + 1])) for k in range(len(asc) - 1)]
+            lt = prix.stack([self - t for t in thresholds]) < 0  # [x < t_k], precision 0
+            diffs = prix.stack([ys[k + 1] - ys[k] for k in range(len(asc) - 1)])
+            return ys[0] + (lt * diffs).sum(0)
         elif method == "tailored_haar":
             truncation_0 = (
                 cfg.functions.inv_sqrt.tailored_0_lut_max_bits

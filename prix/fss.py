@@ -960,6 +960,9 @@ def _wave_bior_r1_jit(
 ):
     c0_table = luts[0]
     c1_table = jnp.round((luts[1] - luts[0]) / float(1 << j_depth)).astype(DATATYPE)
+    if c0_table.ndim == 1:  # one shared table (size,) -> broadcast over N; else per-element (size, N)
+        c0_table = c0_table[:, None]
+        c1_table = c1_table[:, None]
 
     x_u = jax.lax.bitcast_convert_type(x_open, jnp.uint64)
     two_J_mask = jnp.uint64((1 << J) - 1)
@@ -971,8 +974,8 @@ def _wave_bior_r1_jit(
     p = grotto_segment_parities_jit(x_J, z_lo, s_dpf, cw_dpf, party_id, J, j_depth)
     v = p.astype(DATATYPE) if party_id == 0 else -p.astype(DATATYPE)
     u_sh = jnp.sum(v, axis=0)
-    a_ip_sh = jnp.sum(v * c1_table[:, None], axis=0)
-    b_ip_sh = jnp.sum(v * c0_table[:, None], axis=0)
+    a_ip_sh = jnp.sum(v * c1_table, axis=0)
+    b_ip_sh = jnp.sum(v * c0_table, axis=0)
 
     borrow_sh = dcf_eval_arith_jit(z_lo, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, party_id, j_depth)
     x_lsb_sh = r_lo_sh + (jnp.int64(1 << j_depth) * borrow_sh)
@@ -1004,6 +1007,9 @@ def _wave_bior_prob_r1_jit(
 ):
     c0_table = luts[0]
     c1_table = jnp.round((luts[1] - luts[0]) / float(1 << j_depth)).astype(DATATYPE)
+    if c0_table.ndim == 1:  # one shared table (size,) -> broadcast over N; else per-element (size, N)
+        c0_table = c0_table[:, None]
+        c1_table = c1_table[:, None]
 
     x_u = jax.lax.bitcast_convert_type(x_open, jnp.uint64)
     two_J_mask = jnp.uint64((1 << J) - 1)
@@ -1013,8 +1019,8 @@ def _wave_bior_prob_r1_jit(
     p = grotto_segment_parities_jit(x_J, z_lo, s_dpf, cw_dpf, party_id, J, 0)
     v = p.astype(DATATYPE) if party_id == 0 else -p.astype(DATATYPE)
     u_sh = jnp.sum(v, axis=0)
-    a_ip_sh = jnp.sum(v * c1_table[:, None], axis=0)
-    b_ip_sh = jnp.sum(v * c0_table[:, None], axis=0)
+    a_ip_sh = jnp.sum(v * c1_table, axis=0)
+    b_ip_sh = jnp.sum(v * c0_table, axis=0)
 
     return jnp.stack(
         [
@@ -1225,7 +1231,7 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
         probabilistic = cfg.encoder.lut_indexing == "wave_prob"
 
     luts_jax = to_jax(luts, device=x.device, dtype=DATATYPE)
-    size = int(luts_jax.shape[1])
+    size = int(luts_jax.shape[-1])
     J = int(round(np.log2(size)))
     if (1 << J) != size:
         raise ValueError(f"wave_bior_lut requires power-of-2 LUT size, got {size}")
@@ -1234,6 +1240,16 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
         raise ValueError(f"wave_bior_lut requires truncation > 0, got {j_depth}")
     shape = x.size()
     x_flat = x.share.reshape(-1)
+    if luts_jax.ndim == 3:
+        # Per-window tables: `luts` has shape (K, 2, size) and `x` has leading dimension K; every
+        # element of window k is looked up in table k. All windows share (J, j), so this is a
+        # single FSS evaluation with element-wise tables of shape (2, size, N).
+        K = int(luts_jax.shape[0])
+        if len(shape) == 0 or int(shape[0]) != K:
+            raise ValueError(f"wave_bior_lut: got {K} tables but input leading dimension {shape[:1]}")
+        n_per = int(x_flat.size) // K
+        idx = jnp.repeat(jnp.arange(K, dtype=jnp.int32), n_per)
+        luts_jax = jnp.transpose(luts_jax[idx], (1, 2, 0))  # (2, size, N)
     if x_flat.size == 0:
         return Array.from_shares(
             jnp.zeros(shape, dtype=DATATYPE),
