@@ -147,7 +147,7 @@ print("Output shape:", run_private_mlp())
 - [**PriX Technical Report / Paper (PDF)**](paper/prix_arxiv.pdf) ([LaTeX source](paper/main.tex)) — *"PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX"*.
 - [**Quickstart & CrypTen Migration Guide**](docs/quickstart.md) — Side-by-side CrypTen-to-PriX cheat sheet, arithmetic vs. binary secret sharing, and `TFP` vs. `TTP` providers.
 - [**MPC Approximation Modes & Configuration Reference**](docs/modes_and_configuration.md) — Deep dive into `"lut"`, `"poly"`, `"shaft"`, `"crypten"`, and `"fission"` modes and how to mix-and-match methods via `prix.cfg`.
-- [**Transports & Multi-Host Deployment**](docs/transports.md) — Shared memory vs. peer-to-peer TCP (with optional mutual TLS), running parties on separate machines, and creating certificates.
+- [**Transports & Multi-Host Deployment**](docs/transports.md) — Running across multiple terminals or multiple machines over peer-to-peer TCP (with optional mutual TLS), `TTP` / `fission` helper processes (`prix.serve`), LAN/WAN emulation (`tc netem`), and [`examples/multi_party_tcp.py`](examples/multi_party_tcp.py).
 - [**API Reference**](docs/api_reference.md) — Complete reference for top-level `prix` functions, `prix.Array` methods, and `prix.nn` neural network layers.
 
 ---
