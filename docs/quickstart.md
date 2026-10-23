@@ -19,7 +19,7 @@ pip install -U "jax[cuda12]" prix-jax
 
 ## 2. Side-by-Side: Migrating from CrypTen to PriX
 
-PriX preserves CrypTen's familiar entrypoints while running on JAX/XLA and supporting 4 built-in MPC approximation backends (`"lut"`, `"shaft"`, `"crypten"`, `"fission"`):
+PriX preserves CrypTen's familiar entrypoints while running on JAX/XLA and supporting 5 built-in MPC approximation backends (`"lut"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`):
 
 | Concept | CrypTen (PyTorch) | PriX (JAX/XLA) |
 |---|---|---|
@@ -67,9 +67,18 @@ Beaver multiplication triples, random bit shares, and wavelet LUT shares are gen
 - **`"TTP"` (Trusted Third Party)**: `MultiProcessLauncher` / `prix.run` automatically spawns a dedicated dealer process (`TTPServer`) that distributes correlated randomness to the MPC parties.
 
 ```python
-with prix.cfg.temp_override({"mpc.provider": "TTP"}):
-    out = prix.run(demo, world_size=2, mode="lut")
+def multiply():
+    x = prix.array([1.0, -2.0, 3.0], src=0)
+    y = prix.array([0.5, 4.0, -1.0], src=1)
+    return (x * y).reconstruct()
+
+prix.set_mode("lut")  # choose the preset first...
+with prix.cfg.temp_override({"mpc.provider": "TTP"}):  # ...then override individual settings
+    out = prix.run(multiply, world_size=2)  # no mode= here: mode= would reload the whole preset
 ```
+
+> [!NOTE]
+> Passing `mode=` (or `cfg_file=`) to `prix.run` / `run_multiprocess` reloads that preset in full for that run, which replaces earlier `prix.cfg` changes (your own `prix.cfg` is left unchanged afterwards). To combine a preset with your own overrides, call `prix.set_mode(...)` first, then apply the overrides, then call `prix.run` without `mode=`.
 
 ### C. Private Neural Networks (`prix.nn`)
 Define models using `prix.nn.Module` subclasses or `prix.nn.Sequential`, load weights via `.load_state_dict(...)` if desired, and call `.encrypt(src=0)` to secret-share all parameters:

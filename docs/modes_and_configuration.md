@@ -38,6 +38,9 @@ prix.set_mode("crypten")  # CrypTen classic approximations
 prix.set_mode("fission")  # Fission evaluator
 ```
 
+> [!WARNING]
+> Fission mode needs an evaluator process, which is only started when the run itself is launched in Fission mode (`prix.run(fn, mode="fission")`, or `evaluator_size>=1`). Switching to `"fission"` with `prix.set_mode` inside a run that was started without an evaluator makes later nonlinearities fail.
+
 ---
 
 ## 3. Mixing & Customizing Methods via `prix.cfg`
@@ -72,11 +75,48 @@ def hybrid_curl_shaft():
 | `encoder.trunc_method.prod` | `"egk"` \| `"crypten"` \| `"fission"` | Truncation protocol after private multiplications / matmuls. |
 | `encoder.trunc_method.lut` | `"egk"` \| `"crypten"` \| `"fission"` | Truncation protocol inside wavelet LUT interpolation. |
 | `mpc.provider` | `"TFP"` \| `"TTP"` | Correlated randomness dealer (`TrustedFirstParty` vs. `TrustedThirdParty`). |
-| `functions.exp.method` | `"bior"` \| `"haar"` \| `"limit"` \| `"fission"` | Exponential approximation (`iterations`, `bior_size_bits`, `lut_max_bits`). |
+| `functions.exp.method` | `"bior"` \| `"haar"` \| `"split"` \| `"limit"` \| `"poly"` \| `"fission"` | Exponential approximation (`iterations`, `bior_size_bits`, `lut_max_bits`). |
 | `functions.reciprocal.method` | `"bior"` \| `"haar"` \| `"NR"` \| `"fission"` | Reciprocal $1/x$ (`nr_iters`, `bior_size_bits`, `lut_max_bits`). |
 | `functions.inv_sqrt.method` | `"bior"` \| `"haar"` \| `"NR"` \| `"fission"` | Inverse square root $1/\sqrt{x}$ used in `LayerNorm` and `RMSNorm`. |
 | `functions.gelu.method` | `"bior-lut-only"` \| `"fourier"` \| `"erf"` \| `"poly"` \| `"fission"` | GeLU activation (`fs_period`, `fs_terms` for SHAFT Fourier; `bior_size_bits` for Curl LUT). |
-| `functions.silu.method` | `"bior-lut-only"` \| `"fourier"` \| `"sigmoid"` \| `"fission"` | SiLU / Swish activation (`fs_period`, `fs_terms` for SHAFT Fourier). |
-| `functions.sigmoid_tanh.method` | `"bior"` \| `"fourier"` \| `"reciprocal"` \| `"chebyshev"` \| `"fission"` | Sigmoid and Tanh activations. |
+| `functions.silu.method` | `"bior-lut-only"` \| `"fourier"` \| `"sigmoid"` \| `"poly"` \| `"fission"` | SiLU / Swish activation (`fs_period`, `fs_terms` for SHAFT Fourier). |
+| `functions.sigmoid_tanh.method` | `"bior"` \| `"fourier"` \| `"reciprocal"` \| `"chebyshev"` \| `"poly"` \| `"fission"` | Sigmoid and Tanh activations. |
 | `functions.softmax.method` | `"approximation"` \| `"ode"` \| `"fission"` | Softmax (`"ode"` uses SHAFT Forward-Euler ODE with `ode_iter_num`, `ode_ub`, `ode_lb`). |
 | `functions.layernorm.method` | `"approximation"` \| `"fission"` | LayerNorm / RMSNorm normalization method. |
+
+---
+
+## 5. Accuracy and Valid Input Ranges
+
+Each mode's approximations are only accurate on a limited input range, and **inputs outside that range are not clamped or flagged: they silently return wrong values.** The table shows the measured error of each function as shipped (default config of each mode, 2 parties, 10 repeats, compared with exact float64 results). Each cell is *median absolute error / typical worst error within one run*; ⚠ marks runs where some output was off by more than 1.
+
+| Function (tested inputs) | `crypten` | `poly` | `shaft` | `lut` (default) | `fission` |
+|---|---:|---:|---:|---:|---:|
+| exp, x ≤ 0 ([−8, 0]) | 4e-4 / 1e-3 | 2e-3 / 0.011 | 4e-4 / 2e-3 | 8e-3 / **0.66** | 4e-6 |
+| exp, mixed sign ([−4, 2]) | 1e-3 / 0.056 | 3e-3 / 0.011 | 1e-3 / 0.069 | 0.11 / **7.4 ⚠** | 5e-6 |
+| log ([0.1, 50]) | 0.020 / 0.033 | 0.020 / 0.033 | 0.020 / 0.032 | 1e-5 / **2.3 ⚠** | 4e-6 |
+| reciprocal ([0.1, 50]) | 8e-5 / 6e-4 | 9e-5 / 6e-4 | 9e-5 / 6e-4 | 8e-6 / **2.4e4 ⚠** | 3e-6 |
+| inv_sqrt ([0.05, 50]) | 2e-5 / 0.24 | 2e-5 / 0.24 | 2e-5 / 0.24 | **0.76 / 145 ⚠** | 4e-6 |
+| sigmoid ([−8, 8]) | 2e-4 / 2e-3 | 1e-3 / 9e-3 | 0.019 / 0.50 | 5e-5 / 4e-3 | 4e-6 |
+| tanh ([−6, 6]) | 1e-4 / 4e-3 | 1e-3 / 0.018 | 0.035 / 0.093 | 2e-5 / 9e-3 | 3e-6 |
+| erf ([−4, 4]) | **2e3 / 4e6 ⚠** | 2e-3 / 0.015 | 0.027 / 0.071 | 5e-5 / 0.011 | 3e-6 |
+| GeLU ([−6, 6]) | **7e3 / 6e7 ⚠** | 4e-4 / 4e-3 | 4e-4 / 4e-3 | 2e-3 / **6.0 ⚠** | 3e-6 |
+| SiLU ([−8, 8]) | 6e-4 / 2e-3 | 5e-3 / 0.015 | 6e-4 / 5e-3 | 3e-3 / 0.30 | 4e-6 |
+| softmax (N(0, 2) logits) | 1e-4 / 4e-3 | 6e-4 / 6e-3 | 3e-4 / 0.052 | 2e-3 / 0.16 | 4e-6 |
+| LayerNorm (N(0.5, 2) inputs) | 9e-6 / 9e-5 | 9e-6 / 8e-5 | 1e-5 / 8e-5 | **0.55 / 19 ⚠** | 4e-6 |
+
+**Known limits:**
+- **`lut` (Curl defaults, identical to the Curl reference):**
+  - `inv_sqrt` only covers inputs in [0, 2) (`lut_max_bits: 1`), so **LayerNorm is wrong whenever a row's variance is 2 or more**.
+  - GeLU only covers |x| < 4 (`lut_max_bits: 2`).
+  - `exp` assumes non-positive inputs (`all_neg: True`), so positive inputs return about 0. It is coarse near 0 (error up to about 0.66).
+  - Reciprocal and log are inaccurate for inputs near 0.1.
+  - About 3–4% of softmax calls return garbage outputs (also seen in the Curl reference).
+  - Widen a function's range by raising its `lut_max_bits` (and `bior_size_bits` for resolution) via `prix.cfg.temp_override`.
+- **`crypten`:** erf and GeLU use an 8-term Taylor series that diverges for |x| above about 3, the same as in CrypTen.
+- **`shaft`:** the Fourier series are periodic, so sigmoid and tanh ring near the edge of the period (|x| close to 8 with the defaults).
+- **`poly`:** accurate within about 0.02 on the fitted intervals. `exp` is fitted on [−5, 2.5] and returns 0 below −5.
+- **`fission`:** exact to float32 precision. The evaluator sees the permuted plaintext values.
+
+Regenerate this table with [`benchmarks/accuracy_sweep.py`](../benchmarks/accuracy_sweep.py) after changing a configuration (raw results: [`benchmarks/results/accuracy_sweep.json`](../benchmarks/results/accuracy_sweep.json)).
+

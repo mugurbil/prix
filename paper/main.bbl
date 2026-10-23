@@ -13,6 +13,14 @@ James Bradbury, Roy Frostig, Peter Hawkins, Matthew~James Johnson, Chris Leary,
 \newblock {JAX}: Composable transformations of {P}ython+{N}um{P}y programs.
 \newblock \url{http://github.com/jax-ml/jax}, 2018.
 
+\bibitem{damgard2006unconditionally}
+Ivan Damg{\aa}rd, Matthias Fitzi, Eike Kiltz, Jesper~Buus Nielsen, and Tomas
+  Toft.
+\newblock Unconditionally secure constant-rounds multi-party computation for
+  equality, comparison, bits and exponentiation.
+\newblock In {\em Theory of Cryptography Conference (TCC)}, volume 3876 of {\em
+  Lecture Notes in Computer Science}, pages 285--304, 2006.
+
 \bibitem{dong2023puma}
 Ye~Dong, Wen jie Lu, Yancheng Zheng, Haoqi Wu, Derun Zhao, Jin Tan, Zhicong
   Huang, Cheng Hong, Tao Wei, and Wenguang Chen.
@@ -38,11 +46,26 @@ Charles Gouert, Mehmet Ugurbil, Dimitris Mouris, Miguel de~Vega, and
 \newblock Cryptology ePrint Archive, Paper 2024/866,
   \url{https://eprint.iacr.org/2024/866}.
 
+\bibitem{gupta2024sigma}
+Kanav Gupta, Neha Jawalkar, Ananta Mukherjee, Nishanth Chandran, Divya Gupta,
+  Ashish Panwar, and Rahul Sharma.
+\newblock {SIGMA}: Secure {GPT} inference with function secret sharing.
+\newblock {\em Proceedings on Privacy Enhancing Technologies (PoPETs)},
+  2024(4):61--79, 2024.
+
 \bibitem{hao2022iron}
 Meng Hao, Hongwei Li, Hanxiao Chen, Pengzhi Xing, Guowen Xu, and Tianwei Zhang.
 \newblock Iron: Private inference on transformers.
 \newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
   volume~35, pages 15718--15731, 2022.
+
+\bibitem{lu2025bumblebee}
+Wen jie Lu, Zhicong Huang, Zhen Gu, Jingyu Li, Jian Liu, Cheng Hong, Kui Ren,
+  Tao Wei, and WenGuang Chen.
+\newblock {BumbleBee}: Secure two-party inference framework for large
+  transformers.
+\newblock In {\em Network and Distributed System Security Symposium (NDSS)},
+  2025.
 
 \bibitem{kei2025shaft}
 Andes Y.~L. Kei and Sherman S.~M. Chow.
@@ -53,6 +76,12 @@ Andes Y.~L. Kei and Sherman S.~M. Chow.
   \url{https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/};
   Cryptology ePrint Archive, Paper 2025/2324,
   \url{https://eprint.iacr.org/2025/2324}.
+
+\bibitem{keller2020mpspdz}
+Marcel Keller.
+\newblock {MP-SPDZ}: A versatile framework for multi-party computation.
+\newblock In {\em ACM SIGSAC Conference on Computer and Communications Security
+  (CCS)}, pages 1575--1590, 2020.
 
 \bibitem{knott2021crypten}
 Brian Knott, Shobha Venkataraman, Awni Hannun, Shubho Sengupta, Mark Ibrahim,
@@ -67,6 +96,13 @@ Peter~M. Kogge and Harold~S. Stone.
   recurrence equations.
 \newblock {\em IEEE Transactions on Computers}, C-22(8):786--793, 1973.
 
+\bibitem{li2023mpcformer}
+Dacheng Li, Rulin Shao, Hongyi Wang, Han Guo, Eric~P. Xing, and Hao Zhang.
+\newblock {MPCFormer}: Fast, performant and private transformer inference with
+  {MPC}.
+\newblock In {\em International Conference on Learning Representations (ICLR)},
+  2023.
+
 \bibitem{li2024nimbus}
 Zhengyi Li, Kang Yang, Jin Tan, Wen jie Lu, Haoqi Wu, Xiao Wang, Yu~Yu, Derun
   Zhao, Yancheng Zheng, Minyi Guo, and Jingwen Leng.
@@ -75,12 +111,27 @@ Zhengyi Li, Kang Yang, Jin Tan, Wen jie Lu, Haoqi Wu, Xiao Wang, Yu~Yu, Derun
   volume~37, 2024.
 \newblock \url{https://arxiv.org/abs/2411.15707}.
 
+\bibitem{ma2023spu}
+Junming Ma, Yancheng Zheng, Jun Feng, Derun Zhao, Haoqi Wu, Wenjing Fang, Jin
+  Tan, Chaofan Yu, Benyu Zhang, and Lei Wang.
+\newblock {SecretFlow-SPU}: A performant and user-friendly framework for
+  privacy-preserving machine learning.
+\newblock In {\em USENIX Annual Technical Conference (USENIX ATC)}, pages
+  17--33, 2023.
+
 \bibitem{mohassel2017secureml}
 Payman Mohassel and Yupeng Zhang.
 \newblock {SecureML}: A system for scalable privacy-preserving machine
   learning.
 \newblock In {\em IEEE Symposium on Security and Privacy (S\&P)}, pages 19--38,
   2017.
+
+\bibitem{pang2024bolt}
+Qi~Pang, Jinhao Zhu, Helen M{\"o}llering, Wenting Zheng, and Thomas Schneider.
+\newblock {BOLT}: Privacy-preserving, accurate and efficient inference for
+  transformers.
+\newblock In {\em IEEE Symposium on Security and Privacy (S\&P)}, pages
+  4753--4771, 2024.
 
 \bibitem{rathee2020cryptflow2}
 Deevashwer Rathee, Mayank Rathee, Nishant Kumar, Nishanth Chandran, Divya
@@ -106,6 +157,12 @@ Manuel~B. Santos, Dimitris Mouris, Mehmet Ugurbil, Stanislaw Jarecki, Jos{\'e}
 \newblock Cryptology ePrint Archive, Paper 2024/1127,
   \url{https://eprint.iacr.org/2024/1127}.
 
+\bibitem{tan2021cryptgpu}
+Sijun Tan, Brian Knott, Yuan Tian, and David~J. Wu.
+\newblock {CryptGPU}: Fast privacy-preserving machine learning on the {GPU}.
+\newblock In {\em IEEE Symposium on Security and Privacy (S\&P)}, pages
+  1021--1038, 2021.
+
 \bibitem{ugurbil2025fission}
 Mehmet Ugurbil, Dimitris Mouris, Manuel~B. Santos, Jos{\'e} Cabrero-Holgueras,
   Miguel de~Vega, and Shubho Sengupta.
@@ -122,5 +179,10 @@ Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones,
 \newblock Attention is all you need.
 \newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
   volume~30, 2017.
+
+\bibitem{watson2022piranha}
+Jean-Luc Watson, Sameer Wagh, and Raluca~Ada Popa.
+\newblock Piranha: A {GPU} platform for secure computation.
+\newblock In {\em USENIX Security Symposium}, pages 827--844, 2022.
 
 \end{thebibliography}

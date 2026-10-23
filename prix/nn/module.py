@@ -496,6 +496,62 @@ class MatMul(Module):
         return x[0].matmul(x[1])
 
 
+class MultiheadAttention(Module):
+    """
+    Multi-head scaled dot-product attention over (batch, seq, embed_dim) inputs.
+
+    Mirrors the core of ``torch.nn.MultiheadAttention`` with ``batch_first=True``, with two
+    differences: ``forward`` returns only the attention output (attention weights are not
+    returned), and ``attn_mask`` must be a public additive mask broadcastable to
+    (batch, num_heads, query_len, key_len). Dropout is not supported (inference only).
+    """
+
+    def __init__(self, embed_dim, num_heads, dropout=0.0, bias=True, batch_first=True):
+        super().__init__()
+        if embed_dim % num_heads != 0:
+            raise ValueError(f"embed_dim ({embed_dim}) must be divisible by num_heads ({num_heads})")
+        if not batch_first:
+            raise NotImplementedError("only batch_first=True (batch, seq, embed_dim) inputs are supported")
+        if dropout:
+            raise NotImplementedError("attention dropout is not supported")
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
+        self.q_proj = Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = Linear(embed_dim, embed_dim, bias=bias)
+
+    def _split_heads(self, x):
+        b, t, _ = x.shape
+        shape = (b, t, self.num_heads, self.head_dim)
+        if isinstance(x, prix.Array):
+            return x.reshape(*shape).transpose(1, 2)
+        return jnp.swapaxes(jnp.reshape(x, shape), 1, 2)
+
+    def forward(self, query, key=None, value=None, attn_mask=None):
+        key = query if key is None else key
+        value = key if value is None else value
+        b, t, _ = query.shape
+        q = self._split_heads(self.q_proj(query))
+        k = self._split_heads(self.k_proj(key))
+        v = self._split_heads(self.v_proj(value))
+        scale = self.head_dim ** -0.5
+        if isinstance(q, prix.Array):
+            scores = q.matmul(k.transpose(-2, -1)) * scale
+            if attn_mask is not None:
+                scores = scores + attn_mask
+            ctx = scores.softmax(dim=-1).matmul(v)
+            ctx = ctx.transpose(1, 2).reshape(b, t, self.embed_dim)
+        else:
+            scores = jnp.matmul(q, jnp.swapaxes(k, -2, -1)) * scale
+            if attn_mask is not None:
+                scores = scores + attn_mask
+            ctx = jnp.matmul(jax.nn.softmax(scores, axis=-1), v)
+            ctx = jnp.reshape(jnp.swapaxes(ctx, 1, 2), (b, t, self.embed_dim))
+        return self.out_proj(ctx)
+
+
 class Embedding(Module):
     """Secret-shared embedding table evaluated via one-hot Beaver lookup."""
 
@@ -657,7 +713,7 @@ class ReLU(Module):
         super().__init__()
 
     def forward(self, x):
-        return x.relu()
+        return x.relu() if isinstance(x, prix.Array) else jax.nn.relu(x)
 
 
 class GELU(Module):
@@ -665,7 +721,7 @@ class GELU(Module):
         super().__init__()
 
     def forward(self, x):
-        return x.gelu()
+        return x.gelu() if isinstance(x, prix.Array) else jax.nn.gelu(x, approximate=False)
 
 
 class SiLU(Module):
@@ -673,7 +729,7 @@ class SiLU(Module):
         super().__init__()
 
     def forward(self, x):
-        return x.silu()
+        return x.silu() if isinstance(x, prix.Array) else jax.nn.silu(x)
 
 
 SILU = SiLU
@@ -684,7 +740,7 @@ class Tanh(Module):
         super().__init__()
 
     def forward(self, x):
-        return x.tanh()
+        return x.tanh() if isinstance(x, prix.Array) else jnp.tanh(x)
 
 
 class Hardtanh(Module):
@@ -694,7 +750,9 @@ class Hardtanh(Module):
         self.max_val = max_val
 
     def forward(self, x):
-        return x.hardtanh(self.min_val, self.max_val)
+        if isinstance(x, prix.Array):
+            return x.hardtanh(self.min_val, self.max_val)
+        return jnp.clip(x, self.min_val, self.max_val)
 
 
 class ReLU6(Hardtanh):
@@ -704,7 +762,7 @@ class ReLU6(Hardtanh):
 
 class Sigmoid(Module):
     def forward(self, x):
-        return x.sigmoid()
+        return x.sigmoid() if isinstance(x, prix.Array) else jax.nn.sigmoid(x)
 
 
 class Softmax(Module):
@@ -713,7 +771,7 @@ class Softmax(Module):
         self.dim = dim
 
     def forward(self, x):
-        return x.softmax(self.dim)
+        return x.softmax(self.dim) if isinstance(x, prix.Array) else jax.nn.softmax(x, axis=self.dim)
 
 
 class LogSoftmax(Module):
@@ -722,7 +780,7 @@ class LogSoftmax(Module):
         self.dim = dim
 
     def forward(self, x):
-        return x.log_softmax(self.dim)
+        return x.log_softmax(self.dim) if isinstance(x, prix.Array) else jax.nn.log_softmax(x, axis=self.dim)
 
 
 class Dropout(Module):

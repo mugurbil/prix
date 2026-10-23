@@ -799,6 +799,13 @@ def exp(self):
         is_neg, gt_neg5 = ltz_pair[0], ltz_pair[1]
         in_pos = 1 - is_neg
         in_neg = is_neg + gt_neg5 - 1
+        trunc_method = cfg.encoder.trunc_method.prod
+        if trunc_method not in ("crypten", "egk"):
+            # The fused combination below truncates by hand; other truncation schemes (e.g.
+            # Fission's deferred truncation) go through the generic polynomial path.
+            poly_pos = self.polynomial(pos_coeffs) + pos_c0
+            poly_neg = self.polynomial(neg_coeffs) + neg_c0
+            return (prix.stack([in_pos, in_neg]) * prix.stack([poly_pos, poly_neg])).sum(0)
         x2 = self.square()
         x1_x2 = prix.stack([self, x2])
         terms = prix.cat([x1_x2, x1_x2 * x2])
@@ -812,10 +819,9 @@ def exp(self):
         both.share = jnp.sum(jnp.expand_dims(terms.share, axis=0) * coeffs_enc, axis=1)
         both.precision = terms.precision
         if both.precision > 0:
-            trunc_method = cfg.encoder.trunc_method.prod
             if trunc_method == "crypten":
                 both = both.div_(2 ** both.precision)
-            elif trunc_method == "egk":
+            else:
                 both = both.egk_trunc_pr(62, both.precision)
         c0_bcast = jnp.reshape(jnp.asarray([pos_c0, neg_c0], dtype=jnp.float32), (2,) + (1,) * self.dim())
         both = both + c0_bcast

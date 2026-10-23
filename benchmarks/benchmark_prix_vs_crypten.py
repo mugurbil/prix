@@ -5,7 +5,7 @@ Head-to-head benchmark: CrypTen (PyTorch) vs PriX (JAX), on CPU or GPU.
 The PyTorch baseline is the CrypTen-based reference implementation from
 https://github.com/jimouris/curl (a CrypTen fork that adds Curl wavelet LUTs and
 Fission evaluators), augmented with SHAFT (https://github.com/andeskyl/SHAFT,
-NDSS 2025). Both frameworks are benchmarked in four approximation modes:
+NDSS 2025). Both frameworks are benchmarked in five approximation modes:
 
   crypten  - CrypTen's original approximations (Newton-Raphson, limit exp,
              Taylor erf, ...) with CrypTen truncation  (configs/approximations.yaml)

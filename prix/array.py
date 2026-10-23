@@ -102,6 +102,11 @@ class Array:
     sharing (`ptype="arithmetic"`) and XOR binary sharing (`ptype="binary"`).
     """
 
+    # Make NumPy defer to our reflected operators (np_array @ x, np_array + x, ...).
+    # Without this, NumPy treats an Array as a sequence (via __len__/__getitem__) and
+    # applies the operator element by element, which is wrong and can desync parties.
+    __array_ufunc__ = None
+
     def __init__(
         self,
         array=None,
@@ -560,7 +565,9 @@ class Array:
                     elif method == "egk":
                         return result.egk_trunc_pr(62, result.precision)
                     elif method == "fission":
-                        result.precision = result.precision + y.precision
+                        # Use the precision of the operand actually multiplied: under fission,
+                        # y may have been truncated above (y_arg), so y.precision can be stale.
+                        result.precision = result.precision + y_arg.precision
                         return result
                     else:
                         raise ValueError(f"Unsupported truncation method {method}")
@@ -607,16 +614,18 @@ class Array:
         return self._arithmetic_function_(y, "mul")
 
     def matmul(self, y):
-        return self._arithmetic_function(y, "matmul")
+        return _matmul_promoting_1d(self, y, lambda a, b: a._arithmetic_function(b, "matmul"))
 
     def __matmul__(self, other):
-        if isinstance(other, Array):
-            return self.matmul(other)
-        return self._arithmetic_function(other, "matmul")
+        return self.matmul(other)
 
     def __rmatmul__(self, other):
         if isinstance(other, Array):
             return other.matmul(self)
+        return _matmul_promoting_1d(other, self, lambda a, b: b._public_rmatmul(a))
+
+    def _public_rmatmul(self, other):
+        """Public `other` @ private `self` (both at least 2-D)."""
         # Public @ Private:
         result = self.clone()
         if (
@@ -1336,6 +1345,35 @@ def _beaver_mul_combine(c_share, eps, delta, a_share, b_share, trunc_div: int, i
     if trunc_div > 1:
         res = jax.lax.div(res, jnp.int64(trunc_div))
     return res
+
+
+def _ndim(x):
+    if isinstance(x, Array):
+        return x.dim()
+    return np.ndim(x)
+
+
+def _matmul_promoting_1d(a, b, fn):
+    """
+    Applies matmul `fn(a, b)` with numpy semantics for 1-D operands: a 1-D left operand is
+    treated as a row vector and a 1-D right operand as a column vector, and the added
+    dimensions are removed from the result. The underlying kernels require >= 2-D operands.
+    """
+    a_dim, b_dim = _ndim(a), _ndim(b)
+    if a_dim >= 2 and b_dim >= 2:
+        return fn(a, b)
+    if a_dim == 0 or b_dim == 0:
+        raise ValueError("matmul does not accept 0-d (scalar) operands; use * instead")
+    if a_dim == 1:
+        a = a.unsqueeze(0) if isinstance(a, Array) else np.expand_dims(np.asarray(a), 0)
+    if b_dim == 1:
+        b = b.unsqueeze(-1) if isinstance(b, Array) else np.expand_dims(np.asarray(b), -1)
+    out = fn(a, b)
+    if b_dim == 1:
+        out = out.squeeze(-1)
+    if a_dim == 1:
+        out = out.squeeze(-1 if b_dim == 1 else -2)
+    return out
 
 
 @functools.partial(jax.jit, static_argnames=("trunc_div", "is_rank0"))

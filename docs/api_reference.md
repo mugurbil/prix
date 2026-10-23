@@ -38,7 +38,7 @@
   Secret-shared uniform random tensor in $[0, 1)$.
 - **`prix.randn(*sizes, device=None)`**
   Secret-shared standard normal $\mathcal{N}(0, 1)$ random tensor (Box–Muller).
-- **`prix.bernoulli(tensor, device=None)`**
+- **`prix.bernoulli(tensor)`**
   Secret-shared Bernoulli draws with success probabilities `tensor`.
 - **`prix.cat(tensors, dim=0)`** / **`prix.stack(tensors, dim=0)`**
   Concatenates or stacks a list of `prix.Array` tensors along `dim`.
@@ -61,8 +61,8 @@
 
 ### Nonlinear Activations & Math Functions
 - **Elementwise Math**: `exp()`, `log()`, `reciprocal()`, `sqrt()`, `inv_sqrt()`, `abs()`, `sign()`, `cos()`, `sin()`, `cossin()`, `erf()`, `polynomial(coeffs)`
-- **Activations**: `relu()`, `gelu()`, `silu()`, `sigmoid()`, `tanh()`, `hardtanh(min_val, max_val)`, `softmax(dim=-1)`, `log_softmax(dim=-1)`
-- **Normalizations**: `layernorm(weight=None, bias=None, eps=1e-6)`, `rmsnorm(weight=None, eps=1e-6)`
+- **Activations**: `relu()`, `gelu()`, `silu()`, `sigmoid()`, `tanh()`, `hardtanh(min_value=-1, max_value=1)`, `softmax(dim=-1)`, `log_softmax(dim=-1)`
+- **Normalizations**: `layernorm(weight=None, bias=None, eps=1e-5)` (for RMSNorm use `nn.RMSNorm`)
 - **Comparisons & Extremes**: `>`, `>=`, `<`, `<=`, `==`, `!=`, `max(dim=None, keepdim=False)`, `min(dim=None, keepdim=False)`, `argmax(dim=None, keepdim=False)`, `argmin(dim=None, keepdim=False)`
 
 ### Shape & Indexing Operations
@@ -76,8 +76,10 @@ All modules inherit from `prix.nn.Module` and support `.encrypt(src=0)`, `.decry
 
 - **Containers**: `nn.Module`, `nn.Sequential`, `nn.ModuleList`, `nn.ModuleDict`
 - **Linear & Embeddings**: `nn.Linear(in_features, out_features, bias=True)`, `nn.Embedding(num_embeddings, embedding_dim)`
-- **Convolutions & Pooling**: `nn.Conv1d`, `nn.Conv2d`, `nn.AvgPool2d`, `nn.MaxPool2d`, `nn.AdaptiveAvgPool2d`, `nn.Flatten`
-- **Normalizations**: `nn.LayerNorm(normalized_shape, eps=1e-5)`, `nn.RMSNorm(normalized_shape, eps=1e-6)`, `nn.BatchNorm1d`, `nn.BatchNorm2d`
-- **Attention**: `nn.MultiheadAttention(embed_dim, num_heads, dropout=0.0, bias=True)`
-- **Activations**: `nn.ReLU`, `nn.GELU`, `nn.SiLU`, `nn.Sigmoid`, `nn.Tanh`, `nn.Hardtanh`, `nn.Softmax(dim=-1)`, `nn.LogSoftmax(dim=-1)`
-- **Losses**: `nn.MSELoss`, `nn.L1Loss`, `nn.BCELoss`, `nn.BCEWithLogitsLoss`, `nn.CrossEntropyLoss`
+- **Convolutions & Pooling**: `nn.Conv1d`, `nn.Conv2d`, `nn.AvgPool2d`, `nn.MaxPool2d`, `nn.AdaptiveAvgPool2d`, `nn.AdaptiveMaxPool2d`
+- **Normalizations**: `nn.LayerNorm(normalized_shape, eps=1e-5, bias=True)`, `nn.RMSNorm(dim, eps=1e-5)`
+- **Attention**: `nn.MultiheadAttention(embed_dim, num_heads, bias=True)`: `forward(query, key=None, value=None, attn_mask=None)` takes `(batch, seq, embed_dim)` inputs and returns only the attention output; `attn_mask` is a public additive mask. Inference only (no attention dropout).
+- **Activations**: `nn.ReLU`, `nn.ReLU6`, `nn.GELU`, `nn.SiLU`, `nn.Sigmoid`, `nn.Tanh`, `nn.Hardtanh`, `nn.Softmax(dim=-1)`, `nn.LogSoftmax(dim=-1)`
+- **Other**: `nn.Identity`, `nn.Dropout`, `nn.MatMul`, `nn.Parameter`
+
+Layers also accept plaintext NumPy/JAX arrays (computed exactly), which gives a plaintext reference for checking MPC accuracy with the same weights. Losses, `Flatten` and `BatchNorm` are not provided.

@@ -128,7 +128,11 @@ class MultiProcessLauncher:
         if mode is not None and cfg_file is None:
             cfg_file = mode
 
+        # Loading a preset for this run must not change the caller's global config
+        # (otherwise e.g. run(..., mode="fission") would leave later runs in fission mode).
+        caller_config = None
         if cfg_file is not None:
+            caller_config = copy.deepcopy(object.__getattribute__(cfg, "config"))
             cfg.load_config(cfg_file)
 
         if evaluator_size == 0 and getattr(cfg.encoder.trunc_method, "prod", None) == "fission":
@@ -138,18 +142,25 @@ class MultiProcessLauncher:
         self.start_method = _resolve_start_method(start_method)
         ctx = multiprocessing.get_context(self.start_method)
         cfg_snapshot = _config_snapshot()
+        init_ttp = cfg.mpc.provider == "TTP"
+        if caller_config is not None:
+            # Children receive cfg_snapshot explicitly, so the caller's config can be restored now.
+            cfg.set_config(caller_config)
         # Non-fork children can't inherit objects, so the user function and arguments are
         # serialized (cloudpickle supports functions defined in notebooks / __main__).
         pack = (lambda obj: obj) if self.start_method == "fork" else _dumps
         run_process_fn = pack(run_process_fn)
 
-        init_ttp = cfg.mpc.provider == "TTP"
         ttp_count = 1 if init_ttp else 0
         total_ranks = world_size + ttp_count + evaluator_size
 
         mailbox = [ctx.Queue() for _ in range(total_ranks)]
         barrier = ctx.Barrier(world_size)
-        self._result_queue = ctx.Queue()
+        # Rank 0 sends its return value over a one-way pipe. The parent reads it while it is
+        # still waiting on the processes (see join), so large results can't deadlock the way
+        # a multiprocessing.Queue does when the parent only reads it after joining.
+        self._result_recv, self._result_send = ctx.Pipe(duplex=False)
+        self._result_received = False
         self.return_value = None
         if world_size == 2:
             shm_elems = InProcessCommunicator.SHM_SLOT_ELEMS
@@ -162,7 +173,7 @@ class MultiProcessLauncher:
         # Keep the IPC primitives alive in the parent: Process.start() drops its reference
         # to `args`, and garbage-collecting a Queue/Barrier unlinks its named semaphores
         # before 'spawn'/'forkserver' children have attached to them.
-        self._ipc_refs = (mailbox, barrier, shared)
+        self._ipc_refs = (mailbox, barrier, shared, self._result_send)
 
         self.processes = []
         self.ttp_process = None
@@ -192,7 +203,7 @@ class MultiProcessLauncher:
                     new_args,
                     proc_device,
                     cfg_file,
-                    self._result_queue if rank == 0 else None,
+                    self._result_send if rank == 0 else None,
                     shared,
                 ),
             )
@@ -288,11 +299,14 @@ class MultiProcessLauncher:
                 ret = run_process_fn(*call_args, **call_kwargs)
             else:
                 ret = run_process_fn(fn_args)
-            if result_queue is not None and ret is not None:
+            if result_queue is not None:
                 try:
-                    result_queue.put(_to_host_return_value(ret))
-                except Exception:
-                    pass
+                    result_queue.send(_to_host_return_value(ret))
+                except Exception as e:  # noqa: BLE001
+                    logging.warning(f"PriX: could not send rank 0's return value to the caller: {e}")
+                    result_queue.send(None)
+                finally:
+                    result_queue.close()
         finally:
             if rank < world_size and prix.comm.is_initialized():
                 prix.uninit()
@@ -304,6 +318,15 @@ class MultiProcessLauncher:
             process.start()
         for process in self.eval_processes:
             process.start()
+        # Drop the parent's copy of the send end so a crashed rank 0 shows up as EOF.
+        self._result_send.close()
+
+    def _receive_result(self):
+        try:
+            self.return_value = self._result_recv.recv()
+        except (EOFError, OSError):
+            pass
+        self._result_received = True
 
     def join(self, timeout=None):
         """Waits for all MPC parties. If any party exits with a non-zero code,
@@ -311,12 +334,23 @@ class MultiProcessLauncher:
         never leave the others blocked forever) and a RuntimeError is raised."""
         deadline = None if timeout is None else time.monotonic() + timeout
         pending = list(self.processes)
+        helpers = [p for p in [self.ttp_process] + self.eval_processes if p is not None]
         while pending:
             remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-            ready = multiprocessing.connection.wait([p.sentinel for p in pending], timeout=remaining)
+            waitables = [p.sentinel for p in pending] + [h.sentinel for h in helpers if h.is_alive()]
+            if not self._result_received:
+                waitables.append(self._result_recv)
+            ready = multiprocessing.connection.wait(waitables, timeout=remaining)
             if not ready:
                 self.terminate()
                 raise TimeoutError(f"MPC parties did not finish within {timeout}s")
+            if self._result_recv in ready:
+                self._receive_result()
+            for helper in [h for h in helpers if h.sentinel in ready]:
+                helper.join()
+                if helper.exitcode not in (0, None):
+                    self.terminate()
+                    raise RuntimeError(f"{helper.name} exited with non-zero exit code {helper.exitcode}")
             for process in [p for p in pending if p.sentinel in ready]:
                 process.join()
                 pending.remove(process)
@@ -329,12 +363,9 @@ class MultiProcessLauncher:
             self.ttp_process.join(timeout=2.0)
         for process in self.eval_processes:
             process.join(timeout=2.0)
+        if not self._result_received and self._result_recv.poll(0):
+            self._receive_result()
         self.terminate()
-        try:
-            if not self._result_queue.empty():
-                self.return_value = self._result_queue.get_nowait()
-        except Exception:
-            pass
         return self.return_value
 
     def terminate(self):
