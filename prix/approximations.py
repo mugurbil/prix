@@ -1233,6 +1233,7 @@ def sigmoid(self):
         ltz, check, neg_part = _ltz_and_abs_lt(
             self, 2 ** cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits - 1, return_neg_part=True
         )
+        sgn = 1 - 2 * ltz
         abs_val = self - 2 * neg_part
         if method == "haar":
             st_truncation = (

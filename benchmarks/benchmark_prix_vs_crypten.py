@@ -122,6 +122,15 @@ def _deep_merge(base, override):
     return out
 
 
+def _shared_keys(src, ref):
+    """The part of nested dict `src` whose keys also exist in `ref`."""
+    out = {}
+    for k, v in src.items():
+        if k in ref:
+            out[k] = _shared_keys(v, ref[k]) if isinstance(v, dict) and isinstance(ref[k], dict) else v
+    return out
+
+
 def _merged_config(root, cfg_name, tmp_dir, tag, fallback_root=None):
     """default.yaml <- mode yaml, provider forced to TFP; written to tmp_dir."""
     import yaml
@@ -134,6 +143,16 @@ def _merged_config(root, cfg_name, tmp_dir, tag, fallback_root=None):
     with open(mode_cfg_path) as f:
         mode = yaml.safe_load(f)
     merged = _deep_merge(base, mode)
+    if fallback_root is not None:
+        # CrypTen side: use PriX's value for every setting both merged configs define, so the
+        # two frameworks run with identical parameters (configuration only; no code changes).
+        with open(os.path.join(fallback_root, "configs", "default.yaml")) as f:
+            prix_merged = yaml.safe_load(f)
+        prix_mode_path = os.path.join(fallback_root, "configs", cfg_name)
+        if os.path.exists(prix_mode_path):
+            with open(prix_mode_path) as f:
+                prix_merged = _deep_merge(prix_merged, yaml.safe_load(f))
+        merged = _deep_merge(merged, _shared_keys(prix_merged, merged))
     merged.setdefault("mpc", {})["provider"] = "TFP"
     merged.setdefault("functions", {}).setdefault("exp", {}).setdefault("all_neg", False)
     path = os.path.join(tmp_dir, f"_{tag}_{cfg_name}")
