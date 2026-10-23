@@ -1,0 +1,1122 @@
+{
+  "wave_det": {
+    "title": "Wave (2-rd Grotto DPF+DCF, trunc_method.lut=\"wave\")",
+    "mode": "wave",
+    "trunc_method": {
+      "prod": "egk",
+      "lut": "wave"
+    },
+    "primitives": {
+      "gelu": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 488000.0,
+        "key_bytes_1p_l128": 768000.0,
+        "time_ms": 9.779030981007963,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 488.0,
+        "key_bytes_per_elem_l128": 768.0,
+        "mae": 0.001752700693053137,
+        "max_err": 0.015045491543374272
+      },
+      "silu": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 512000.0,
+        "key_bytes_1p_l128": 808000.0,
+        "time_ms": 8.97549994988367,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 512.0,
+        "key_bytes_per_elem_l128": 808.0,
+        "mae": 0.0034660624627623465,
+        "max_err": 0.03588759542295538
+      },
+      "sigmoid": {
+        "rounds": 6,
+        "online_bytes_1p": 80256.0,
+        "key_bytes_1p": 1072375.0,
+        "key_bytes_1p_l128": 1864375.0,
+        "time_ms": 51.58474197378382,
+        "online_bytes_per_elem": 80.256,
+        "key_bytes_per_elem": 1072.375,
+        "key_bytes_per_elem_l128": 1864.375,
+        "mae": 7.210742091617544e-05,
+        "max_err": 0.0004531673706966166
+      },
+      "tanh": {
+        "rounds": 6,
+        "online_bytes_1p": 80256.0,
+        "key_bytes_1p": 1048375.0,
+        "key_bytes_1p_l128": 1824375.0,
+        "time_ms": 54.21278200810775,
+        "online_bytes_per_elem": 80.256,
+        "key_bytes_per_elem": 1048.375,
+        "key_bytes_per_elem_l128": 1824.375,
+        "mae": 0.00011655129491301186,
+        "max_err": 0.0009565732087402634
+      },
+      "erf": {
+        "rounds": 9,
+        "online_bytes_1p": 104256.0,
+        "key_bytes_1p": 1576500.0,
+        "key_bytes_1p_l128": 2856500.0,
+        "time_ms": 71.74079201649874,
+        "online_bytes_per_elem": 104.256,
+        "key_bytes_per_elem": 1576.5,
+        "key_bytes_per_elem_l128": 2856.5,
+        "mae": 0.00016795681121203307,
+        "max_err": 0.001129050485557559
+      },
+      "exp": {
+        "rounds": 5,
+        "online_bytes_1p": 64128.0,
+        "key_bytes_1p": 1032250.0,
+        "key_bytes_1p_l128": 1816250.0,
+        "time_ms": 19.212400016840547,
+        "online_bytes_per_elem": 64.128,
+        "key_bytes_per_elem": 1032.25,
+        "key_bytes_per_elem_l128": 1816.25,
+        "mae": 0.0006036569216372179,
+        "max_err": 0.01385556287649814
+      },
+      "reciprocal": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 488000.0,
+        "key_bytes_1p_l128": 776000.0,
+        "time_ms": 30.54143104236573,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 488.0,
+        "key_bytes_per_elem_l128": 776.0,
+        "mae": 8.501903753485885e-05,
+        "max_err": 0.0112762451171875
+      },
+      "inv_sqrt": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 408000.0,
+        "key_bytes_1p_l128": 648000.0,
+        "time_ms": 113.91031398670748,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 408.0,
+        "key_bytes_per_elem_l128": 648.0,
+        "mae": 2.6006712549064448e-05,
+        "max_err": 0.0009151124158623958
+      }
+    },
+    "sublayers": {
+      "gelu_128x3072": {
+        "time_s": 2.0852622910169885,
+        "rounds": 2,
+        "online_bytes_1p": 15728640.0,
+        "key_bytes_1p": 191889408.0,
+        "key_bytes_1p_l128": 301989888.0,
+        "mae": 0.0018990847671026916,
+        "max_err": 0.01579317412526228
+      },
+      "softmax_12x128x128": {
+        "time_s": 1.9896934140124358,
+        "rounds": 23,
+        "online_bytes_1p": 17411904.0,
+        "key_bytes_1p": 311451264.0,
+        "key_bytes_1p_l128": 564350592.0,
+        "mae": 6.860845293965555e-05,
+        "max_err": 0.0013582096996409276
+      },
+      "layernorm_128x768": {
+        "time_s": 0.09629515302367508,
+        "rounds": 8,
+        "online_bytes_1p": 4724736.0,
+        "key_bytes_1p": 7094272.0,
+        "key_bytes_1p_l128": 7124992.0,
+        "mae": 3.228662458318691e-05,
+        "max_err": 0.0002376578879039748
+      }
+    },
+    "models": {
+      "bert_base": {
+        "time_s": 4.337358571996447,
+        "rounds": 58,
+        "online_bytes_1p": 64610112.0,
+        "key_bytes_1p": 548814464.0,
+        "key_bytes_1p_l128": 911875712.0,
+        "n_layers": 12,
+        "block_rounds": 58,
+        "total_rounds": 696,
+        "total_online_gb_1p": 0.775321344,
+        "total_online_gb_2p": 1.550642688,
+        "total_key_gb_1p": 6.585773568,
+        "total_key_gb_1p_l128": 10.942508544,
+        "block_time_s": 4.337358571996447,
+        "total_time_s": 52.04830286395736
+      },
+      "bert_large": {
+        "time_s": 5.854602034960408,
+        "rounds": 58,
+        "online_bytes_1p": 86142720.0,
+        "key_bytes_1p": 731717120.0,
+        "key_bytes_1p_l128": 1215778304.0,
+        "n_layers": 24,
+        "block_rounds": 58,
+        "total_rounds": 1392,
+        "total_online_gb_1p": 2.06742528,
+        "total_online_gb_2p": 4.13485056,
+        "total_key_gb_1p": 17.56121088,
+        "total_key_gb_1p_l128": 29.178679296,
+        "block_time_s": 5.854602034960408,
+        "total_time_s": 140.5104488390498
+      },
+      "gpt2_64": {
+        "time_s": 2.7891924650175497,
+        "rounds": 56,
+        "online_bytes_1p": 26787744.0,
+        "key_bytes_1p": 194971456.0,
+        "key_bytes_1p_l128": 313194304.0,
+        "n_layers": 12,
+        "block_rounds": 56,
+        "total_rounds": 672,
+        "total_online_gb_1p": 0.321452928,
+        "total_online_gb_2p": 0.642905856,
+        "total_key_gb_1p": 2.339657472,
+        "total_key_gb_1p_l128": 3.758331648,
+        "block_time_s": 2.7891924650175497,
+        "total_time_s": 33.470309580210596
+      }
+    }
+  },
+  "wave_sigma_tr": {
+    "title": "Wave + SIGMA TR (3-rd, trunc_method.lut=\"sigma\")",
+    "mode": "wave",
+    "trunc_method": {
+      "prod": "egk",
+      "lut": "sigma"
+    },
+    "primitives": {
+      "gelu": {
+        "rounds": 3,
+        "online_bytes_1p": 48000.0,
+        "key_bytes_1p": 376000.0,
+        "key_bytes_1p_l128": 536000.0,
+        "time_ms": 9.951990039553493,
+        "online_bytes_per_elem": 48.0,
+        "key_bytes_per_elem": 376.0,
+        "key_bytes_per_elem_l128": 536.0,
+        "mae": 0.0017528248327324028,
+        "max_err": 0.015045491543374272
+      },
+      "silu": {
+        "rounds": 3,
+        "online_bytes_1p": 48000.0,
+        "key_bytes_1p": 392000.0,
+        "key_bytes_1p_l128": 560000.0,
+        "time_ms": 6.619649997446686,
+        "online_bytes_per_elem": 48.0,
+        "key_bytes_per_elem": 392.0,
+        "key_bytes_per_elem_l128": 560.0,
+        "mae": 0.0034658818622789953,
+        "max_err": 0.03588759542295538
+      },
+      "sigmoid": {
+        "rounds": 7,
+        "online_bytes_1p": 88256.0,
+        "key_bytes_1p": 968375.0,
+        "key_bytes_1p_l128": 1648375.0,
+        "time_ms": 21.09877998009324,
+        "online_bytes_per_elem": 88.256,
+        "key_bytes_per_elem": 968.375,
+        "key_bytes_per_elem_l128": 1648.375,
+        "mae": 7.20855871205827e-05,
+        "max_err": 0.0004379085816341166
+      },
+      "tanh": {
+        "rounds": 7,
+        "online_bytes_1p": 88256.0,
+        "key_bytes_1p": 952375.0,
+        "key_bytes_1p_l128": 1624375.0,
+        "time_ms": 25.12176102027297,
+        "online_bytes_per_elem": 88.256,
+        "key_bytes_per_elem": 952.375,
+        "key_bytes_per_elem_l128": 1624.375,
+        "mae": 0.00011698202301303854,
+        "max_err": 0.0009718319978027634
+      },
+      "erf": {
+        "rounds": 10,
+        "online_bytes_1p": 112256.0,
+        "key_bytes_1p": 1480500.0,
+        "key_bytes_1p_l128": 2656500.0,
+        "time_ms": 33.42057002009824,
+        "online_bytes_per_elem": 112.256,
+        "key_bytes_per_elem": 1480.5,
+        "key_bytes_per_elem_l128": 2656.5,
+        "mae": 0.00016757577324885472,
+        "max_err": 0.001129050485557559
+      },
+      "exp": {
+        "rounds": 6,
+        "online_bytes_1p": 72128.0,
+        "key_bytes_1p": 920250.0,
+        "key_bytes_1p_l128": 1584250.0,
+        "time_ms": 14.825559977907687,
+        "online_bytes_per_elem": 72.128,
+        "key_bytes_per_elem": 920.25,
+        "key_bytes_per_elem_l128": 1584.25,
+        "mae": 0.0006038655668749388,
+        "max_err": 0.013867383853987003
+      },
+      "reciprocal": {
+        "rounds": 3,
+        "online_bytes_1p": 48000.0,
+        "key_bytes_1p": 384000.0,
+        "key_bytes_1p_l128": 560000.0,
+        "time_ms": 9.394139982759953,
+        "online_bytes_per_elem": 48.0,
+        "key_bytes_per_elem": 384.0,
+        "key_bytes_per_elem_l128": 560.0,
+        "mae": 8.531000057081898e-05,
+        "max_err": 0.0112762451171875
+      },
+      "inv_sqrt": {
+        "rounds": 3,
+        "online_bytes_1p": 48000.0,
+        "key_bytes_1p": 336000.0,
+        "key_bytes_1p_l128": 496000.0,
+        "time_ms": 18.328550970181823,
+        "online_bytes_per_elem": 48.0,
+        "key_bytes_per_elem": 336.0,
+        "key_bytes_per_elem_l128": 496.0,
+        "mae": 2.6504483921111654e-05,
+        "max_err": 0.0009151124158623958
+      }
+    },
+    "sublayers": {
+      "gelu_128x3072": {
+        "time_s": 0.5693395550479181,
+        "rounds": 3,
+        "online_bytes_1p": 18874368.0,
+        "key_bytes_1p": 147849216.0,
+        "key_bytes_1p_l128": 210763776.0,
+        "mae": 0.0018990935129247447,
+        "max_err": 0.015805679119509006
+      },
+      "softmax_12x128x128": {
+        "time_s": 0.9721140849869698,
+        "rounds": 25,
+        "online_bytes_1p": 18997056.0,
+        "key_bytes_1p": 289271424.0,
+        "key_bytes_1p_l128": 518405760.0,
+        "mae": 6.862003376585473e-05,
+        "max_err": 0.0013503462045847126
+      },
+      "layernorm_128x768": {
+        "time_s": 0.058758710976690054,
+        "rounds": 9,
+        "online_bytes_1p": 4725760.0,
+        "key_bytes_1p": 7085056.0,
+        "key_bytes_1p_l128": 7105536.0,
+        "mae": 3.210579286489189e-05,
+        "max_err": 0.00025622022999405303
+      }
+    },
+    "models": {
+      "bert_base": {
+        "time_s": 2.2180892849573866,
+        "rounds": 63,
+        "online_bytes_1p": 69343040.0,
+        "key_bytes_1p": 482576000.0,
+        "key_bytes_1p_l128": 774665856.0,
+        "n_layers": 12,
+        "block_rounds": 63,
+        "total_rounds": 756,
+        "total_online_gb_1p": 0.83211648,
+        "total_online_gb_2p": 1.66423296,
+        "total_key_gb_1p": 5.790912,
+        "total_key_gb_1p_l128": 9.295990272,
+        "block_time_s": 2.2180892849573866,
+        "total_time_s": 26.61707141948864
+      },
+      "bert_large": {
+        "time_s": 3.212639018020127,
+        "rounds": 63,
+        "online_bytes_1p": 92452608.0,
+        "key_bytes_1p": 643405312.0,
+        "key_bytes_1p_l128": 1032844800.0,
+        "n_layers": 24,
+        "block_rounds": 63,
+        "total_rounds": 1512,
+        "total_online_gb_1p": 2.218862592,
+        "total_online_gb_2p": 4.437725184,
+        "total_key_gb_1p": 15.441727488,
+        "total_key_gb_1p_l128": 24.7882752,
+        "block_time_s": 3.212639018020127,
+        "total_time_s": 77.10333643248305
+      },
+      "gpt2_64": {
+        "time_s": 1.0071824939805083,
+        "rounds": 61,
+        "online_bytes_1p": 28760992.0,
+        "key_bytes_1p": 167357248.0,
+        "key_bytes_1p_l128": 255992640.0,
+        "n_layers": 12,
+        "block_rounds": 61,
+        "total_rounds": 732,
+        "total_online_gb_1p": 0.345131904,
+        "total_online_gb_2p": 0.690263808,
+        "total_key_gb_1p": 2.008286976,
+        "total_key_gb_1p_l128": 3.07191168,
+        "block_time_s": 1.0071824939805083,
+        "total_time_s": 12.0861899277661
+      }
+    }
+  },
+  "wave_prob": {
+    "title": "Wave-Prob (2-rd, trunc_method.lut=\"wave_prob\")",
+    "mode": "wave",
+    "trunc_method": {
+      "prod": "egk",
+      "lut": "wave_prob"
+    },
+    "primitives": {
+      "gelu": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 112000.0,
+        "key_bytes_1p_l128": 152000.0,
+        "time_ms": 5.2426609909161925,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 112.0,
+        "key_bytes_per_elem_l128": 152.0,
+        "mae": 0.009173120476087,
+        "max_err": 0.18051465959344487
+      },
+      "silu": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 112000.0,
+        "key_bytes_1p_l128": 152000.0,
+        "time_ms": 4.757719987537712,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 112.0,
+        "key_bytes_per_elem_l128": 152.0,
+        "mae": 0.01902849842815192,
+        "max_err": 0.4523698826129987
+      },
+      "sigmoid": {
+        "rounds": 6,
+        "online_bytes_1p": 80256.0,
+        "key_bytes_1p": 720375.0,
+        "key_bytes_1p_l128": 1288375.0,
+        "time_ms": 19.30610998533666,
+        "online_bytes_per_elem": 80.256,
+        "key_bytes_per_elem": 720.375,
+        "key_bytes_per_elem_l128": 1288.375,
+        "mae": 0.0003540001966825942,
+        "max_err": 0.005993121017922709
+      },
+      "tanh": {
+        "rounds": 6,
+        "online_bytes_1p": 80256.0,
+        "key_bytes_1p": 720375.0,
+        "key_bytes_1p_l128": 1288375.0,
+        "time_ms": 19.09215102205053,
+        "online_bytes_per_elem": 80.256,
+        "key_bytes_per_elem": 720.375,
+        "key_bytes_per_elem_l128": 1288.375,
+        "mae": 0.0006993180474934271,
+        "max_err": 0.012690482153137617
+      },
+      "erf": {
+        "rounds": 9,
+        "online_bytes_1p": 104256.0,
+        "key_bytes_1p": 1248500.0,
+        "key_bytes_1p_l128": 2320500.0,
+        "time_ms": 23.32339098211378,
+        "online_bytes_per_elem": 104.256,
+        "key_bytes_per_elem": 1248.5,
+        "key_bytes_per_elem_l128": 2320.5,
+        "mae": 0.000900518031183164,
+        "max_err": 0.013531486832951467
+      },
+      "exp": {
+        "rounds": 5,
+        "online_bytes_1p": 64128.0,
+        "key_bytes_1p": 656250.0,
+        "key_bytes_1p_l128": 1200250.0,
+        "time_ms": 13.103630975820124,
+        "online_bytes_per_elem": 64.128,
+        "key_bytes_per_elem": 656.25,
+        "key_bytes_per_elem_l128": 1200.25,
+        "mae": 0.0027284470789198075,
+        "max_err": 0.16069931743117827
+      },
+      "reciprocal": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 136000.0,
+        "key_bytes_1p_l128": 200000.0,
+        "time_ms": 8.630099997390062,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 136.0,
+        "key_bytes_per_elem_l128": 200.0,
+        "mae": 0.00032218998301264526,
+        "max_err": 0.03147739108806746
+      },
+      "inv_sqrt": {
+        "rounds": 2,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 152000.0,
+        "key_bytes_1p_l128": 232000.0,
+        "time_ms": 20.387461001519114,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 152.0,
+        "key_bytes_per_elem_l128": 232.0,
+        "mae": 7.572561641644454e-05,
+        "max_err": 0.020944992573988852
+      }
+    },
+    "sublayers": {
+      "gelu_128x3072": {
+        "time_s": 0.28533009596867487,
+        "rounds": 2,
+        "online_bytes_1p": 15728640.0,
+        "key_bytes_1p": 44040192.0,
+        "key_bytes_1p_l128": 59768832.0,
+        "mae": 0.009802269957488086,
+        "max_err": 0.20895553043342843
+      },
+      "softmax_12x128x128": {
+        "time_s": 0.8668951009749435,
+        "rounds": 23,
+        "online_bytes_1p": 17411904.0,
+        "key_bytes_1p": 236985984.0,
+        "key_bytes_1p_l128": 442355328.0,
+        "mae": 0.00027552104131481754,
+        "max_err": 0.0106205213795703
+      },
+      "layernorm_128x768": {
+        "time_s": 0.06739271094556898,
+        "rounds": 8,
+        "online_bytes_1p": 4724736.0,
+        "key_bytes_1p": 7061504.0,
+        "key_bytes_1p_l128": 7071744.0,
+        "mae": 5.561166246358381e-05,
+        "max_err": 0.0006968521237702419
+      }
+    },
+    "models": {
+      "bert_base": {
+        "time_s": 1.7674295919714496,
+        "rounds": 58,
+        "online_bytes_1p": 64610112.0,
+        "key_bytes_1p": 326434432.0,
+        "key_bytes_1p_l128": 547552896.0,
+        "n_layers": 12,
+        "block_rounds": 58,
+        "total_rounds": 696,
+        "total_online_gb_1p": 0.775321344,
+        "total_online_gb_2p": 1.550642688,
+        "total_key_gb_1p": 3.917213184,
+        "total_key_gb_1p_l128": 6.570634752,
+        "block_time_s": 1.7674295919714496,
+        "total_time_s": 21.209155103657395
+      },
+      "bert_large": {
+        "time_s": 2.7370081929839216,
+        "rounds": 58,
+        "online_bytes_1p": 86142720.0,
+        "key_bytes_1p": 435232256.0,
+        "key_bytes_1p_l128": 730050048.0,
+        "n_layers": 24,
+        "block_rounds": 58,
+        "total_rounds": 1392,
+        "total_online_gb_1p": 2.06742528,
+        "total_online_gb_2p": 4.13485056,
+        "total_key_gb_1p": 10.445574144,
+        "total_key_gb_1p_l128": 17.521201152,
+        "block_time_s": 2.7370081929839216,
+        "total_time_s": 65.68819663161412
+      },
+      "gpt2_64": {
+        "time_s": 0.8865141500136815,
+        "rounds": 56,
+        "online_bytes_1p": 26787744.0,
+        "key_bytes_1p": 102262592.0,
+        "key_bytes_1p_l128": 161310528.0,
+        "n_layers": 12,
+        "block_rounds": 56,
+        "total_rounds": 672,
+        "total_online_gb_1p": 0.321452928,
+        "total_online_gb_2p": 0.642905856,
+        "total_key_gb_1p": 1.227151104,
+        "total_key_gb_1p_l128": 1.935726336,
+        "block_time_s": 0.8865141500136815,
+        "total_time_s": 10.638169800164178
+      }
+    }
+  },
+  "sigma": {
+    "title": "SIGMA (mode=\"sigma\")",
+    "mode": "sigma",
+    "trunc_method": {
+      "prod": "egk",
+      "lut": "sigma"
+    },
+    "primitives": {
+      "gelu": {
+        "rounds": 6,
+        "online_bytes_1p": 56256.0,
+        "key_bytes_1p": 840375.0,
+        "key_bytes_1p_l128": 1488375.0,
+        "time_ms": 18.85906100505963,
+        "online_bytes_per_elem": 56.256,
+        "key_bytes_per_elem": 840.375,
+        "key_bytes_per_elem_l128": 1488.375,
+        "mae": 0.0003491883530815227,
+        "max_err": 0.0029507979143784877
+      },
+      "silu": {
+        "rounds": 6,
+        "online_bytes_1p": 56256.0,
+        "key_bytes_1p": 840375.0,
+        "key_bytes_1p_l128": 1496375.0,
+        "time_ms": 38.47167099593207,
+        "online_bytes_per_elem": 56.256,
+        "key_bytes_per_elem": 840.375,
+        "key_bytes_per_elem_l128": 1496.375,
+        "mae": 0.0004959939927168752,
+        "max_err": 0.006352806568515552
+      },
+      "sigmoid": {
+        "rounds": 7,
+        "online_bytes_1p": 72256.0,
+        "key_bytes_1p": 928375.0,
+        "key_bytes_1p_l128": 1608375.0,
+        "time_ms": 24.95743101462722,
+        "online_bytes_per_elem": 72.256,
+        "key_bytes_per_elem": 928.375,
+        "key_bytes_per_elem_l128": 1608.375,
+        "mae": 0.004158959143762703,
+        "max_err": 0.03046362050156759
+      },
+      "tanh": {
+        "rounds": 7,
+        "online_bytes_1p": 72256.0,
+        "key_bytes_1p": 912375.0,
+        "key_bytes_1p_l128": 1584375.0,
+        "time_ms": 23.299399996176362,
+        "online_bytes_per_elem": 72.256,
+        "key_bytes_per_elem": 912.375,
+        "key_bytes_per_elem_l128": 1584.375,
+        "mae": 0.006931433403661814,
+        "max_err": 0.05869332891169518
+      },
+      "erf": {
+        "rounds": 10,
+        "online_bytes_1p": 96256.0,
+        "key_bytes_1p": 1440500.0,
+        "key_bytes_1p_l128": 2616500.0,
+        "time_ms": 27.37304102629423,
+        "online_bytes_per_elem": 96.256,
+        "key_bytes_per_elem": 1440.5,
+        "key_bytes_per_elem_l128": 2616.5,
+        "mae": 0.008927621126071287,
+        "max_err": 0.06733141528197664
+      },
+      "exp": {
+        "rounds": 12,
+        "online_bytes_1p": 120128.0,
+        "key_bytes_1p": 928000.0,
+        "key_bytes_1p_l128": 1624000.0,
+        "time_ms": 40.18597101094201,
+        "online_bytes_per_elem": 120.128,
+        "key_bytes_per_elem": 928.0,
+        "key_bytes_per_elem_l128": 1624.0,
+        "mae": 1.1399620553081875e-05,
+        "max_err": 0.0002067202931094192
+      },
+      "reciprocal": {
+        "rounds": 3,
+        "online_bytes_1p": 32000.0,
+        "key_bytes_1p": 328000.0,
+        "key_bytes_1p_l128": 504000.0,
+        "time_ms": 25.691681017633528,
+        "online_bytes_per_elem": 32.0,
+        "key_bytes_per_elem": 328.0,
+        "key_bytes_per_elem_l128": 504.0,
+        "mae": 0.0005363194005270415,
+        "max_err": 0.0300140380859375
+      },
+      "inv_sqrt": {
+        "rounds": 10,
+        "online_bytes_1p": 104128.0,
+        "key_bytes_1p": 1096250.0,
+        "key_bytes_1p_l128": 1888250.0,
+        "time_ms": 46.86002101516351,
+        "online_bytes_per_elem": 104.128,
+        "key_bytes_per_elem": 1096.25,
+        "key_bytes_per_elem_l128": 1888.25,
+        "mae": 0.0002246392791196739,
+        "max_err": 0.004573881739044605
+      }
+    },
+    "sublayers": {
+      "gelu_128x3072": {
+        "time_s": 2.8162877110298723,
+        "rounds": 6,
+        "online_bytes_1p": 22118400.0,
+        "key_bytes_1p": 330448896.0,
+        "key_bytes_1p_l128": 585252864.0,
+        "mae": 0.00037867258883753926,
+        "max_err": 0.0038730064350495975
+      },
+      "softmax_12x128x128": {
+        "time_s": 2.1270966649753973,
+        "rounds": 31,
+        "online_bytes_1p": 28409664.0,
+        "key_bytes_1p": 290709120.0,
+        "key_bytes_1p_l128": 526134912.0,
+        "mae": 1.0543366791731831e-05,
+        "max_err": 0.0002543612854044447
+      },
+      "layernorm_128x768": {
+        "time_s": 0.05865955201443285,
+        "rounds": 16,
+        "online_bytes_1p": 4732944.0,
+        "key_bytes_1p": 7182368.0,
+        "key_bytes_1p_l128": 7283744.0,
+        "mae": 0.0009271682549135141,
+        "max_err": 0.013397994685385495
+      }
+    },
+    "models": {
+      "bert_base": {
+        "time_s": 5.0986551639507525,
+        "rounds": 86,
+        "online_bytes_1p": 82014048.0,
+        "key_bytes_1p": 666808000.0,
+        "key_bytes_1p_l128": 1157240512.0,
+        "n_layers": 12,
+        "block_rounds": 86,
+        "total_rounds": 1032,
+        "total_online_gb_1p": 0.984168576,
+        "total_online_gb_2p": 1.968337152,
+        "total_key_gb_1p": 8.001696,
+        "total_key_gb_1p_l128": 13.886886144,
+        "block_time_s": 5.0986551639507525,
+        "total_time_s": 61.18386196740903
+      },
+      "bert_large": {
+        "time_s": 7.604436939000152,
+        "rounds": 86,
+        "online_bytes_1p": 109342496.0,
+        "key_bytes_1p": 888983104.0,
+        "key_bytes_1p_l128": 1542825536.0,
+        "n_layers": 24,
+        "block_rounds": 86,
+        "total_rounds": 2064,
+        "total_online_gb_1p": 2.624219904,
+        "total_online_gb_2p": 5.248439808,
+        "total_key_gb_1p": 21.335594496,
+        "total_key_gb_1p_l128": 37.027812864,
+        "block_time_s": 7.604436939000152,
+        "total_time_s": 182.50648653600365
+      },
+      "gpt2_64": {
+        "time_s": 2.2145598320057616,
+        "rounds": 84,
+        "online_bytes_1p": 32737200.0,
+        "key_bytes_1p": 259092320.0,
+        "key_bytes_1p_l128": 445326176.0,
+        "n_layers": 12,
+        "block_rounds": 84,
+        "total_rounds": 1008,
+        "total_online_gb_1p": 0.3928464,
+        "total_online_gb_2p": 0.7856928,
+        "total_key_gb_1p": 3.10910784,
+        "total_key_gb_1p_l128": 5.343914112,
+        "block_time_s": 2.2145598320057616,
+        "total_time_s": 26.57471798406914
+      }
+    }
+  },
+  "curl": {
+    "title": "Curl (mode=\"lut\")",
+    "mode": "lut",
+    "trunc_method": {
+      "prod": "egk",
+      "lut": "egk"
+    },
+    "primitives": {
+      "gelu": {
+        "rounds": 4,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 303750.0,
+        "key_bytes_1p_l128": 303750.0,
+        "time_ms": 10.633900004904717,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 303.75,
+        "key_bytes_per_elem_l128": 303.75,
+        "mae": 0.008862434035615908,
+        "max_err": 0.1531632277978896
+      },
+      "silu": {
+        "rounds": 4,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 303750.0,
+        "key_bytes_1p_l128": 303750.0,
+        "time_ms": 8.332650002557784,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 303.75,
+        "key_bytes_per_elem_l128": 303.75,
+        "mae": 0.017562759601093197,
+        "max_err": 0.4427590549903748
+      },
+      "sigmoid": {
+        "rounds": 15,
+        "online_bytes_1p": 592000.0,
+        "key_bytes_1p": 3007750.0,
+        "key_bytes_1p_l128": 3007750.0,
+        "time_ms": 21.31263102637604,
+        "online_bytes_per_elem": 592.0,
+        "key_bytes_per_elem": 3007.75,
+        "key_bytes_per_elem_l128": 3007.75,
+        "mae": 0.000408583369645278,
+        "max_err": 0.0062917404132731836
+      },
+      "tanh": {
+        "rounds": 15,
+        "online_bytes_1p": 592000.0,
+        "key_bytes_1p": 3007750.0,
+        "key_bytes_1p_l128": 3007750.0,
+        "time_ms": 22.965940996073186,
+        "online_bytes_per_elem": 592.0,
+        "key_bytes_per_elem": 3007.75,
+        "key_bytes_per_elem_l128": 3007.75,
+        "mae": 0.0005904506533902229,
+        "max_err": 0.011809461499504903
+      },
+      "erf": {
+        "rounds": 23,
+        "online_bytes_1p": 424000.0,
+        "key_bytes_1p": 2727750.0,
+        "key_bytes_1p_l128": 2727750.0,
+        "time_ms": 36.61768097663298,
+        "online_bytes_per_elem": 424.0,
+        "key_bytes_per_elem": 2727.75,
+        "key_bytes_per_elem_l128": 2727.75,
+        "mae": 0.0008996207966736309,
+        "max_err": 0.013881084687915157
+      },
+      "exp": {
+        "rounds": 13,
+        "online_bytes_1p": 224000.0,
+        "key_bytes_1p": 607750.0,
+        "key_bytes_1p_l128": 607750.0,
+        "time_ms": 22.868141008075327,
+        "online_bytes_per_elem": 224.0,
+        "key_bytes_per_elem": 607.75,
+        "key_bytes_per_elem_l128": 607.75,
+        "mae": 0.0020369633442693653,
+        "max_err": 0.10634685701185942
+      },
+      "reciprocal": {
+        "rounds": 4,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 2095750.0,
+        "key_bytes_1p_l128": 2095750.0,
+        "time_ms": 8.8090009521693,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 2095.75,
+        "key_bytes_per_elem_l128": 2095.75,
+        "mae": 0.0003182103539006717,
+        "max_err": 0.04020509844458042
+      },
+      "inv_sqrt": {
+        "rounds": 4,
+        "online_bytes_1p": 40000.0,
+        "key_bytes_1p": 8239750.0,
+        "key_bytes_1p_l128": 8239750.0,
+        "time_ms": 11.621890007518232,
+        "online_bytes_per_elem": 40.0,
+        "key_bytes_per_elem": 8239.75,
+        "key_bytes_per_elem_l128": 8239.75,
+        "mae": 6.214754829012165e-05,
+        "max_err": 0.020914474995863852
+      }
+    },
+    "sublayers": {
+      "gelu_128x3072": {
+        "time_s": 0.11327867198269814,
+        "rounds": 4,
+        "online_bytes_1p": 15728640.0,
+        "key_bytes_1p": 119439360.0,
+        "key_bytes_1p_l128": 119439360.0,
+        "mae": 0.00982743994702957,
+        "max_err": 0.20751609816789335
+      },
+      "softmax_12x128x128": {
+        "time_s": 0.5880283510196023,
+        "rounds": 98,
+        "online_bytes_1p": 155934720.0,
+        "key_bytes_1p": 302892672.0,
+        "key_bytes_1p_l128": 302892672.0,
+        "mae": 0.000277859907934762,
+        "max_err": 0.0100101698170703
+      },
+      "layernorm_128x768": {
+        "time_s": 0.05931535200215876,
+        "rounds": 10,
+        "online_bytes_1p": 4730880.0,
+        "key_bytes_1p": 8102880.0,
+        "key_bytes_1p_l128": 8102880.0,
+        "mae": 4.616050367629968e-05,
+        "max_err": 0.0006166513021876874
+      }
+    },
+    "models": {
+      "bert_base": {
+        "time_s": 1.4832474160357378,
+        "rounds": 139,
+        "online_bytes_1p": 259768320.0,
+        "key_bytes_1p": 526446144.0,
+        "key_bytes_1p_l128": 526446144.0,
+        "n_layers": 12,
+        "block_rounds": 139,
+        "total_rounds": 1668,
+        "total_online_gb_1p": 3.11721984,
+        "total_online_gb_2p": 6.23443968,
+        "total_key_gb_1p": 6.317353728,
+        "total_key_gb_1p_l128": 6.317353728,
+        "block_time_s": 1.4832474160357378,
+        "total_time_s": 17.798968992428854
+      },
+      "bert_large": {
+        "time_s": 2.044648534967564,
+        "rounds": 139,
+        "online_bytes_1p": 371519488.0,
+        "key_bytes_1p": 726390208.0,
+        "key_bytes_1p_l128": 726390208.0,
+        "n_layers": 24,
+        "block_rounds": 139,
+        "total_rounds": 3336,
+        "total_online_gb_1p": 8.916467712,
+        "total_online_gb_2p": 17.832935424,
+        "total_key_gb_1p": 17.433364992,
+        "total_key_gb_1p_l128": 17.433364992,
+        "block_time_s": 2.044648534967564,
+        "total_time_s": 49.07156483922154
+      },
+      "gpt2_64": {
+        "time_s": 0.927040065987967,
+        "rounds": 138,
+        "online_bytes_1p": 115906560.0,
+        "key_bytes_1p": 211447584.0,
+        "key_bytes_1p_l128": 211447584.0,
+        "n_layers": 12,
+        "block_rounds": 138,
+        "total_rounds": 1656,
+        "total_online_gb_1p": 1.39087872,
+        "total_online_gb_2p": 2.78175744,
+        "total_key_gb_1p": 2.537371008,
+        "total_key_gb_1p_l128": 2.537371008,
+        "block_time_s": 0.927040065987967,
+        "total_time_s": 11.124480791855603
+      }
+    }
+  },
+  "shaft": {
+    "title": "SHAFT (mode=\"shaft\")",
+    "mode": "shaft",
+    "trunc_method": {
+      "prod": "crypten",
+      "lut": "crypten"
+    },
+    "primitives": {
+      "gelu": {
+        "rounds": 11,
+        "online_bytes_1p": 544000.0,
+        "key_bytes_1p": 1024000.0,
+        "key_bytes_1p_l128": 1024000.0,
+        "time_ms": 18.026419973466545,
+        "online_bytes_per_elem": 544.0,
+        "key_bytes_per_elem": 1024.0,
+        "key_bytes_per_elem_l128": 1024.0,
+        "mae": 0.0009415196334304043,
+        "max_err": 0.004492985501034608
+      },
+      "silu": {
+        "rounds": 11,
+        "online_bytes_1p": 544000.0,
+        "key_bytes_1p": 1088000.0,
+        "key_bytes_1p_l128": 1088000.0,
+        "time_ms": 15.66433097468689,
+        "online_bytes_per_elem": 544.0,
+        "key_bytes_per_elem": 1088.0,
+        "key_bytes_per_elem_l128": 1088.0,
+        "mae": 0.0008546808512981722,
+        "max_err": 0.005335768664820023
+      },
+      "sigmoid": {
+        "rounds": 1,
+        "online_bytes_1p": 8000.0,
+        "key_bytes_1p": 136000.0,
+        "key_bytes_1p_l128": 136000.0,
+        "time_ms": 2.0288790110498667,
+        "online_bytes_per_elem": 8.0,
+        "key_bytes_per_elem": 136.0,
+        "key_bytes_per_elem_l128": 136.0,
+        "mae": 0.022370485096257293,
+        "max_err": 0.09001124127765653
+      },
+      "tanh": {
+        "rounds": 1,
+        "online_bytes_1p": 8000.0,
+        "key_bytes_1p": 136000.0,
+        "key_bytes_1p_l128": 136000.0,
+        "time_ms": 3.0200800392776728,
+        "online_bytes_per_elem": 8.0,
+        "key_bytes_per_elem": 136.0,
+        "key_bytes_per_elem_l128": 136.0,
+        "mae": 0.030256081546473686,
+        "max_err": 0.055720958955306266
+      },
+      "erf": {
+        "rounds": 1,
+        "online_bytes_1p": 8000.0,
+        "key_bytes_1p": 88000.0,
+        "key_bytes_1p_l128": 88000.0,
+        "time_ms": 2.4609300307929516,
+        "online_bytes_per_elem": 8.0,
+        "key_bytes_per_elem": 88.0,
+        "key_bytes_per_elem_l128": 88.0,
+        "mae": 0.023747118145021062,
+        "max_err": 0.05613782805930989
+      },
+      "exp": {
+        "rounds": 8,
+        "online_bytes_1p": 64000.0,
+        "key_bytes_1p": 128000.0,
+        "key_bytes_1p_l128": 128000.0,
+        "time_ms": 12.312570994254202,
+        "online_bytes_per_elem": 64.0,
+        "key_bytes_per_elem": 128.0,
+        "key_bytes_per_elem_l128": 128.0,
+        "mae": 0.0002988995470839403,
+        "max_err": 0.0026455474485503894
+      },
+      "reciprocal": {
+        "rounds": 28,
+        "online_bytes_1p": 304000.0,
+        "key_bytes_1p": 528000.0,
+        "key_bytes_1p_l128": 528000.0,
+        "time_ms": 48.80644101649523,
+        "online_bytes_per_elem": 304.0,
+        "key_bytes_per_elem": 528.0,
+        "key_bytes_per_elem_l128": 528.0,
+        "mae": 7.795299347263544e-05,
+        "max_err": 0.00039537508887955986
+      },
+      "inv_sqrt": {
+        "rounds": 17,
+        "online_bytes_1p": 184000.0,
+        "key_bytes_1p": 320000.0,
+        "key_bytes_1p_l128": 320000.0,
+        "time_ms": 29.75822100415826,
+        "online_bytes_per_elem": 184.0,
+        "key_bytes_per_elem": 320.0,
+        "key_bytes_per_elem_l128": 320.0,
+        "mae": 0.00046538047280260945,
+        "max_err": 0.015686450084137604
+      }
+    },
+    "sublayers": {
+      "gelu_128x3072": {
+        "time_s": 0.503456987964455,
+        "rounds": 11,
+        "online_bytes_1p": 213909504.0,
+        "key_bytes_1p": 402653184.0,
+        "key_bytes_1p_l128": 402653184.0,
+        "mae": 0.000979735484264887,
+        "max_err": 0.004541691436004344
+      },
+      "softmax_12x128x128": {
+        "time_s": 0.5879411089699715,
+        "rounds": 41,
+        "online_bytes_1p": 173015040.0,
+        "key_bytes_1p": 270532608.0,
+        "key_bytes_1p_l128": 270532608.0,
+        "mae": 0.00030246344581428603,
+        "max_err": 0.010431973590091945
+      },
+      "layernorm_128x768": {
+        "time_s": 0.04358656000113115,
+        "rounds": 20,
+        "online_bytes_1p": 2390016.0,
+        "key_bytes_1p": 4766720.0,
+        "key_bytes_1p_l128": 4766720.0,
+        "mae": 0.0008972329852249492,
+        "max_err": 0.005209857486369707
+      }
+    },
+    "models": {
+      "bert_base": {
+        "time_s": 1.654882435046602,
+        "rounds": 100,
+        "online_bytes_1p": 459337728.0,
+        "key_bytes_1p": 759789568.0,
+        "key_bytes_1p_l128": 759789568.0,
+        "n_layers": 12,
+        "block_rounds": 100,
+        "total_rounds": 1200,
+        "total_online_gb_1p": 5.512052736,
+        "total_online_gb_2p": 11.024105472,
+        "total_key_gb_1p": 9.117474816,
+        "total_key_gb_1p_l128": 9.117474816,
+        "block_time_s": 1.654882435046602,
+        "total_time_s": 19.858589220559224
+      },
+      "bert_large": {
+        "time_s": 2.613456838997081,
+        "rounds": 100,
+        "online_bytes_1p": 637599744.0,
+        "key_bytes_1p": 1038190592.0,
+        "key_bytes_1p_l128": 1038190592.0,
+        "n_layers": 24,
+        "block_rounds": 100,
+        "total_rounds": 2400,
+        "total_online_gb_1p": 15.302393856,
+        "total_online_gb_2p": 30.604787712,
+        "total_key_gb_1p": 24.916574208,
+        "total_key_gb_1p_l128": 24.916574208,
+        "block_time_s": 2.613456838997081,
+        "total_time_s": 62.72296413592994
+      },
+      "gpt2_64": {
+        "time_s": 1.505939892027527,
+        "rounds": 100,
+        "online_bytes_1p": 214339584.0,
+        "key_bytes_1p": 339792896.0,
+        "key_bytes_1p_l128": 339792896.0,
+        "n_layers": 12,
+        "block_rounds": 100,
+        "total_rounds": 1200,
+        "total_online_gb_1p": 2.572075008,
+        "total_online_gb_2p": 5.144150016,
+        "total_key_gb_1p": 4.077514752,
+        "total_key_gb_1p_l128": 4.077514752,
+        "block_time_s": 1.505939892027527,
+        "total_time_s": 18.071278704330325
+      }
+    }
+  },
+  "_env": {
+    "backend": "cpu",
+    "devices": [
+      "cpu:0"
+    ],
+    "jax": "0.12.0",
+    "python": "3.13.15",
+    "platform": "Linux-7.1.6-1rodete1-amd64-x86_64-with-glibc2.43",
+    "timestamp": "2026-10-23T18:46:01"
+  }
+}

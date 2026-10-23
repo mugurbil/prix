@@ -40,6 +40,59 @@ _MATMUL_MAX_K_22 = 1 << 9
 _MATMUL_MAX_K_16 = 1 << 21
 
 
+# ==============================================================================
+# Preprocessing (dealer key) size accounting.
+#
+# PriX's TFP provider is a *simulated* dealer: both parties expand the same PRG seeds
+# locally, so no key material is ever transmitted. To report what a real dealer would
+# have to send to each party, every TFP generation routine calls `_acct_preproc` with
+# the number of bits of non-seed-derivable material in the key of ONE party:
+#   - FSS correction words (received identically by both parties): one 64-bit word per
+#     DPF level in PriX (62-bit seed + 2 control bits). `bits_l128` re-counts each seed
+#     CW at lambda = 128 (16 B / level, as in SIGMA / Orca) for a like-for-like comparison.
+#   - Shared ring elements (Beaver triples, masks, B2A bits): with pairwise dealer<->party
+#     seeds only ONE party receives each share explicitly; we charge the full 64 bits
+#     (1 bit for binary masks) per shared value, i.e. the worst-case party.
+# ==============================================================================
+_PREPROC_STATS = {"bits": 0, "bits_l128": 0, "calls": 0}
+
+
+def reset_preproc_stats():
+    _PREPROC_STATS["bits"] = 0
+    _PREPROC_STATS["bits_l128"] = 0
+    _PREPROC_STATS["calls"] = 0
+
+
+def get_preproc_stats():
+    """Returns `{"bytes": ..., "bytes_l128": ..., "calls": ...}` accumulated since the last reset."""
+    return {
+        "bytes": _PREPROC_STATS["bits"] / 8.0,
+        "bytes_l128": _PREPROC_STATS["bits_l128"] / 8.0,
+        "calls": _PREPROC_STATS["calls"],
+    }
+
+
+def _acct_preproc(bits, bits_l128=None):
+    _PREPROC_STATS["bits"] += int(bits)
+    _PREPROC_STATS["bits_l128"] += int(bits if bits_l128 is None else bits_l128)
+    _PREPROC_STATS["calls"] += 1
+
+
+def _acct_fss_key(n, dpf_levels=0, dcf_levels=0, ring_elems=0, bit_elems=0):
+    """
+    Accounts one party's FSS key for `n` elements:
+      - DPF: `dpf_levels` seed correction words (64 bits each in PriX, 128 at lambda=128).
+      - Arithmetic DCF: `dcf_levels` seed CWs + `dcf_levels` 64-bit value CWs + 1 final 64-bit CW.
+      - `ring_elems` 64-bit shares and `bit_elems` 1-bit shares.
+    """
+    seed_bits = dpf_levels + dcf_levels
+    value_bits = (dcf_levels + (1 if dcf_levels > 0 else 0)) * 64
+    share_bits = ring_elems * 64 + bit_elems
+    bits = n * (seed_bits * 64 + value_bits + share_bits)
+    bits_l128 = n * (seed_bits * 128 + value_bits + share_bits)
+    _acct_preproc(bits, bits_l128)
+
+
 @jax.jit
 def _int64_matmul(a, b):
     """
@@ -776,6 +829,7 @@ class TrustedFirstParty(TupleProvider):
         is_rank0 = self.rank == 0
         if op == "mul":
             c_shape = jnp.broadcast_shapes(s0, s1)
+            _acct_preproc(64 * (int(np.prod(s0)) + int(np.prod(s1)) + int(np.prod(c_shape))))
             if jax.default_backend() == "gpu":
                 n0 = int(np.prod(s0)) if len(s0) > 0 else 1
                 n1 = int(np.prod(s1)) if len(s1) > 0 else 1
@@ -797,6 +851,7 @@ class TrustedFirstParty(TupleProvider):
             n0 = int(np.prod(s0)) if len(s0) > 0 else 1
             n1 = int(np.prod(s1)) if len(s1) > 0 else 1
             n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            _acct_preproc(64 * (n0 + n1 + n2))
             c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n1 + n2, n0 + n1 if is_rank0 else 0)
             shares = _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, sd0, sd1, s0, s1, c_shape, is_rank0)
             return _wrap_shares(shares, ("arithmetic", "arithmetic", "arithmetic"), device=device)
@@ -813,11 +868,13 @@ class TrustedFirstParty(TupleProvider):
             b_dummy = jnp.zeros(s1, dtype=DATATYPE)
             c_shape = _eval_ring_op(op, a_dummy, b_dummy, *args, **kwargs).shape
         shapes = (s0, s1, c_shape)
+        _acct_preproc(64 * sum(int(np.prod(s)) for s in shapes))
         return tuple(_share_batch(tensors, shapes, ("arithmetic", "arithmetic", "arithmetic"), device=device))
 
     def square(self, size, device=None):
         shape = tuple(size)
         is_rank0 = self.rank == 0
+        _acct_preproc(64 * 2 * int(np.prod(shape)))
         if jax.default_backend() == "gpu":
             n = int(np.prod(shape)) if len(shape) > 0 else 1
             c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
@@ -835,6 +892,7 @@ class TrustedFirstParty(TupleProvider):
         s0, s1 = tuple(size0), tuple(size1)
         c_shape = jnp.broadcast_shapes(s0, s1)
         is_rank0 = self.rank == 0
+        _acct_preproc(64 * (int(np.prod(s0)) + int(np.prod(s1)) + int(np.prod(c_shape))))
         if jax.default_backend() == "gpu":
             n0 = int(np.prod(s0)) if len(s0) > 0 else 1
             n1 = int(np.prod(s1)) if len(s1) > 0 else 1
@@ -857,6 +915,7 @@ class TrustedFirstParty(TupleProvider):
         n = int(np.prod(s)) if len(s) > 0 else 1
         n_a = k_rounds * n
         n_b = k_rounds * 2 * n
+        _acct_preproc(64 * (n_a + 2 * n_b))
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n_a + 2 * n_b, (n_a + n_b) if is_rank0 else 0)
         a_sh, b_sh, c_sh = _tfp_spk_triples_jit(c_loc, c0, c1, s_loc, sd0, sd1, s, k_rounds, is_rank0)
         return (
@@ -873,6 +932,7 @@ class TrustedFirstParty(TupleProvider):
         n_b = k_rounds * 2 * n
         tot_przs = 5 * n + n_a + 2 * n_b
         tot_loc = (3 * n + n_a + n_b) if is_rank0 else 0
+        _acct_preproc(64 * tot_przs)
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(tot_przs, tot_loc)
         return _tfp_ltz_rng_and_pre_jit(
             x_share, c_loc, c0, c1, s_loc, sd0, sd1, s, k_rounds, is_rank0
@@ -882,6 +942,7 @@ class TrustedFirstParty(TupleProvider):
         shape = tuple(x_share.shape)
         is_rank0 = self.rank == 0
         n = int(np.prod(shape)) if len(shape) > 0 else 1
+        _acct_preproc(64 * 3 * n)
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(3 * n, 2 * n if is_rank0 else 0)
         return _tfp_mul_triple_and_pre_jit(
             x_share, y_share, c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0
@@ -891,6 +952,7 @@ class TrustedFirstParty(TupleProvider):
         shape = tuple(x_share.shape)
         is_rank0 = self.rank == 0
         n = int(np.prod(shape)) if len(shape) > 0 else 1
+        _acct_preproc(64 * 2 * n)
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
         return _tfp_square_and_pre_jit(
             x_share, c_loc, c0, c1, s_loc, sd0, sd1, shape, is_rank0
@@ -900,6 +962,7 @@ class TrustedFirstParty(TupleProvider):
         shape = tuple(x_share.shape)
         is_rank0 = self.rank == 0
         n = int(np.prod(shape)) if len(shape) > 0 else 1
+        _acct_preproc((int(l) + 1) * n)  # r (l-m bits), r' (m bits), b (1 bit)
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(3 * n, 3 * n if is_rank0 else 0)
         return _tfp_egk_rng_and_pre_jit(
             x_share, c_loc, c0, c1, s_loc, sd0, sd1, shape, int(l), int(m), is_rank0
@@ -912,6 +975,7 @@ class TrustedFirstParty(TupleProvider):
         if num_parties == 2:
             shape = tuple(size)
             is_rank0 = self.rank == 0
+            _acct_preproc(64 * 2 * int(np.prod(shape)))
             if jax.default_backend() == "gpu":
                 n = int(np.prod(shape)) if len(shape) > 0 else 1
                 c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
@@ -950,6 +1014,7 @@ class TrustedFirstParty(TupleProvider):
     def B2A_rng(self, size, device=None):
         shape = tuple(size)
         is_rank0 = self.rank == 0
+        _acct_preproc(65 * int(np.prod(shape)))  # 1 ring share + 1 binary share
         if jax.default_backend() == "gpu":
             n = int(np.prod(shape)) if len(shape) > 0 else 1
             c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(2 * n, n if is_rank0 else 0)
@@ -967,6 +1032,7 @@ class TrustedFirstParty(TupleProvider):
         n_elem = int(np.prod(t_shape)) if len(t_shape) > 0 else 1
         lut_sz = int(lut_size)
         is_rank0 = self.rank == 0
+        _acct_preproc(64 * (n_elem + n_elem * lut_sz))
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n_elem + n_elem * lut_sz, n_elem if is_rank0 else 0)
         r_sh, oh_sh = _tfp_one_hot_jit(c_loc, c0, c1, s_loc, sd0, sd1, t_shape, lut_sz, is_rank0)
         return _wrap_shares((r_sh, oh_sh), ("arithmetic", "arithmetic"), device=device)
@@ -974,6 +1040,7 @@ class TrustedFirstParty(TupleProvider):
     def egk_trunc_pr_rng(self, size, l, m, device=None):
         shape = tuple(size)
         is_rank0 = self.rank == 0
+        _acct_preproc((int(l) + 1) * int(np.prod(shape)))  # r (l-m bits), r' (m bits), b (1 bit)
         if jax.default_backend() == "gpu":
             n = int(np.prod(shape)) if len(shape) > 0 else 1
             c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(3 * n, 3 * n if is_rank0 else 0)
@@ -1009,6 +1076,7 @@ class TrustedFirstParty(TupleProvider):
         period_f = float(period)
         period_scaled = int(round(period_f * scale))
         is_rank0 = self.rank == 0
+        _acct_preproc(64 * (n0 + 2 * n_uv))
         c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(
             n0 + 2 * n_uv, n0 if is_rank0 else 0
         )
@@ -1031,6 +1099,7 @@ class TrustedFirstParty(TupleProvider):
             c_shape = jnp.broadcast_shapes(s0[:-2], s1[:-2]) + (s0[-2], s1[-1])
             n0 = int(np.prod(s0)) if len(s0) > 0 else 1
             n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            _acct_preproc(64 * (n0 + n2))
             c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n2, n0 if is_rank0 else 0)
             w_arg = _w_plain if (is_rank0 and _w_plain is not None) else jnp.zeros(s1, dtype=DATATYPE)
             shares = _tfp_linear_matmul_jit(
@@ -1042,6 +1111,7 @@ class TrustedFirstParty(TupleProvider):
             c_shape = jnp.broadcast_shapes(s0, s1)
             n0 = int(np.prod(s0)) if len(s0) > 0 else 1
             n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            _acct_preproc(64 * (n0 + n2))
             c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n2, n0 if is_rank0 else 0)
             w_arg = _w_plain if (is_rank0 and _w_plain is not None) else jnp.zeros(s1, dtype=DATATYPE)
             shares = _tfp_linear_mul_jit(
@@ -1080,6 +1150,13 @@ class TrustedFirstParty(TupleProvider):
         k_przs = 4 if mode == "ltz" else (5 if mode == "relu" else 7)
         s0, c0 = g0.next_offset(k_przs * n)
         s1, c1 = g1.next_offset(k_przs * n)
+        # Key: nbits-level DPF CWs + r_in share + msb(r) bit + B2A masks (rA, rB) [+ w = rA * r_in].
+        if mode == "ltz":
+            _acct_fss_key(n, dpf_levels=int(nbits), ring_elems=2, bit_elems=2)
+        elif mode == "relu":
+            _acct_fss_key(n, dpf_levels=int(nbits), ring_elems=3, bit_elems=2)
+        else:
+            _acct_fss_key(n, dpf_levels=int(nbits), ring_elems=4, bit_elems=3)
         return _tfp_dcf_key_jit(
             c_glob, c0, c1, s_glob, s0, s1, shape, int(nbits), str(mode), is_rank0
         )
@@ -1106,6 +1183,13 @@ class TrustedFirstParty(TupleProvider):
         s_glob, c_glob = g_glob.next_offset(k_glob * n)
         s0, c0 = g0.next_offset(k_przs * n)
         s1, c1 = g1.next_offset(k_przs * n)
+        # Key: DPF CWs (+ DCF CWs for 'bior') + mask share(s) + Beaver tuple shares.
+        if mode_s == "haar":
+            _acct_fss_key(n, dpf_levels=int(J) + int(j_depth), ring_elems=4)
+        elif mode_s == "bior_prob":
+            _acct_fss_key(n, dpf_levels=int(J), ring_elems=9)
+        else:
+            _acct_fss_key(n, dpf_levels=int(J) + int(j_depth), dcf_levels=int(j_depth), ring_elems=10)
         return _tfp_wave_key_jit(
             c_glob, c0, c1, s_glob, s0, s1, shape, int(J), int(j_depth), mode_s, is_rank0
         )

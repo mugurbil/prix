@@ -1131,6 +1131,9 @@ def sigma_tr_trunc(x, truncation: int):
     s_glob, c_glob = g_glob.next_offset(3 * n)
     s0, c0 = g0.next_offset(2 * n)
     s1, c1 = g1.next_offset(2 * n)
+    from prix.provider import _acct_fss_key
+
+    _acct_fss_key(n, dcf_levels=j_depth, ring_elems=2)  # j-level arithmetic DCF + (r, r_hi) shares
     r_sh, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf = _tfp_sigma_tr_key_jit(
         c_glob, c0, c1, s_glob, s0, s1, shape, j_depth, is_rank0
     )
@@ -1243,12 +1246,16 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
     party_id = comm.get().get_rank()
     is_rank0 = party_id == 0
 
-    if probabilistic:
-        x_high_sh = x_flat >> jnp.int64(j_depth)
-        x_lsb_sh = x_flat & jnp.int64((1 << j_depth) - 1)
-        if is_rank0:
-            x_high_sh = x_high_sh + jnp.int64(1)
-            x_lsb_sh = x_lsb_sh - jnp.int64(1 << j_depth)
+    if probabilistic or cfg.encoder.trunc_method.lut == "sigma":
+        if cfg.encoder.trunc_method.lut == "sigma" and not probabilistic:
+            x_high_sh = sigma_tr_trunc(x, j_depth).share.reshape(-1)
+            x_lsb_sh = x_flat - (x_high_sh << jnp.int64(j_depth))
+        else:
+            x_high_sh = x_flat >> jnp.int64(j_depth)
+            x_lsb_sh = x_flat & jnp.int64((1 << j_depth) - 1)
+            if is_rank0:
+                x_high_sh = x_high_sh + jnp.int64(1)
+                x_lsb_sh = x_lsb_sh - jnp.int64(1 << j_depth)
         r_sh, s_dpf, cw_dpf, bvr_sh = provider.generate_wave_key(
             shape, J=J, j_depth=0, mode="bior_prob", device=x.device
         )

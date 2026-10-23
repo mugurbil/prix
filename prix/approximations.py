@@ -817,8 +817,8 @@ def _eval_haar_lut(x, lut_table, truncation):
 
 
 def _eval_bior_lut(x, lut_table, truncation):
-    """Evaluates a Bior(5,3) Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`) or Curl's protocol."""
-    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob"):
+    """Evaluates a Bior(5,3) Wavelet LUT using Wave's 2-round FSS protocol (`trunc_method.lut in ('wave', 'wave_prob')`), 3-round SIGMA TR + Wave Bior protocol (`trunc_method.lut == 'sigma'`), or Curl's protocol."""
+    if comm.get().get_world_size() == 2 and cfg.encoder.trunc_method.lut in ("wave", "wave_prob", "sigma"):
         from prix import fss
 
         return fss.wave_bior_lut(x, lut_table, truncation=truncation)
