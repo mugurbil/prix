@@ -74,6 +74,7 @@ class PrixConfig:
         "default": "default.yaml",
         "lut": "default.yaml",
         "curl": "default.yaml",
+        "wave": "wave.yaml",
         "sigma": "sigma.yaml",
         "fss": "sigma.yaml",
         "poly": "poly.yaml",

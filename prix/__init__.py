@@ -86,7 +86,8 @@ def set_mode(mode, device=None):
     """
     Switch PriX's MPC approximation backend in one line:
       - 'lut' / 'default': Curl Wavelet Look-Up Tables + EGK truncation
-      - 'sigma' / 'fss': SIGMA Function Secret Sharing (DPF/DCF comparisons, bit-packed B2A, static-weight correlations) + Wavelet LUTs
+      - 'wave': Wave (PoPETs 2025) 2-round FSS Wavelet Look-Up Tables (bior(5,3) + deterministic DPF/DCF truncation + Beaver 8-tuple)
+      - 'sigma' / 'fss': SIGMA Function Secret Sharing (DPF/DCF comparisons, bit-packed B2A, static-weight correlations, 0th-order Haar FSS LUTs)
       - 'poly': PUMA / Nimbus piecewise low-degree polynomials (no LUTs)
       - 'shaft': SHAFT 1-round Fourier activations + constant-round ODE Softmax
       - 'crypten': Classic CrypTen polynomial / Newton-Raphson / limit approximations

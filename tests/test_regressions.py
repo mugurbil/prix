@@ -134,7 +134,62 @@ def _split_nexp_and_dynamic_lut():
         _ = np.asarray(g.gelu().reconstruct())
     with prix.cfg.temp_override({"functions.gelu.lut_max_bits": 3}):
         g_wide = np.asarray(g.gelu().reconstruct())
-    return split_out, np.exp(x_np), g_wide
+    with prix.cfg.temp_override({"functions.gelu.method": "haar"}):
+        g_haar = np.asarray(prix.array(np.array([-1.0, 0.5, 1.5], np.float32)).gelu().reconstruct())
+    with prix.cfg.temp_override({"functions.silu.method": "bior-lut-only"}):
+        s_blo = np.asarray(prix.array(np.array([-1.0, 0.5, 1.5], np.float32)).silu().reconstruct())
+    return split_out, np.exp(x_np), g_wide, g_haar, s_blo
+
+
+def _three_party_ops():
+    x_np = np.array([-2.0, 0.5, 3.0, 4.0], dtype=np.float32)
+    y_np = np.array([1.0, -1.0, 2.0, 0.5], dtype=np.float32)
+    div_np = np.array([2, 2, 4, 4], dtype=np.int64)
+    x = prix.array(x_np, src=0)
+    y = prix.array(y_np, src=1)
+    # Non-scalar integer divisor in 3-party mode (Audit item B5)
+    div_out = np.asarray(x.div(div_np).reconstruct())
+    return (
+        np.asarray((x + y).reconstruct()),
+        np.asarray((x * y).reconstruct()),
+        np.asarray((x < y).reconstruct()),
+        np.asarray(x.relu().reconstruct()),
+        div_out,
+    )
+
+
+def _fission_multi_eval():
+    rs = np.random.RandomState(42)
+    x_np = rs.randn(4, 8).astype(np.float32)
+    x = prix.array(x_np, src=0)
+    return (
+        x_np,
+        np.asarray(x.gelu().reconstruct()),
+        np.asarray(x.softmax(dim=-1).reconstruct()),
+        np.asarray(x.layernorm().reconstruct()),
+    )
+
+
+def _dense_mode_sweep():
+    grid = np.linspace(-1.75, 1.75, 64, dtype=np.float32)
+    rs = np.random.RandomState(7)
+    logits = (rs.randn(4, 16) * 1.5).astype(np.float32)
+    ln_in = (rs.randn(4, 16) * 1.5 + 0.5).astype(np.float32)
+    x = prix.array(grid, src=0)
+    sm = np.asarray(prix.array(logits, src=0).softmax(dim=-1).reconstruct())
+    ln = np.asarray(prix.array(ln_in, src=0).layernorm().reconstruct())
+    return {
+        "grid": grid,
+        "logits": logits,
+        "ln_in": ln_in,
+        "gelu": np.asarray(x.gelu().reconstruct()),
+        "silu": np.asarray(x.silu().reconstruct()),
+        "sigmoid": np.asarray(x.sigmoid().reconstruct()),
+        "tanh": np.asarray(x.tanh().reconstruct()),
+        "erf": np.asarray(x.erf().reconstruct()),
+        "softmax": sm,
+        "layernorm": ln,
+    }
 
 
 class TestRegressions(unittest.TestCase):
@@ -195,9 +250,117 @@ class TestRegressions(unittest.TestCase):
         self.assertNotEqual(p1, p2)
 
     def test_split_nexp_and_dynamic_lut_override(self):
-        split_out, ref, g_wide = prix.run(_split_nexp_and_dynamic_lut, world_size=2, mode="lut", timeout=180)
+        split_out, ref, g_wide, g_haar, s_blo = prix.run(
+            _split_nexp_and_dynamic_lut, world_size=2, mode="lut", timeout=180
+        )
         np.testing.assert_allclose(split_out, ref, atol=0.07)
         np.testing.assert_allclose(g_wide, np.array([0.0, 5.0], dtype=np.float32), atol=0.15)
+        pts = np.array([-1.0, 0.5, 1.5], dtype=np.float64)
+        from scipy.special import erf
+        gelu_ref = 0.5 * pts * (1.0 + erf(pts / np.sqrt(2.0)))
+        silu_ref = pts / (1.0 + np.exp(-pts))
+        np.testing.assert_allclose(g_haar, gelu_ref, atol=0.05)
+        np.testing.assert_allclose(s_blo, silu_ref, atol=0.15)
+
+    def test_three_party_mpc_and_nonscalar_div(self):
+        add_o, mul_o, lt_o, relu_o, div_o = prix.run(
+            _three_party_ops, world_size=3, mode="crypten", timeout=180
+        )
+        x_np = np.array([-2.0, 0.5, 3.0, 4.0], dtype=np.float32)
+        y_np = np.array([1.0, -1.0, 2.0, 0.5], dtype=np.float32)
+        div_np = np.array([2, 2, 4, 4], dtype=np.float32)
+        np.testing.assert_allclose(add_o, x_np + y_np, atol=1e-3)
+        np.testing.assert_allclose(mul_o, x_np * y_np, atol=1e-2)
+        np.testing.assert_allclose(lt_o, (x_np < y_np).astype(np.float32), atol=1e-3)
+        np.testing.assert_allclose(relu_o, np.maximum(x_np, 0.0), atol=1e-2)
+        np.testing.assert_allclose(div_o, x_np / div_np, atol=1e-2)
+
+    def test_fission_multi_evaluator_and_ttp(self):
+        from scipy.special import erf
+        for eval_size, prov in ((2, "TFP"), (1, "TTP")):
+            with prix.cfg.temp_override({"mpc.provider": prov}):
+                x_np, g, sm, ln = prix.run(
+                    _fission_multi_eval, world_size=2, evaluator_size=eval_size, mode="fission", timeout=180
+                )
+            x64 = x_np.astype(np.float64)
+            gelu_ref = 0.5 * x64 * (1.0 + erf(x64 / np.sqrt(2.0)))
+            ex = np.exp(x64 - np.max(x64, axis=-1, keepdims=True))
+            sm_ref = ex / np.sum(ex, axis=-1, keepdims=True)
+            ln_ref = (x64 - x64.mean(-1, keepdims=True)) / np.sqrt(x64.var(-1, keepdims=True) + 1e-5)
+            np.testing.assert_allclose(g, gelu_ref, atol=1e-4)
+            np.testing.assert_allclose(sm, sm_ref, atol=1e-4)
+            np.testing.assert_allclose(ln, ln_ref, atol=1e-4)
+
+    def test_dense_accuracy_and_range_invariants_all_modes(self):
+        from scipy.special import erf
+        for mode, atol in (("lut", 0.08), ("sigma", 0.08), ("poly", 0.03), ("shaft", 0.07), ("crypten", 0.08), ("fission", 1e-3)):
+            res = prix.run(_dense_mode_sweep, world_size=2, mode=mode, timeout=180)
+            g = res["grid"].astype(np.float64)
+            logits = res["logits"].astype(np.float64)
+            ln_in = res["ln_in"].astype(np.float64)
+            gelu_ref = 0.5 * g * (1.0 + erf(g / np.sqrt(2.0)))
+            silu_ref = g / (1.0 + np.exp(-g))
+            sig_ref = 1.0 / (1.0 + np.exp(-g))
+            tanh_ref = np.tanh(g)
+            erf_ref = erf(g)
+            ex = np.exp(logits - np.max(logits, axis=-1, keepdims=True))
+            sm_ref = ex / np.sum(ex, axis=-1, keepdims=True)
+            ln_ref = (ln_in - ln_in.mean(-1, keepdims=True)) / np.sqrt(ln_in.var(-1, keepdims=True) + 1e-5)
+
+            gelu_atol = 0.25 if mode in ("lut", "sigma") else atol
+            silu_atol = 0.50 if mode in ("lut", "sigma") else atol
+            self.assertLess(float(np.median(np.abs(res["gelu"] - gelu_ref))), 0.03, f"{mode}:gelu_med")
+            self.assertLess(float(np.median(np.abs(res["silu"] - silu_ref))), 0.03, f"{mode}:silu_med")
+            np.testing.assert_allclose(res["gelu"], gelu_ref, atol=gelu_atol, err_msg=f"{mode}:gelu")
+            np.testing.assert_allclose(res["silu"], silu_ref, atol=silu_atol, err_msg=f"{mode}:silu")
+            np.testing.assert_allclose(res["sigmoid"], sig_ref, atol=atol, err_msg=f"{mode}:sigmoid")
+            np.testing.assert_allclose(res["tanh"], tanh_ref, atol=atol, err_msg=f"{mode}:tanh")
+            np.testing.assert_allclose(res["erf"], erf_ref, atol=atol, err_msg=f"{mode}:erf")
+            np.testing.assert_allclose(res["softmax"], sm_ref, atol=atol, err_msg=f"{mode}:softmax")
+            np.testing.assert_allclose(res["layernorm"], ln_ref, atol=atol, err_msg=f"{mode}:layernorm")
+
+            # Range invariants: softmax in [0, 1] and rows sum to ~1; sigmoid in [0, 1]; tanh/erf in [-1, 1]
+            self.assertTrue(np.all((res["softmax"] >= -0.02) & (res["softmax"] <= 1.02)), mode)
+            np.testing.assert_allclose(res["softmax"].sum(axis=-1), 1.0, atol=0.06, err_msg=f"{mode}:sm_sum")
+            self.assertTrue(np.all((res["sigmoid"] >= -0.05) & (res["sigmoid"] <= 1.05)), mode)
+            self.assertTrue(np.all((res["tanh"] >= -1.05) & (res["tanh"] <= 1.05)), mode)
+
+    def test_packaging_and_config_sync(self):
+        import glob
+        import os
+
+        repo_root = os.path.normpath(os.path.join(os.path.dirname(prix.__file__), ".."))
+        pkg_cfg_dir = os.path.join(os.path.dirname(prix.__file__), "config")
+        repo_cfg_dir = os.path.join(repo_root, "configs")
+        if os.path.isdir(repo_cfg_dir):
+            pkg_yamls = {os.path.basename(p) for p in glob.glob(os.path.join(pkg_cfg_dir, "*.yaml"))}
+            repo_yamls = {os.path.basename(p) for p in glob.glob(os.path.join(repo_cfg_dir, "*.yaml"))}
+            self.assertEqual(pkg_yamls, repo_yamls)
+            for fname in pkg_yamls:
+                with open(os.path.join(pkg_cfg_dir, fname), "r", encoding="utf-8") as f1, open(
+                    os.path.join(repo_cfg_dir, fname), "r", encoding="utf-8"
+                ) as f2:
+                    self.assertEqual(f1.read(), f2.read(), f"Config drift in {fname}")
+
+        pyproject_path = os.path.join(repo_root, "pyproject.toml")
+        req_path = os.path.join(repo_root, "requirements.txt")
+        if os.path.exists(pyproject_path) and os.path.exists(req_path):
+            try:
+                import tomllib
+            except ImportError:
+                tomllib = None
+            if tomllib is not None:
+                with open(pyproject_path, "rb") as f:
+                    pyproject = tomllib.load(f)
+                self.assertEqual(pyproject["project"]["version"], prix.__version__)
+                py_deps = set(pyproject["project"]["dependencies"])
+                with open(req_path, "r", encoding="utf-8") as f:
+                    req_deps = {
+                        line.strip()
+                        for line in f
+                        if line.strip() and not line.startswith("#") and not line.startswith("pytest")
+                    }
+                self.assertEqual(py_deps, req_deps)
 
     def test_sigma_fss_protocol(self):
         res = prix.run(_sigma_fss_checks, world_size=2, mode="sigma", timeout=180)

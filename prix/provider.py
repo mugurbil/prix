@@ -9,6 +9,7 @@ import functools
 import logging
 import os
 import pickle
+import tempfile
 
 import jax
 import jax.numpy as jnp
@@ -190,6 +191,7 @@ class TupleProvider:
         "generate_additive_triple",
         "generate_linear_triple",
         "generate_dcf_key",
+        "generate_wave_key",
         "square",
         "generate_binary_triple",
         "wrap_rng",
@@ -199,8 +201,9 @@ class TupleProvider:
         "generate_trig_triple",
     ]
 
-    _DEFAULT_CACHE_PATH = os.path.normpath(
-        os.path.join(os.path.dirname(__file__), "tuple_cache")
+    _DEFAULT_CACHE_PATH = os.path.join(
+        tempfile.gettempdir(),
+        f"prix_tuple_cache_{os.getuid() if hasattr(os, 'getuid') else 'default'}",
     )
     CACHE_SAVE_BATCH_SIZE = 1000
 
@@ -217,12 +220,13 @@ class TupleProvider:
     def _get_request_path(self, prefix=None):
         if prefix is None:
             prefix = self._DEFAULT_CACHE_PATH
-        os.makedirs(prefix, exist_ok=True)
+        os.makedirs(prefix, mode=0o700, exist_ok=True)
         return os.path.join(prefix, f"request_cache-{self.rank}.pkl")
 
     def _get_tuple_path(self, prefix=None):
         if prefix is None:
             prefix = self._DEFAULT_CACHE_PATH
+        os.makedirs(prefix, mode=0o700, exist_ok=True)
         return os.path.join(prefix, f"tuple_cache-{self.rank}")
 
     def trace(self, tracing=True):
@@ -1044,6 +1048,32 @@ class TrustedFirstParty(TupleProvider):
             c_glob, c0, c1, s_glob, s0, s1, shape, int(nbits), str(mode), is_rank0
         )
 
+    def generate_wave_key(self, size, J=5, j_depth=14, mode="bior", device=None):
+        """
+        Generates correlated Wave FSS keys (`mode` in ('haar', 'bior')):
+          - 'haar': (J + j_depth)-level DPF key + Beaver multiplication triple (U, IP, U*IP).
+          - 'bior': (J + j_depth)-level DPF key + j_depth-level arithmetic DCF key +
+            Generalized Beaver 8-tuple (U, A, B, X, A*X - B, U*X, U*A, U*(A*X - B)).
+        """
+        import prix
+        from prix.fss import _tfp_wave_key_jit
+
+        shape = tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        is_rank0 = self.rank == 0
+        g_glob = prix.generators.get("global")
+        g0 = prix.generators.get("prev")
+        g1 = prix.generators.get("next")
+        mode_s = str(mode)
+        k_glob = 5 if mode_s == "haar" else 9
+        k_przs = 4 if mode_s == "haar" else 10
+        s_glob, c_glob = g_glob.next_offset(k_glob * n)
+        s0, c0 = g0.next_offset(k_przs * n)
+        s1, c1 = g1.next_offset(k_przs * n)
+        return _tfp_wave_key_jit(
+            c_glob, c0, c1, s_glob, s0, s1, shape, int(J), int(j_depth), mode_s, is_rank0
+        )
+
 
 class TrustedThirdParty(TupleProvider):
     """Trusted Third Party provider communicating with a dedicated TTPServer process."""
@@ -1301,6 +1331,73 @@ class TrustedThirdParty(TupleProvider):
             return r_in_sh, s_init, cw_all, msb_r_sh, rA_sh, rB_sh
         return r_in_sh, s_init, cw_all, msb_r_sh, rA_sh, rB_sh, w_sh
 
+    def generate_wave_key(self, size, J=5, j_depth=14, mode="bior", device=None):
+        if device is None:
+            device = self.device
+        generator = TTPClient.get().get_generator(device=device)
+        shape = tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        J_i = int(J)
+        j_i = int(j_depth)
+        mode_s = str(mode)
+
+        r_sh = generate_random_ring_element((n,), generator=generator, device=device)
+        s_dpf_raw = generate_random_ring_element((n,), generator=generator, device=device)
+        s_dpf = jax.lax.bitcast_convert_type(s_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
+
+        if mode_s == "haar":
+            if comm.get().get_rank() == 0:
+                cw_dpf_i64 = TTPClient.get().ttp_request("wave_cw", device, shape, J_i, j_i, mode_s)
+                cw_dpf = jax.lax.bitcast_convert_type(cw_dpf_i64, jnp.uint64)
+                bvr_sh = TTPClient.get().ttp_request("wave_bvr", device)
+            else:
+                ttp_rank = comm.get().get_ttp_rank()
+                old_v = comm.get().is_verbose()
+                comm.get().set_verbosity(False)
+                try:
+                    cw_dpf_i64 = comm.get().recv(src=ttp_rank)
+                finally:
+                    comm.get().set_verbosity(old_v)
+                cw_dpf = jax.lax.bitcast_convert_type(
+                    to_jax(cw_dpf_i64, device=device, dtype=DATATYPE), jnp.uint64
+                )
+                bvr_sh = generate_random_ring_element((3, n), generator=generator, device=device)
+            return r_sh, s_dpf, cw_dpf, bvr_sh
+        else:
+            s_dcf_raw = generate_random_ring_element((n,), generator=generator, device=device)
+            s_dcf = jax.lax.bitcast_convert_type(s_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+            if comm.get().get_rank() == 0:
+                cw_dpf_i64 = TTPClient.get().ttp_request("wave_cw", device, shape, J_i, j_i, mode_s)
+                cw_dpf = jax.lax.bitcast_convert_type(cw_dpf_i64, jnp.uint64)
+                r_lo_sh = TTPClient.get().ttp_request("wave_r_lo", device)
+                cw_dcf_i64 = TTPClient.get().ttp_request("wave_dcf_cw", device)
+                cw_dcf = jax.lax.bitcast_convert_type(cw_dcf_i64, jnp.uint64)
+                v_cw_dcf = TTPClient.get().ttp_request("wave_dcf_v", device)
+                g_cw_dcf = TTPClient.get().ttp_request("wave_dcf_g", device)
+                bvr_sh = TTPClient.get().ttp_request("wave_bvr", device)
+            else:
+                ttp_rank = comm.get().get_ttp_rank()
+                old_v = comm.get().is_verbose()
+                comm.get().set_verbosity(False)
+                try:
+                    cw_dpf_i64 = comm.get().recv(src=ttp_rank)
+                    cw_dcf_i64 = comm.get().recv(src=ttp_rank)
+                    v_cw_dcf_np = comm.get().recv(src=ttp_rank)
+                    g_cw_dcf_np = comm.get().recv(src=ttp_rank)
+                finally:
+                    comm.get().set_verbosity(old_v)
+                cw_dpf = jax.lax.bitcast_convert_type(
+                    to_jax(cw_dpf_i64, device=device, dtype=DATATYPE), jnp.uint64
+                )
+                cw_dcf = jax.lax.bitcast_convert_type(
+                    to_jax(cw_dcf_i64, device=device, dtype=DATATYPE), jnp.uint64
+                )
+                v_cw_dcf = to_jax(v_cw_dcf_np, device=device, dtype=DATATYPE)
+                g_cw_dcf = to_jax(g_cw_dcf_np, device=device, dtype=DATATYPE)
+                r_lo_sh = generate_random_ring_element((n,), generator=generator, device=device)
+                bvr_sh = generate_random_ring_element((8, n), generator=generator, device=device)
+            return r_sh, r_lo_sh, s_dpf, cw_dpf, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, bvr_sh
+
     @staticmethod
     def _init(device=None):
         TTPClient._init(device)
@@ -1395,6 +1492,12 @@ class TTPServer:
         "dcf_msb",
         "dcf_rA",
         "dcf_w",
+        "wave_cw",
+        "wave_r_lo",
+        "wave_dcf_cw",
+        "wave_dcf_v",
+        "wave_dcf_g",
+        "wave_bvr",
         "square",
         "binary",
         "wraps",
@@ -1430,8 +1533,9 @@ class TTPServer:
 
                 result = getattr(self, function)(*args, **kwargs)
                 comm.get().send(result, 0)
-        except RuntimeError as err:
-            logging.info(f"Encountered Runtime error. TTPServer shutting down: {err}")
+        except Exception as err:
+            logging.error(f"Encountered error. TTPServer shutting down: {err}")
+            raise
 
     def _setup_generators(self):
         ws = comm.get().get_world_size()
@@ -1583,6 +1687,97 @@ class TTPServer:
     def dcf_w(self):
         res = self._pending_dcf_w
         self._pending_dcf_w = None
+        return res
+
+    def wave_cw(self, shape, J, j_depth, mode):
+        from prix.fss import dcf_gen_arith_jit, dpf_gen_jit
+
+        shape = tuple(shape)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        J_i = int(J)
+        j_i = int(j_depth)
+        mode_s = str(mode)
+
+        r_in = self._get_additive_PRSS((n,))
+        r_u = jax.lax.bitcast_convert_type(r_in, jnp.uint64)
+        s0_dpf_raw = generate_random_ring_element((n,), generator=self.generators[0])
+        s1_dpf_raw = generate_random_ring_element((n,), generator=self.generators[1])
+        k0_dpf = jax.lax.bitcast_convert_type(s0_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
+        k1_dpf = jax.lax.bitcast_convert_type(s1_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
+
+        two_J_mask = jnp.uint64((1 << J_i) - 1)
+        two_j_mask = jnp.uint64((1 << j_i) - 1) if j_i > 0 else jnp.uint64(0)
+        r_J = (r_u >> jnp.uint64(j_i)) & two_J_mask
+        if j_i > 0:
+            r_lo = r_u & two_j_mask
+            alpha_lo = two_j_mask - r_lo
+            alpha_full = (r_J << jnp.uint64(j_i)) | alpha_lo
+        else:
+            r_lo = jnp.zeros_like(r_u)
+            alpha_lo = jnp.zeros_like(r_u)
+            alpha_full = r_J
+
+        cw_dpf = dpf_gen_jit(alpha_full, k0_dpf, k1_dpf, J_i + j_i)
+        cw_dpf_i64 = jax.lax.bitcast_convert_type(cw_dpf, DATATYPE)
+        comm.get().send(cw_dpf_i64, 1)
+
+        if mode_s == "haar":
+            U = generate_random_ring_element((n,))
+            IP = generate_random_ring_element((n,))
+            C = U * IP
+            bvr_plain = jnp.stack([U, IP, C], axis=0)
+            self._pending_wave_bvr = bvr_plain - self._get_additive_PRSS((3, n), remove_rank=True)
+        else:
+            s0_dcf_raw = generate_random_ring_element((n,), generator=self.generators[0])
+            s1_dcf_raw = generate_random_ring_element((n,), generator=self.generators[1])
+            k0_dcf = jax.lax.bitcast_convert_type(s0_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+            k1_dcf = jax.lax.bitcast_convert_type(s1_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+            cw_dcf, v_cw_dcf, g_cw_dcf = dcf_gen_arith_jit(alpha_lo, k0_dcf, k1_dcf, j_i)
+            cw_dcf_i64 = jax.lax.bitcast_convert_type(cw_dcf, DATATYPE)
+            comm.get().send(cw_dcf_i64, 1)
+            comm.get().send(v_cw_dcf, 1)
+            comm.get().send(g_cw_dcf, 1)
+            self._pending_wave_dcf_cw = cw_dcf_i64
+            self._pending_wave_dcf_v = v_cw_dcf
+            self._pending_wave_dcf_g = g_cw_dcf
+            r_lo_i64 = jax.lax.bitcast_convert_type(r_lo, DATATYPE)
+            self._pending_wave_r_lo = r_lo_i64 - self._get_additive_PRSS((n,), remove_rank=True)
+
+            U = generate_random_ring_element((n,))
+            A = generate_random_ring_element((n,))
+            B = generate_random_ring_element((n,))
+            X = generate_random_ring_element((n,))
+            AXmB = A * X - B
+            UX = U * X
+            UA = U * A
+            UAXmB = U * AXmB
+            bvr_plain = jnp.stack([U, A, B, X, AXmB, UX, UA, UAXmB], axis=0)
+            self._pending_wave_bvr = bvr_plain - self._get_additive_PRSS((8, n), remove_rank=True)
+        return cw_dpf_i64
+
+    def wave_r_lo(self):
+        res = self._pending_wave_r_lo
+        self._pending_wave_r_lo = None
+        return res
+
+    def wave_dcf_cw(self):
+        res = self._pending_wave_dcf_cw
+        self._pending_wave_dcf_cw = None
+        return res
+
+    def wave_dcf_v(self):
+        res = self._pending_wave_dcf_v
+        self._pending_wave_dcf_v = None
+        return res
+
+    def wave_dcf_g(self):
+        res = self._pending_wave_dcf_g
+        self._pending_wave_dcf_g = None
+        return res
+
+    def wave_bvr(self):
+        res = self._pending_wave_bvr
+        self._pending_wave_bvr = None
         return res
 
 

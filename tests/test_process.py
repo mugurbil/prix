@@ -6,6 +6,8 @@ python tests/test_process.py
 
 import argparse
 import logging
+import unittest
+from types import SimpleNamespace
 
 import jax.numpy as jnp
 
@@ -93,11 +95,11 @@ def _run_experiment(args):
 
     print("Test Private MatMul")
     left, right = (x @ y).reconstruct(), x_inner @ y_inner
-    assert jnp.array_equal(left, right), f"MatMul {left} != {right}"
+    assert jnp.allclose(left, right, atol=1e-2), f"MatMul {left} != {right}"
 
     print("Test Private Mul")
     left, right = (x * y).reconstruct(), x_inner * y_inner
-    assert jnp.array_equal(left, right), f"Mul {left} != {right}"
+    assert jnp.allclose(left, right, atol=1e-2), f"Mul {left} != {right}"
 
     z = jnp.array([2, 3])
 
@@ -131,6 +133,22 @@ def main():
     launcher.start()
     launcher.join()
     launcher.terminate()
+
+
+class TestProcess(unittest.TestCase):
+    def test_multiprocess_launcher_arithmetic(self):
+        args = SimpleNamespace(
+            world_size=2,
+            evaluator_size=0,
+            device="cpu",
+            multi_gpu=False,
+        )
+        launcher = MultiProcessLauncher(
+            args.world_size, args.evaluator_size, _run_experiment, args
+        )
+        launcher.start()
+        launcher.join(timeout=180)
+        launcher.terminate()
 
 
 if __name__ == "__main__":

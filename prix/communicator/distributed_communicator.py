@@ -8,7 +8,6 @@
 import functools
 import logging
 import os
-import pickle
 
 import jax
 import jax.distributed as jdist
@@ -16,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 from jax._src.distributed import global_state
 
+from . import wire
 from .communicator import Communicator, _logging
 
 
@@ -76,6 +76,12 @@ class DistributedCommunicator(Communicator):
         self._barrier_counter = 0
         self.reset_communication_stats()
         self._name = f"rank_{rank}"
+        if type(self) is DistributedCommunicator:
+            logging.warning(
+                "PriX DistributedCommunicator routes messages through the unencrypted "
+                "jax.distributed coordinator KV store. Use transport='tcp' with tls={...} "
+                "for multi-host deployments with untrusted networks or coordinators."
+            )
 
         eval_base = self.world_size + self.ttp_offset
         self.eval_groups = [
@@ -114,14 +120,22 @@ class DistributedCommunicator(Communicator):
     def _kv_put(self, src, dst, payload):
         seq = self._next_seq(src, dst)
         key = f"prix_msg_{src}_{dst}_{seq}"
-        data = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
+        data = b"".join( bytes(p) if isinstance(p, memoryview) else p for p in wire.encode(payload) )
         global_state.client.key_value_set(key, data)
 
     def _kv_get(self, src, dst):
         seq = self._next_seq(src, dst)
         key = f"prix_msg_{src}_{dst}_{seq}"
         data = global_state.client.blocking_key_value_get(key, self._TIMEOUT_MS)
-        return pickle.loads(data)
+        return wire.decode(bytearray(data))
+
+    def _put_to_mailbox(self, dst, payload):
+        self._kv_put(self.rank, dst, payload)
+
+    def _get_from_mailbox(self, src):
+        if src is None:
+            raise ValueError("DistributedCommunicatorrequires an explicit `src` rank.")
+        return src, self._kv_get(src, self.rank)
 
     @staticmethod
     def _to_transport(array):

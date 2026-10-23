@@ -158,43 +158,56 @@ def _worker_approximations():
     x_val = jnp.array([-0.8, -0.4, 0.4, 0.8], dtype=jnp.float32)
     x = prix.cryptensor(x_val)
 
-    with cfg.temp_override({"functions.exp.bior_size_bits": 8}):
-        prix.LookupTables.LUTs.clear()
-        np.testing.assert_allclose(neg.exp().get_plain_text(), jnp.exp(neg_val), rtol=0.1, atol=0.1)
-        prix.LookupTables.LUTs.clear()
+    with cfg.temp_override({"functions.exp.all_neg": True, "functions.exp.bior_size_bits": 8}):
+        np.testing.assert_allclose(neg.exp().get_plain_text(), jnp.exp(neg_val), rtol=0.05, atol=0.05)
     with cfg.temp_override({"functions.exp.all_neg": False, "functions.exp.bior_size_bits": 8}):
-        prix.LookupTables.LUTs.clear()
-        np.testing.assert_allclose(x.exp().get_plain_text(), jnp.exp(x_val), rtol=0.15, atol=0.15)
-        prix.LookupTables.LUTs.clear()
-    np.testing.assert_allclose(pos.log().get_plain_text(), jnp.log(pos_val), rtol=0.1, atol=0.1)
-    np.testing.assert_allclose(pos.reciprocal().get_plain_text(), 1.0 / pos_val, rtol=0.1, atol=0.1)
-    np.testing.assert_allclose(pos.sqrt().get_plain_text(), jnp.sqrt(pos_val), rtol=0.1, atol=0.1)
+        np.testing.assert_allclose(x.exp().get_plain_text(), jnp.exp(x_val), rtol=0.08, atol=0.08)
+    np.testing.assert_allclose(pos.log().get_plain_text(), jnp.log(pos_val), rtol=0.05, atol=0.05)
+    np.testing.assert_allclose(pos.reciprocal().get_plain_text(), 1.0 / pos_val, rtol=0.05, atol=0.05)
+    np.testing.assert_allclose(pos.sqrt().get_plain_text(), jnp.sqrt(pos_val), rtol=0.05, atol=0.05)
     np.testing.assert_allclose(
         inv_sqrt_in.inv_sqrt().get_plain_text(),
         1.0 / jnp.sqrt(inv_sqrt_val),
-        rtol=0.1,
-        atol=0.1,
+        rtol=0.05,
+        atol=0.05,
     )
-    np.testing.assert_allclose(x.sigmoid().get_plain_text(), jax.nn.sigmoid(x_val), rtol=0.1, atol=0.08)
-    np.testing.assert_allclose(x.tanh().get_plain_text(), jnp.tanh(x_val), rtol=0.1, atol=0.1)
+    np.testing.assert_allclose(x.sigmoid().get_plain_text(), jax.nn.sigmoid(x_val), rtol=0.05, atol=0.05)
+    np.testing.assert_allclose(x.tanh().get_plain_text(), jnp.tanh(x_val), rtol=0.05, atol=0.05)
     np.testing.assert_allclose(
-        x.erf().get_plain_text(), jax.scipy.special.erf(x_val), rtol=0.1, atol=0.1
+        x.erf().get_plain_text(), jax.scipy.special.erf(x_val), rtol=0.05, atol=0.05
     )
     np.testing.assert_allclose(
-        x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), rtol=0.15, atol=0.1
+        x.gelu().get_plain_text(), jax.nn.gelu(x_val, approximate=False), rtol=0.1, atol=0.1
     )
     with cfg.temp_override({"functions.silu.bior_size_bits": 7}):
-        prix.LookupTables.LUTs.clear()
-        np.testing.assert_allclose(x.silu().get_plain_text(), jax.nn.silu(x_val), rtol=0.1, atol=0.1)
-        prix.LookupTables.LUTs.clear()
-    np.testing.assert_allclose(x.sin().get_plain_text(), jnp.sin(x_val), rtol=0.1, atol=0.1)
-    np.testing.assert_allclose(x.cos().get_plain_text(), jnp.cos(x_val), rtol=0.1, atol=0.1)
+        np.testing.assert_allclose(x.silu().get_plain_text(), jax.nn.silu(x_val), rtol=0.08, atol=0.08)
+    np.testing.assert_allclose(x.sin().get_plain_text(), jnp.sin(x_val), rtol=0.05, atol=0.05)
+    np.testing.assert_allclose(x.cos().get_plain_text(), jnp.cos(x_val), rtol=0.05, atol=0.05)
 
-    with cfg.temp_override({"functions.exp.bior_size_bits": 8}):
-        prix.LookupTables.LUTs.clear()
-        sm = x.softmax(dim=0).get_plain_text()
-        prix.LookupTables.LUTs.clear()
-    np.testing.assert_allclose(sm, jax.nn.softmax(x_val, axis=0), rtol=0.15, atol=0.08)
+    sm = x.softmax(dim=0).get_plain_text()
+    np.testing.assert_allclose(sm, jax.nn.softmax(x_val, axis=0), rtol=0.05, atol=0.03)
+    lsm = x.log_softmax(dim=0).get_plain_text()
+    np.testing.assert_allclose(lsm, jax.nn.log_softmax(x_val, axis=0), rtol=0.08, atol=0.08)
+
+    # Power, norm, and 2D pooling
+    np.testing.assert_allclose(pos.pow(2).get_plain_text(), pos_val ** 2, atol=2e-2)
+    np.testing.assert_allclose(pos.pow(3).get_plain_text(), pos_val ** 3, atol=5e-2)
+    np.testing.assert_allclose(x.pow(5).get_plain_text(), x_val ** 5, atol=2e-2)
+    np.testing.assert_allclose(
+        x.norm(p=2, dim=0).get_plain_text(), jnp.linalg.norm(x_val, ord=2, axis=0), atol=5e-2
+    )
+    img_val = jnp.arange(16, dtype=jnp.float32).reshape(1, 1, 4, 4) / 4.0 - 1.5
+    img = prix.cryptensor(img_val)
+    ap = img.avg_pool2d(2, stride=2).get_plain_text()
+    aap = img.adaptive_avg_pool2d((2, 2)).get_plain_text()
+    np.testing.assert_allclose(ap, jnp.array([[[[-0.875, -0.375], [1.125, 1.625]]]]), atol=1e-2)
+    np.testing.assert_allclose(aap, ap, atol=1e-2)
+    mp = img.max_pool2d(2, stride=2, padding=1).get_plain_text()
+    np.testing.assert_allclose(
+        mp,
+        jnp.array([[[[-1.5, -1.0, -0.75], [0.5, 1.0, 1.25], [1.5, 2.0, 2.25]]]]),
+        atol=2e-2,
+    )
 
     ln_in_val = jnp.array([[1.0, 2.0, 3.0, 4.0], [-1.0, 0.0, 1.0, 2.0]], dtype=jnp.float32)
     ln_in = prix.cryptensor(ln_in_val)
@@ -202,7 +215,7 @@ def _worker_approximations():
     mean = jnp.mean(ln_in_val, axis=-1, keepdims=True)
     var = jnp.var(ln_in_val, axis=-1, keepdims=True)
     ln_ref = (ln_in_val - mean) / jnp.sqrt(var + 1e-5)
-    np.testing.assert_allclose(ln_out, ln_ref, rtol=0.15, atol=0.15)
+    np.testing.assert_allclose(ln_out, ln_ref, rtol=0.05, atol=0.05)
 
 
 def _worker_fission():
@@ -227,6 +240,7 @@ def _worker_fission():
 
 
 def _worker_ttp():
+    assert prix.get_default_provider().NAME == "TTP"
     x_val = jnp.array([[1.5, -2.0], [0.5, 3.0]], dtype=jnp.float32)
     y_val = jnp.array([[2.0, 1.0], [-1.0, 2.0]], dtype=jnp.float32)
 
@@ -311,25 +325,29 @@ def _worker_nn_and_llms():
     from examples.llms.models.modern_bert import ModernBertModel
 
     # Basic nn layers
-    lin = prix.nn.Linear(4, 3).encrypt()
-    x = prix.cryptensor(jnp.ones((2, 4), dtype=jnp.float32) * 0.25)
+    lin = prix.nn.Linear(4, 3)
+    x_plain = jnp.ones((2, 4), dtype=jnp.float32) * 0.25
+    plain_out = lin(x_plain)
+    lin.encrypt()
+    x = prix.cryptensor(x_plain)
     out = lin(x)
     assert out.shape == (2, 3)
+    np.testing.assert_allclose(out.get_plain_text(), plain_out, atol=1e-2)
 
     # Small BERT forward pass
     bert = BertModel(
         vocab_size=16, emb_size=8, seq_len=4, n_heads=2, n_layers=1, full=False
     ).encrypt()
     x_emb = prix.cryptensor(jnp.ones((1, 4, 8), dtype=jnp.float32) * 0.1)
-    y_bert = bert(x_emb)
-    assert y_bert.shape == (1, 4, 8)
+    y_bert = bert(x_emb).get_plain_text()
+    assert y_bert.shape == (1, 4, 8) and bool(jnp.all(jnp.isfinite(y_bert)))
 
     # Small GPT forward pass
     gpt = GPT(
         embed_dim=8, num_heads=2, num_blocks=1, vocab_size=16, seq_len=4, full=False
     ).encrypt()
-    y_gpt = gpt(x_emb)
-    assert y_gpt.shape == (1, 4, 8)
+    y_gpt = gpt(x_emb).get_plain_text()
+    assert y_gpt.shape == (1, 4, 8) and bool(jnp.all(jnp.isfinite(y_gpt)))
 
     # Small ModernBert forward pass
     mbert = ModernBertModel(
@@ -341,8 +359,8 @@ def _worker_nn_and_llms():
         n_layers=1,
         full=False,
     ).encrypt()
-    y_mbert = mbert(x_emb)
-    assert y_mbert.shape == (1, 4, 8)
+    y_mbert = mbert(x_emb).get_plain_text()
+    assert y_mbert.shape == (1, 4, 8) and bool(jnp.all(jnp.isfinite(y_mbert)))
 
     # Small Llama forward pass
     llama = Llama(
@@ -357,8 +375,8 @@ def _worker_nn_and_llms():
         full=False,
         cache=True,
     ).encrypt()
-    y_llama = llama(x_emb)
-    assert y_llama.shape == (1, 4, 8)
+    y_llama = llama(x_emb).get_plain_text()
+    assert y_llama.shape == (1, 4, 8) and bool(jnp.all(jnp.isfinite(y_llama)))
 
 
 def _worker_ergonomics(scale):
@@ -392,28 +410,20 @@ class TestPrix(unittest.TestCase):
         _run_mpc(_worker_binary_and_comparisons)
 
     def test_04_wavelet_luts(self):
-        default_cfg = os.path.join(
-            os.path.dirname(prix.__file__), "..", "configs", "default.yaml"
-        )
+        default_cfg = cfg.resolve_config_path("default")
         _run_mpc(_worker_approximations, cfg_file=default_cfg)
 
     def test_05_approximations(self):
-        approx_cfg = os.path.join(
-            os.path.dirname(prix.__file__), "..", "configs", "approximations.yaml"
-        )
+        approx_cfg = cfg.resolve_config_path("approximations")
         _run_mpc(_worker_approximations, cfg_file=approx_cfg)
 
     def test_06_fission_evaluator(self):
-        fission_cfg = os.path.join(
-            os.path.dirname(prix.__file__), "..", "configs", "fission.yaml"
-        )
+        fission_cfg = cfg.resolve_config_path("fission")
         _run_mpc(_worker_fission, world_size=2, evaluator_size=1, cfg_file=fission_cfg)
 
     def test_07_ttp_provider(self):
         with tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False) as f:
-            default_cfg = os.path.join(
-                os.path.dirname(prix.__file__), "..", "configs", "default.yaml"
-            )
+            default_cfg = cfg.resolve_config_path("default")
             with open(default_cfg, "r") as src:
                 content = src.read().replace("provider: \"TFP\"", "provider: \"TTP\"")
             f.write(content)
@@ -425,15 +435,11 @@ class TestPrix(unittest.TestCase):
                 os.remove(ttp_cfg)
 
     def test_08_nn_and_llms(self):
-        fission_cfg = os.path.join(
-            os.path.dirname(prix.__file__), "..", "configs", "fission.yaml"
-        )
+        fission_cfg = cfg.resolve_config_path("fission")
         _run_mpc(_worker_nn_and_llms, world_size=2, evaluator_size=1, cfg_file=fission_cfg)
 
     def test_09_shaft_and_poly(self):
-        shaft_cfg = os.path.join(
-            os.path.dirname(prix.__file__), "..", "configs", "shaft.yaml"
-        )
+        shaft_cfg = cfg.resolve_config_path("shaft")
         _run_mpc(_worker_shaft_and_poly, cfg_file=shaft_cfg)
 
     def test_11_launch_after_jax_initialized(self):

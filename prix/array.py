@@ -1636,9 +1636,13 @@ def _wraps(x):
 
 
 def _truncate(x, y):
-    y_int = int(y) if isinstance(y, (int, float)) else int(np.asarray(y).item())
-    y_arr = jnp.int64(y_int)
-    corr_factor = jnp.int64(4 * ((1 << 62) // y_int))
+    if isinstance(y, (int, float, np.number)):
+        y_int = int(y)
+        y_arr = jnp.int64(y_int)
+        corr_factor = jnp.int64(4 * ((1 << 62) // y_int))
+    else:
+        y_arr = jnp.asarray(y, dtype=DATATYPE)
+        corr_factor = jnp.int64(4) * (jnp.int64(1 << 62) // y_arr)
     if comm.get().get_world_size() == 2:
         provider = get_default_provider()
         r, theta_r = provider.wrap_rng(x.size(), device=x.device)
@@ -1730,9 +1734,18 @@ def _bior_lut_gather_dot(one_hot_share, z_revealed, luts):
 
 def _evaluate_lut(x, lut):
     """Evaluates a 1D Wavelet Look-Up Table (Haar) on secret-shared Array x."""
-    provider = get_default_provider()
     lut = to_jax(lut, device=x.device, dtype=DATATYPE)
-    size = lut.shape[0]
+    size = int(lut.shape[0])
+    if (
+        comm.get().get_world_size() == 2
+        and cfg.encoder.trunc_method.lut == "wave"
+        and size > 0
+        and (size & (size - 1)) == 0
+    ):
+        from prix import fss
+
+        return fss.wave_haar_lut(x, lut, truncation=0)
+    provider = get_default_provider()
     shape = x.size()
     x_flat = x.flatten()
 

@@ -7,20 +7,20 @@ encoder:
   precision_bits: 16
   trunc_method:
     prod: "egk"
-    lut: "egk"
+    lut: "wave"
 functions:
   max:
     method: "tree"
   exp:
-    method: "bior"
+    method: "haar"
     iterations: 8
-    haar_size_bits: 5
+    haar_size_bits: 8
     bior_size_bits: 5
     lut_max_bits: 4
     all_neg: True
     neg_lut_size: 256 # 2^8
   log:
-    method: "bior"
+    method: "haar"
     iterations: 2
     exp_iterations: 8
     order: 8
@@ -28,32 +28,32 @@ functions:
     bior_size_bits: 8
     lut_max_bits: 6
   reciprocal:
-    method: "bior"
+    method: "haar"
     nr_iters: 10
     log_iters: 1
     all_pos: True
     initial: null
-    haar_size_bits: 8
+    haar_size_bits: 10
     bior_size_bits: 8
     lut_max_bits: 6
   sqrt:
-    method: "bior"
+    method: "haar"
     nr_iters: 3
     nr_initial: null
-    haar_size_bits: 6
+    haar_size_bits: 8
     bior_size_bits: 6
     lut_max_bits: 6
   inv_sqrt:
-    method: "bior"
-    haar_size_bits: 16
+    method: "tailored_haar"
+    haar_size_bits: 10
     bior_size_bits: 10
     lut_max_bits: 4
     tailored_0_lut_max_bits: 0
-    tailored_0_haar_size_bits: 12
+    tailored_0_haar_size_bits: 10
     tailored_1_lut_max_bits: 8
     tailored_1_haar_size_bits: 8
   sigmoid_tanh:
-    method: "bior"
+    method: "haar"
     terms: 32
     haar_size_bits: 8
     bior_size_bits: 8
@@ -64,13 +64,13 @@ functions:
     tanh_fs_period: 16
     tanh_fs_terms: 8
   trigonometry:
-    method: "bior"
+    method: "haar"
     iterations: 10
     haar_size_bits: 8
     bior_size_bits: 8
     lut_max_bits: 5
   erf:
-    method: "bior"
+    method: "haar"
     iterations: 8
     haar_size_bits: 8
     bior_size_bits: 8
@@ -78,15 +78,15 @@ functions:
     fs_period: 16
     fs_terms: 5
   gelu:
-    method: "bior-lut-only"
-    haar_size_bits: 4
+    method: "haar-lut-only"
+    haar_size_bits: 8
     bior_size_bits: 4
     lut_max_bits: 3
     fs_period: 8
     fs_terms: 8
   silu:
-    method: "bior-lut-only"
-    haar_size_bits: 4
+    method: "haar-lut-only"
+    haar_size_bits: 8
     bior_size_bits: 4
     lut_max_bits: 4
     fs_period: 16

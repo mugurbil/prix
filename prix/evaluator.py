@@ -273,6 +273,6 @@ class EvaluatorServer:
                 for mpc_node in range(world_size):
                     communicator._put_to_mailbox(mpc_node, out_shares[mpc_node])
 
-        except RuntimeError as err:
-            logging.info("Encountered Runtime error. Evaluator Server shutting down:")
-            logging.info(f"{err}")
+        except Exception as err:
+            logging.error(f"Encountered error. Evaluator Server shutting down: {err}")
+            raise
