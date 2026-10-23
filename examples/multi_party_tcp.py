@@ -263,6 +263,7 @@ def main() -> None:
         peers=peers,
         tls=tls,
     )
+    comm.get().set_verbosity(True)
     try:
         if args.workload == "mlp":
             run_mlp_workload(args.rank)
