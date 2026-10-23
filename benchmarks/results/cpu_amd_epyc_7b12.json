@@ -1,215 +1,2049 @@
 {
-  "prix": {
-    "crypten": {
-      "micro": {
-        "Private MatMul (128x128)": 4.905259993392974,
-        "Private Mul (128x128)": 2.6254399854224175,
-        "Comparison / ReLU (32x64)": 4.681549005908892,
-        "Exp (32x64)": 8.13912000739947,
-        "Reciprocal (32x64)": 33.62149998429231,
-        "InvSqrt (32x64)": 17.91409999714233,
-        "GeLU (32x64)": 40.9139699768275,
-        "SiLU (32x64)": 24.272200011182576,
-        "Softmax (4x32x32)": 103.92550899996422,
-        "LayerNorm (4x32x64)": 22.905980003997684
-      },
-      "llm": {
-        "BertTiny (2-Block, seq=16)": 394.2145279725082,
-        "BertBase (1-Block, seq=16)": 555.1365269930102,
-        "GPT2 (1-Block, seq=16)": 547.236485988833,
-        "Llama (1-Block, d=768, seq=16)": 407.4733770103194,
-        "ModernBert (1-Block, seq=16)": 386.44073699833825
-      }
-    },
-    "poly": {
-      "micro": {
-        "Private MatMul (128x128)": 5.970250000245869,
-        "Private Mul (128x128)": 1.8362289993092418,
-        "Comparison / ReLU (32x64)": 4.611980024492368,
-        "Exp (32x64)": 11.502030014526099,
-        "Reciprocal (32x64)": 29.17499002069235,
-        "InvSqrt (32x64)": 22.02843999839388,
-        "GeLU (32x64)": 16.375570005038753,
-        "SiLU (32x64)": 15.688679995946586,
-        "Softmax (4x32x32)": 100.36995899281465,
-        "LayerNorm (4x32x64)": 18.12596997478977
-      },
-      "llm": {
-        "BertTiny (2-Block, seq=16)": 332.65953802037984,
-        "BertBase (1-Block, seq=16)": 512.6360979920719,
-        "GPT2 (1-Block, seq=16)": 450.4348839982413,
-        "Llama (1-Block, d=768, seq=16)": 390.02556999912485,
-        "ModernBert (1-Block, seq=16)": 346.7291419801768
-      }
-    },
-    "shaft": {
-      "micro": {
-        "Private MatMul (128x128)": 4.810989019460976,
-        "Private Mul (128x128)": 1.8926989869214594,
-        "Comparison / ReLU (32x64)": 4.724558995803818,
-        "Exp (32x64)": 6.326908012852073,
-        "Reciprocal (32x64)": 32.70416200393811,
-        "InvSqrt (32x64)": 19.707694998942316,
-        "GeLU (32x64)": 13.73650602181442,
-        "SiLU (32x64)": 13.408566010184586,
-        "Softmax (4x32x32)": 55.28658698312938,
-        "LayerNorm (4x32x64)": 17.12895600940101
-      },
-      "llm": {
-        "BertTiny (2-Block, seq=16)": 255.53092701011337,
-        "BertBase (1-Block, seq=16)": 464.9669269856531,
-        "GPT2 (1-Block, seq=16)": 424.2704380012583,
-        "Llama (1-Block, d=768, seq=16)": 345.5373979813885,
-        "ModernBert (1-Block, seq=16)": 273.18242500768974
-      }
-    },
-    "lut": {
-      "micro": {
-        "Private MatMul (128x128)": 6.564257986610755,
-        "Private Mul (128x128)": 4.667728004278615,
-        "Comparison / ReLU (32x64)": 5.722178000723943,
-        "Exp (32x64)": 14.15784700657241,
-        "Reciprocal (32x64)": 6.825858989031985,
-        "InvSqrt (32x64)": 15.345106017775834,
-        "GeLU (32x64)": 5.897779017686844,
-        "SiLU (32x64)": 5.1579889841377735,
-        "Softmax (4x32x32)": 82.01258099870756,
-        "LayerNorm (4x32x64)": 14.322906994493678
-      },
-      "llm": {
-        "BertTiny (2-Block, seq=16)": 298.8436419982463,
-        "BertBase (1-Block, seq=16)": 453.3973990182858,
-        "GPT2 (1-Block, seq=16)": 410.9356799745001,
-        "Llama (1-Block, d=768, seq=16)": 385.23168599931523,
-        "ModernBert (1-Block, seq=16)": 313.727981003467
-      }
-    },
-    "fission": {
-      "micro": {
-        "Private MatMul (128x128)": 4.588637995766476,
-        "Private Mul (128x128)": 2.7708199922926724,
-        "Comparison / ReLU (32x64)": 4.729329026304185,
-        "Exp (32x64)": 1.1065900034736842,
-        "Reciprocal (32x64)": 1.0546900157351047,
-        "InvSqrt (32x64)": 1.2572489795275033,
-        "GeLU (32x64)": 1.1514600191731006,
-        "SiLU (32x64)": 1.2000499991700053,
-        "Softmax (4x32x32)": 1.5775189967826009,
-        "LayerNorm (4x32x64)": 2.8918199823237956
-      },
-      "llm": {
-        "BertTiny (2-Block, seq=16)": 97.28540902142413,
-        "BertBase (1-Block, seq=16)": 334.52400800888427,
-        "GPT2 (1-Block, seq=16)": 292.4945770064369,
-        "Llama (1-Block, d=768, seq=16)": 268.4566029929556,
-        "ModernBert (1-Block, seq=16)": 200.16510802088305
-      }
-    }
-  },
   "crypten": {
     "crypten": {
       "micro": {
-        "Private MatMul (128x128)": 23.520194983575493,
-        "Private Mul (128x128)": 4.635808989405632,
-        "Comparison / ReLU (32x64)": 22.833364986581728,
-        "Exp (32x64)": 15.20557701587677,
-        "Reciprocal (32x64)": 80.83500398788601,
-        "InvSqrt (32x64)": 46.97464100900106,
-        "GeLU (32x64)": 89.70082100131549,
-        "SiLU (32x64)": 71.08098600292578,
-        "Softmax (4x32x32)": 293.2790190097876,
-        "LayerNorm (4x32x64)": 55.71627902099863
+        "Private MatMul (128x128)": 23.89349098666571,
+        "Private Mul (128x128)": 5.290469998726621,
+        "Comparison / ReLU (32x64)": 32.51837001880631,
+        "Exp (32x64)": 21.08464000048116,
+        "Reciprocal (32x64)": 105.89310899376869,
+        "InvSqrt (32x64)": 65.45443998766132,
+        "GeLU (32x64)": 114.97640999732539,
+        "SiLU (32x64)": 83.53411999996752,
+        "Softmax (4x32x32)": 382.48143999953754,
+        "LayerNorm (4x32x64)": 75.39911998901516
       },
       "llm": {
-        "BertTiny (2-Block, seq=16)": 1116.9225499907043,
-        "BertBase (1-Block, seq=16)": 2111.690819001524,
-        "GPT2 (1-Block, seq=16)": 2725.988854013849,
-        "Llama (1-Block, d=768, seq=16)": 2015.0208809936885,
-        "ModernBert (1-Block, seq=16)": 1520.7214319962077
+        "BertTiny (2-Block, seq=16)": 1423.3089110057335,
+        "BertBase (1-Block, seq=16)": 2950.738073006505,
+        "GPT2 (1-Block, seq=16)": 3480.9649929811712,
+        "Llama (1-Block, d=768, seq=16)": 2317.2601409896743,
+        "ModernBert (1-Block, seq=16)": 1899.8693500179797
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.1281200170051306,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.126120001776144,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 15.272440039552748,
+            "rounds": 9.0,
+            "bytes": 475136.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 9.047049999935552,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 46.194624999770895,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 25.89995999005623,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 48.28238094341941,
+            "rounds": 35.0,
+            "bytes": 802816.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 33.49943898501806,
+            "rounds": 24.0,
+            "bytes": 802816.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 169.7820610133931,
+            "rounds": 105.0,
+            "bytes": 3038208.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 28.565699991304427,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 559.2500592465512,
+            "rounds": 356.0,
+            "bytes": 11046400.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 559.7326380666345,
+            "rounds": 178.0,
+            "bytes": 80294400.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 618.0299369152635,
+            "rounds": 176.0,
+            "bytes": 80097792.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 433.0441270431038,
+            "rounds": 177.0,
+            "bytes": 68336128.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 431.6544718167279,
+            "rounds": 177.0,
+            "bytes": 51589632.0
+          }
+        }
       }
     },
     "poly": {
       "micro": {
-        "Private MatMul (128x128)": 23.129905021050945,
-        "Private Mul (128x128)": 4.639627994038165,
-        "Comparison / ReLU (32x64)": 23.847456002840772,
-        "Exp (32x64)": 43.269572022836655,
-        "Reciprocal (32x64)": 85.77575298841111,
-        "InvSqrt (32x64)": 50.21161001059227,
-        "GeLU (32x64)": 43.82432097918354,
-        "SiLU (32x64)": 49.92652000510134,
-        "Softmax (4x32x32)": 333.73570602270775,
-        "LayerNorm (4x32x64)": 54.56285001127981
+        "Private MatMul (128x128)": 24.536210985388607,
+        "Private Mul (128x128)": 5.894019996048883,
+        "Comparison / ReLU (32x64)": 36.94029100006446,
+        "Exp (32x64)": 52.60873198858462,
+        "Reciprocal (32x64)": 128.86410602368414,
+        "InvSqrt (32x64)": 67.88682300248183,
+        "GeLU (32x64)": 59.2369329824578,
+        "SiLU (32x64)": 53.841551998630166,
+        "Softmax (4x32x32)": 442.88222899194807,
+        "LayerNorm (4x32x64)": 72.25474301958457
       },
       "llm": {
-        "BertTiny (2-Block, seq=16)": 1214.0565890003927,
-        "BertBase (1-Block, seq=16)": 2422.597712982679,
-        "GPT2 (1-Block, seq=16)": 2797.495467995759,
-        "Llama (1-Block, d=768, seq=16)": 2082.8120689839125,
-        "ModernBert (1-Block, seq=16)": 1524.2256440105848
+        "BertTiny (2-Block, seq=16)": 1687.1429610182531,
+        "BertBase (1-Block, seq=16)": 2968.0267419898883,
+        "GPT2 (1-Block, seq=16)": 3524.8354820068926,
+        "Llama (1-Block, d=768, seq=16)": 2779.457608994562,
+        "ModernBert (1-Block, seq=16)": 2099.3621200032067
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.6644600147847086,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.4225100059993565,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 16.26295005553402,
+            "rounds": 9.0,
+            "bytes": 475136.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 18.89456095523201,
+            "rounds": 11.0,
+            "bytes": 1015808.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 53.82158310385421,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 28.27435001381673,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 22.73599006002769,
+            "rounds": 12.0,
+            "bytes": 1458176.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 22.678050940157846,
+            "rounds": 12.0,
+            "bytes": 1458176.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 183.6374469276052,
+            "rounds": 108.0,
+            "bytes": 3857408.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 30.083751917118207,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 653.4498562978115,
+            "rounds": 316.0,
+            "bytes": 16494080.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 537.4369830533396,
+            "rounds": 158.0,
+            "bytes": 96637440.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 519.7516621265095,
+            "rounds": 156.0,
+            "bytes": 96440832.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 497.33073788229376,
+            "rounds": 168.0,
+            "bytes": 79436288.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 424.1266139142681,
+            "rounds": 157.0,
+            "bytes": 58102272.0
+          }
+        }
       }
     },
     "shaft": {
       "micro": {
-        "Private MatMul (128x128)": 22.460467007476836,
-        "Private Mul (128x128)": 5.020009004510939,
-        "Comparison / ReLU (32x64)": 26.77869499893859,
-        "Exp (32x64)": 14.859226997941732,
-        "Reciprocal (32x64)": 73.6165459966287,
-        "InvSqrt (32x64)": 53.71602100785822,
-        "GeLU (32x64)": 59.11881901556626,
-        "SiLU (32x64)": 63.150239002425224,
-        "Softmax (4x32x32)": 136.17940599215217,
-        "LayerNorm (4x32x64)": 56.83165998198092
+        "Private MatMul (128x128)": 25.05262999329716,
+        "Private Mul (128x128)": 4.846060008276254,
+        "Comparison / ReLU (32x64)": 31.099350017029792,
+        "Exp (32x64)": 20.771621027961373,
+        "Reciprocal (32x64)": 95.98753301543184,
+        "InvSqrt (32x64)": 69.75208298536018,
+        "GeLU (32x64)": 83.85256299516186,
+        "SiLU (32x64)": 74.8716430098284,
+        "Softmax (4x32x32)": 178.77736501395702,
+        "LayerNorm (4x32x64)": 76.07035301043652
       },
       "llm": {
-        "BertTiny (2-Block, seq=16)": 769.7801830072422,
-        "BertBase (1-Block, seq=16)": 1992.1858190209605,
-        "GPT2 (1-Block, seq=16)": 2483.982459001709,
-        "Llama (1-Block, d=768, seq=16)": 2015.5208549986128,
-        "ModernBert (1-Block, seq=16)": 1536.3152789941523
+        "BertTiny (2-Block, seq=16)": 1010.6614800170064,
+        "BertBase (1-Block, seq=16)": 3154.521592980018,
+        "GPT2 (1-Block, seq=16)": 3915.1120419846848,
+        "Llama (1-Block, d=768, seq=16)": 3021.7583240009844,
+        "ModernBert (1-Block, seq=16)": 2236.078341025859
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.39355000667274,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.8779200036078691,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 14.572830987162888,
+            "rounds": 9.0,
+            "bytes": 475136.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 9.912119974615052,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 37.8094760235399,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 28.288560977671295,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 44.46456098230556,
+            "rounds": 19.0,
+            "bytes": 966656.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 38.1859689950943,
+            "rounds": 19.0,
+            "bytes": 966656.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 80.4422200017143,
+            "rounds": 41.0,
+            "bytes": 3997696.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 30.65640202839859,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 409.0581150667276,
+            "rounds": 216.0,
+            "bytes": 12492800.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 502.6994590589311,
+            "rounds": 108.0,
+            "bytes": 84633600.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 521.6047658759635,
+            "rounds": 106.0,
+            "bytes": 84436992.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 501.17466601659544,
+            "rounds": 118.0,
+            "bytes": 71364608.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 452.60391497868113,
+            "rounds": 107.0,
+            "bytes": 53471232.0
+          }
+        }
       }
     },
     "lut": {
       "micro": {
-        "Private MatMul (128x128)": 26.459505985258147,
-        "Private Mul (128x128)": 8.618770021712407,
-        "Comparison / ReLU (32x64)": 24.639536015456542,
-        "Exp (32x64)": 48.228372004814446,
-        "Reciprocal (32x64)": 33.380263979779556,
-        "InvSqrt (32x64)": 97.08147300989367,
-        "GeLU (32x64)": 21.39158599311486,
-        "SiLU (32x64)": 27.300825022393838,
-        "Softmax (4x32x32)": 284.7885219962336,
-        "LayerNorm (4x32x64)": 50.90545100392774
+        "Private MatMul (128x128)": 28.343470999971032,
+        "Private Mul (128x128)": 9.484370006248355,
+        "Comparison / ReLU (32x64)": 30.118610011413693,
+        "Exp (32x64)": 68.19395200000145,
+        "Reciprocal (32x64)": 50.34720100229606,
+        "InvSqrt (32x64)": 122.5804919959046,
+        "GeLU (32x64)": 34.10825101309456,
+        "SiLU (32x64)": 35.45184098766185,
+        "Softmax (4x32x32)": 378.8944480184,
+        "LayerNorm (4x32x64)": 55.58441099128686
       },
       "llm": {
-        "BertTiny (2-Block, seq=16)": 884.3456830072682,
-        "BertBase (1-Block, seq=16)": 1927.604174008593,
-        "GPT2 (1-Block, seq=16)": 3366.236386995297,
-        "Llama (1-Block, d=768, seq=16)": 2558.861673984211,
-        "ModernBert (1-Block, seq=16)": 2089.2579029896297
+        "BertTiny (2-Block, seq=16)": 1106.8473530176561,
+        "BertBase (1-Block, seq=16)": 2167.779673007317,
+        "GPT2 (1-Block, seq=16)": 2702.190982992761,
+        "Llama (1-Block, d=768, seq=16)": 2068.0760180111974,
+        "ModernBert (1-Block, seq=16)": 1685.1211420143954
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 3.5091419995296746,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 3.875608992530033,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 14.314979955088347,
+            "rounds": 9.0,
+            "bytes": 475136.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 31.904512929031625,
+            "rounds": 13.0,
+            "bytes": 557056.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 13.579920982010663,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 14.480980025837198,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 12.734980002278462,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 13.584759988589212,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 157.1147938957438,
+            "rounds": 87.0,
+            "bytes": 3889152.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 16.10948098823428,
+            "rounds": 7.0,
+            "bytes": 202752.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 422.0478632778395,
+            "rounds": 232.0,
+            "bytes": 5949440.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 307.4562400870491,
+            "rounds": 116.0,
+            "bytes": 65026560.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 338.7640920118429,
+            "rounds": 111.0,
+            "bytes": 64805376.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 325.7176229089964,
+            "rounds": 136.0,
+            "bytes": 59359744.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 308.88150684768334,
+            "rounds": 117.0,
+            "bytes": 47553024.0
+          }
+        }
       }
     },
     "fission": {
       "micro": {
-        "Private MatMul (128x128)": 34.751294006127864,
-        "Private Mul (128x128)": 6.951088987989351,
-        "Comparison / ReLU (32x64)": 52.99691198160872,
-        "Exp (32x64)": 12.61921800323762,
-        "Reciprocal (32x64)": 21.934446995146573,
-        "InvSqrt (32x64)": 22.0260760106612,
-        "GeLU (32x64)": 12.544158002128825,
-        "SiLU (32x64)": 11.830008996184915,
-        "Softmax (4x32x32)": 14.642388006905094,
-        "LayerNorm (4x32x64)": 16.35874802013859
+        "Private MatMul (128x128)": 29.611290025059134,
+        "Private Mul (128x128)": 6.895580008858815,
+        "Comparison / ReLU (32x64)": 41.97664000093937,
+        "Exp (32x64)": 10.899019980570301,
+        "Reciprocal (32x64)": 19.56000001518987,
+        "InvSqrt (32x64)": 20.26074001332745,
+        "GeLU (32x64)": 11.132151004858315,
+        "SiLU (32x64)": 12.000329996226355,
+        "Softmax (4x32x32)": 18.555739981820807,
+        "LayerNorm (4x32x64)": 21.718211006373167
       },
       "llm": {
-        "BertTiny (2-Block, seq=16)": 426.0281339811627,
-        "BertBase (1-Block, seq=16)": 2067.6323140214663,
-        "GPT2 (1-Block, seq=16)": 2690.2319750224706,
-        "Llama (1-Block, d=768, seq=16)": 2058.7363629892934,
-        "ModernBert (1-Block, seq=16)": 1378.7471969844773
+        "BertTiny (2-Block, seq=16)": 443.4614860219881,
+        "BertBase (1-Block, seq=16)": 2081.6244279849343,
+        "GPT2 (1-Block, seq=16)": 2776.967715995852,
+        "Llama (1-Block, d=768, seq=16)": 2244.4341990048997,
+        "ModernBert (1-Block, seq=16)": 1432.8133389935829
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.8316800016909838,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.2950199781917036,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 21.04112002416514,
+            "rounds": 9.0,
+            "bytes": 475136.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 110.09075181209482,
+            "rounds": 38.0,
+            "bytes": 3887104.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 160.14848303166218,
+            "rounds": 19.0,
+            "bytes": 58847232.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 113.68535002111457,
+            "rounds": 13.0,
+            "bytes": 58331136.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 217.729843017878,
+            "rounds": 47.0,
+            "bytes": 54884608.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 113.7917111045681,
+            "rounds": 20.0,
+            "bytes": 42553344.0
+          }
+        }
+      }
+    }
+  },
+  "prix": {
+    "crypten": {
+      "micro": {
+        "Private MatMul (128x128)": 5.823750019771978,
+        "Private Mul (128x128)": 4.948400019202381,
+        "Comparison / ReLU (32x64)": 9.459130989853293,
+        "Exp (32x64)": 14.972491015214473,
+        "Reciprocal (32x64)": 49.64623099658638,
+        "InvSqrt (32x64)": 34.42640998400748,
+        "GeLU (32x64)": 62.65761100803502,
+        "SiLU (32x64)": 39.35172001365572,
+        "Softmax (4x32x32)": 169.3759599875193,
+        "LayerNorm (4x32x64)": 28.368119994411245
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 582.2675300005358,
+        "BertBase (1-Block, seq=16)": 737.8484299988486,
+        "GPT2 (1-Block, seq=16)": 809.6033399924636,
+        "Llama (1-Block, d=768, seq=16)": 566.5404199971817,
+        "ModernBert (1-Block, seq=16)": 557.6173700101208
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.812649996485561,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.2868799967691302,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 6.792530039092526,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 5.879349977476522,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 21.208180958637968,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 14.570699975593016,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 25.99398317397572,
+            "rounds": 35.0,
+            "bytes": 802816.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 20.040733099449426,
+            "rounds": 25.0,
+            "bytes": 720896.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 90.0790351734031,
+            "rounds": 105.0,
+            "bytes": 2571264.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 12.475997966248542,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 284.53920999891125,
+            "rounds": 356.0,
+            "bytes": 10911232.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 483.9640609861817,
+            "rounds": 178.0,
+            "bytes": 79888896.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 569.2127133079339,
+            "rounds": 176.0,
+            "bytes": 79692288.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 335.52485989639536,
+            "rounds": 178.0,
+            "bytes": 66650624.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 316.2647949939128,
+            "rounds": 177.0,
+            "bytes": 51184128.0
+          }
+        }
+      }
+    },
+    "poly": {
+      "micro": {
+        "Private MatMul (128x128)": 6.547789991600439,
+        "Private Mul (128x128)": 3.6541990120895207,
+        "Comparison / ReLU (32x64)": 9.502250992227346,
+        "Exp (32x64)": 19.05728000565432,
+        "Reciprocal (32x64)": 40.38421899895184,
+        "InvSqrt (32x64)": 31.043780007166788,
+        "GeLU (32x64)": 24.047240003710613,
+        "SiLU (32x64)": 23.46815899363719,
+        "Softmax (4x32x32)": 159.94683900498785,
+        "LayerNorm (4x32x64)": 31.839459988987073
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 560.1680589898024,
+        "BertBase (1-Block, seq=16)": 733.6637080006767,
+        "GPT2 (1-Block, seq=16)": 574.8350280045997,
+        "Llama (1-Block, d=768, seq=16)": 612.0800579956267,
+        "ModernBert (1-Block, seq=16)": 514.4261789973825
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 3.1224100093822926,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.1808410054072738,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 6.556032021762803,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 10.322739981347695,
+            "rounds": 11.0,
+            "bytes": 819200.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 17.20311801182106,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 12.796670955140144,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 13.707449979847297,
+            "rounds": 12.0,
+            "bytes": 1163264.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 13.877337041776627,
+            "rounds": 12.0,
+            "bytes": 1163264.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 83.8629397621844,
+            "rounds": 108.0,
+            "bytes": 3193856.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 11.450568970758468,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 299.65894611086696,
+            "rounds": 316.0,
+            "bytes": 13950464.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 547.3485628026538,
+            "rounds": 158.0,
+            "bytes": 89006592.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 407.18198515241966,
+            "rounds": 156.0,
+            "bytes": 88809984.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 400.85590386297554,
+            "rounds": 168.0,
+            "bytes": 74195456.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 312.5787281023804,
+            "rounds": 157.0,
+            "bytes": 54895104.0
+          }
+        }
+      }
+    },
+    "shaft": {
+      "micro": {
+        "Private MatMul (128x128)": 6.146140018245205,
+        "Private Mul (128x128)": 4.569381009787321,
+        "Comparison / ReLU (32x64)": 10.057920997496694,
+        "Exp (32x64)": 17.734780994942412,
+        "Reciprocal (32x64)": 59.461912023834884,
+        "InvSqrt (32x64)": 45.4249210015405,
+        "GeLU (32x64)": 24.271879985462874,
+        "SiLU (32x64)": 34.21406101551838,
+        "Softmax (4x32x32)": 136.9165739743039,
+        "LayerNorm (4x32x64)": 40.35680100787431
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 434.9290610116441,
+        "BertBase (1-Block, seq=16)": 735.382668004604,
+        "GPT2 (1-Block, seq=16)": 519.4948040007148,
+        "Llama (1-Block, d=768, seq=16)": 600.1375039923005,
+        "ModernBert (1-Block, seq=16)": 450.985209987266
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.9963600100018084,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.6873999848030508,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 7.543021056335419,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 8.404519932810217,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 27.884387993253767,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 22.466458001872525,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 16.100149019621313,
+            "rounds": 11.0,
+            "bytes": 1114112.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 20.13919106684625,
+            "rounds": 11.0,
+            "bytes": 1114112.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 63.32661097985692,
+            "rounds": 41.0,
+            "bytes": 3604480.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 20.030178944580257,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 231.49239309714176,
+            "rounds": 200.0,
+            "bytes": 13574144.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 533.6224299098831,
+            "rounds": 100.0,
+            "bytes": 87877632.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 383.9797900582198,
+            "rounds": 98.0,
+            "bytes": 87681024.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 386.2372769508511,
+            "rounds": 110.0,
+            "bytes": 73459712.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 291.29787514102645,
+            "rounds": 99.0,
+            "bytes": 54503424.0
+          }
+        }
+      }
+    },
+    "lut": {
+      "micro": {
+        "Private MatMul (128x128)": 7.4926899978891015,
+        "Private Mul (128x128)": 6.393639981979504,
+        "Comparison / ReLU (32x64)": 13.088511012028903,
+        "Exp (32x64)": 14.940380002371967,
+        "Reciprocal (32x64)": 9.525709989247844,
+        "InvSqrt (32x64)": 19.715310976607725,
+        "GeLU (32x64)": 8.178479998605326,
+        "SiLU (32x64)": 7.404348987620324,
+        "Softmax (4x32x32)": 120.87108197738416,
+        "LayerNorm (4x32x64)": 13.906380016123876
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 446.87095799599774,
+        "BertBase (1-Block, seq=16)": 582.6864600239787,
+        "GPT2 (1-Block, seq=16)": 482.0668179891072,
+        "Llama (1-Block, d=768, seq=16)": 525.2602089894935,
+        "ModernBert (1-Block, seq=16)": 425.1029269944411
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 3.7334800290409476,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.5783590206410736,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 9.360060008475557,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 7.871899986639619,
+            "rounds": 13.0,
+            "bytes": 458752.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 4.530909995082766,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 10.276532993884757,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 2.803041017614305,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 2.873149001970887,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 63.02242004312575,
+            "rounds": 87.0,
+            "bytes": 3225600.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 4.00829006684944,
+            "rounds": 8.0,
+            "bytes": 268288.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 219.17733331792988,
+            "rounds": 236.0,
+            "bytes": 5830656.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 435.4585812834557,
+            "rounds": 118.0,
+            "bytes": 64670208.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 345.187943050405,
+            "rounds": 113.0,
+            "bytes": 64449024.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 341.66709028068,
+            "rounds": 138.0,
+            "bytes": 59034112.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 275.0823469250463,
+            "rounds": 119.0,
+            "bytes": 47196672.0
+          }
+        }
+      }
+    },
+    "fission": {
+      "micro": {
+        "Private MatMul (128x128)": 7.703669019974768,
+        "Private Mul (128x128)": 4.473970009712502,
+        "Comparison / ReLU (32x64)": 13.251930009573698,
+        "Exp (32x64)": 2.669880981557071,
+        "Reciprocal (32x64)": 2.6686899946071208,
+        "InvSqrt (32x64)": 1.5286199923139066,
+        "GeLU (32x64)": 2.595600002678111,
+        "SiLU (32x64)": 1.7957099771592766,
+        "Softmax (4x32x32)": 2.873620978789404,
+        "LayerNorm (4x32x64)": 3.072329011047259
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 163.3321520057507,
+        "BertBase (1-Block, seq=16)": 449.64746601181105,
+        "GPT2 (1-Block, seq=16)": 357.21664401353337,
+        "Llama (1-Block, d=768, seq=16)": 463.346084987279,
+        "ModernBert (1-Block, seq=16)": 307.38753397599794
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 3.8429010019171983,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.343960000667721,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 9.222400956787169,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 66.11215200973675,
+            "rounds": 35.0,
+            "bytes": 3837952.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 258.02719994680956,
+            "rounds": 16.0,
+            "bytes": 58552320.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 194.28920300561003,
+            "rounds": 14.0,
+            "bytes": 58429440.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 261.84150396147743,
+            "rounds": 47.0,
+            "bytes": 54915328.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 158.09770303894766,
+            "rounds": 20.0,
+            "bytes": 42553344.0
+          }
+        }
+      }
+    }
+  },
+  "prix_shm": {
+    "crypten": {
+      "micro": {
+        "Private MatMul (128x128)": 5.870549997780472,
+        "Private Mul (128x128)": 3.611460007959977,
+        "Comparison / ReLU (32x64)": 6.300699984421954,
+        "Exp (32x64)": 12.100989988539368,
+        "Reciprocal (32x64)": 32.9663300071843,
+        "InvSqrt (32x64)": 20.776349992956966,
+        "GeLU (32x64)": 39.73144001793116,
+        "SiLU (32x64)": 29.195599985541776,
+        "Softmax (4x32x32)": 140.81842999439687,
+        "LayerNorm (4x32x64)": 23.3263700210955
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 537.3142099997494,
+        "BertBase (1-Block, seq=16)": 786.696758994367,
+        "GPT2 (1-Block, seq=16)": 673.6892889894079,
+        "Llama (1-Block, d=768, seq=16)": 611.6219090181403,
+        "ModernBert (1-Block, seq=16)": 493.45979900681414
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.6227899943478405,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 0.8071399934124202,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 4.036479949718341,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 4.296609986340627,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 10.451999958604574,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 5.449049931485206,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 13.296031072968617,
+            "rounds": 35.0,
+            "bytes": 802816.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 12.99829693743959,
+            "rounds": 25.0,
+            "bytes": 720896.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 56.79488292662427,
+            "rounds": 105.0,
+            "bytes": 2571264.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 8.343209978193045,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 207.67660488490947,
+            "rounds": 356.0,
+            "bytes": 10911232.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 516.3086378597654,
+            "rounds": 178.0,
+            "bytes": 79888896.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 393.57479027239606,
+            "rounds": 176.0,
+            "bytes": 79692288.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 336.08790213475004,
+            "rounds": 178.0,
+            "bytes": 66650624.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 265.3932280372828,
+            "rounds": 177.0,
+            "bytes": 51184128.0
+          }
+        }
+      }
+    },
+    "poly": {
+      "micro": {
+        "Private MatMul (128x128)": 5.685160023858771,
+        "Private Mul (128x128)": 5.1557499973569065,
+        "Comparison / ReLU (32x64)": 6.287529977271333,
+        "Exp (32x64)": 15.878769976552576,
+        "Reciprocal (32x64)": 42.73128998465836,
+        "InvSqrt (32x64)": 31.969360017683357,
+        "GeLU (32x64)": 20.24237997829914,
+        "SiLU (32x64)": 18.86257898877375,
+        "Softmax (4x32x32)": 115.62053000670858,
+        "LayerNorm (4x32x64)": 18.80636901478283
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 432.6943990017753,
+        "BertBase (1-Block, seq=16)": 593.3655179978814,
+        "GPT2 (1-Block, seq=16)": 540.5754989769775,
+        "Llama (1-Block, d=768, seq=16)": 547.5917489966378,
+        "ModernBert (1-Block, seq=16)": 443.2069080066867
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.4020499840844423,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.345339977182448,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 3.790651971939951,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 7.494658959330991,
+            "rounds": 11.0,
+            "bytes": 819200.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 15.739580121589825,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 11.458341934485361,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 9.349409985588863,
+            "rounds": 12.0,
+            "bytes": 1163264.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 8.309529977850616,
+            "rounds": 12.0,
+            "bytes": 1163264.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 46.839192014886066,
+            "rounds": 108.0,
+            "bytes": 3193856.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 4.71703993389383,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 178.94640486338176,
+            "rounds": 316.0,
+            "bytes": 13950464.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 454.9544219917152,
+            "rounds": 158.0,
+            "bytes": 89006592.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 355.7539010362234,
+            "rounds": 156.0,
+            "bytes": 88809984.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 322.2998401906807,
+            "rounds": 168.0,
+            "bytes": 74195456.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 253.23874806053936,
+            "rounds": 157.0,
+            "bytes": 54895104.0
+          }
+        }
+      }
+    },
+    "shaft": {
+      "micro": {
+        "Private MatMul (128x128)": 6.456621020333841,
+        "Private Mul (128x128)": 3.6528189957607538,
+        "Comparison / ReLU (32x64)": 6.791259977035224,
+        "Exp (32x64)": 12.748039996949956,
+        "Reciprocal (32x64)": 41.72657200251706,
+        "InvSqrt (32x64)": 22.131820995127782,
+        "GeLU (32x64)": 15.595080010825768,
+        "SiLU (32x64)": 16.489201021613553,
+        "Softmax (4x32x32)": 75.81402300274931,
+        "LayerNorm (4x32x64)": 30.28560199891217
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 362.76214401004836,
+        "BertBase (1-Block, seq=16)": 594.9547119962517,
+        "GPT2 (1-Block, seq=16)": 549.6829499898013,
+        "Llama (1-Block, d=768, seq=16)": 496.5166870097164,
+        "ModernBert (1-Block, seq=16)": 368.3310229971539
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.718748990446329,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 0.7868809916544706,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 4.151019937125966,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 4.547149030258879,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 14.250019856262952,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 6.9872479944024235,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 7.886436971602961,
+            "rounds": 11.0,
+            "bytes": 1114112.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 9.709010948427022,
+            "rounds": 11.0,
+            "bytes": 1114112.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 30.189659097231925,
+            "rounds": 41.0,
+            "bytes": 3604480.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 8.329089032486081,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 162.15356515021995,
+            "rounds": 200.0,
+            "bytes": 13574144.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 473.0999412131496,
+            "rounds": 100.0,
+            "bytes": 87877632.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 385.01592705142684,
+            "rounds": 98.0,
+            "bytes": 87681024.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 304.7106919402722,
+            "rounds": 110.0,
+            "bytes": 73459712.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 216.28465803223662,
+            "rounds": 99.0,
+            "bytes": 54503424.0
+          }
+        }
+      }
+    },
+    "lut": {
+      "micro": {
+        "Private MatMul (128x128)": 6.002659996738657,
+        "Private Mul (128x128)": 5.048291001003236,
+        "Comparison / ReLU (32x64)": 4.756860027555376,
+        "Exp (32x64)": 13.02291001775302,
+        "Reciprocal (32x64)": 10.985050001181662,
+        "InvSqrt (32x64)": 18.003320990828797,
+        "GeLU (32x64)": 10.038300999440253,
+        "SiLU (32x64)": 6.1608800024259835,
+        "Softmax (4x32x32)": 120.94126199372113,
+        "LayerNorm (4x32x64)": 21.619690000079572
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 333.8459850056097,
+        "BertBase (1-Block, seq=16)": 793.2368709880393,
+        "GPT2 (1-Block, seq=16)": 648.2441289990675,
+        "Llama (1-Block, d=768, seq=16)": 590.7307880115695,
+        "ModernBert (1-Block, seq=16)": 525.3846870036796
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.6686999772209674,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 1.779900019755587,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 2.8019199962727726,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 5.8696499618235976,
+            "rounds": 13.0,
+            "bytes": 458752.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 4.494149994570762,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 10.748579981736839,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 2.6291000249329954,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 1.6110190190374851,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 56.28593696746975,
+            "rounds": 87.0,
+            "bytes": 3225600.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 7.109130005119368,
+            "rounds": 8.0,
+            "bytes": 268288.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 133.71393491979688,
+            "rounds": 236.0,
+            "bytes": 5830656.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 564.1722210857552,
+            "rounds": 118.0,
+            "bytes": 64670208.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 475.69518731324933,
+            "rounds": 113.0,
+            "bytes": 64449024.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 339.6921951789409,
+            "rounds": 138.0,
+            "bytes": 59034112.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 315.8640861220192,
+            "rounds": 119.0,
+            "bytes": 47196672.0
+          }
+        }
+      }
+    },
+    "fission": {
+      "micro": {
+        "Private MatMul (128x128)": 7.404280011542141,
+        "Private Mul (128x128)": 4.857230000197887,
+        "Comparison / ReLU (32x64)": 7.535078999353573,
+        "Exp (32x64)": 1.576849987031892,
+        "Reciprocal (32x64)": 2.4211400013882667,
+        "InvSqrt (32x64)": 2.9806490056216717,
+        "GeLU (32x64)": 2.2206100111361593,
+        "SiLU (32x64)": 2.2576200135517865,
+        "Softmax (4x32x32)": 2.37210001796484,
+        "LayerNorm (4x32x64)": 3.9555899857077748
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 171.54889201628976,
+        "BertBase (1-Block, seq=16)": 523.3658959914465,
+        "GPT2 (1-Block, seq=16)": 402.34826400410384,
+        "Llama (1-Block, d=768, seq=16)": 427.2196349920705,
+        "ModernBert (1-Block, seq=16)": 283.6725329980254
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 2.4345100100617856,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 0.9260899969376624,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 4.641009989427403,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 53.50463994545862,
+            "rounds": 35.0,
+            "bytes": 3837952.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 272.5378340110183,
+            "rounds": 16.0,
+            "bytes": 58552320.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 230.04168103216216,
+            "rounds": 14.0,
+            "bytes": 58429440.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 220.14572500484064,
+            "rounds": 47.0,
+            "bytes": 54915328.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 126.36288205976598,
+            "rounds": 20.0,
+            "bytes": 42553344.0
+          }
+        }
+      }
+    }
+  },
+  "prix_gloo": {
+    "crypten": {
+      "micro": {
+        "Private MatMul (128x128)": 6.733399990480393,
+        "Private Mul (128x128)": 4.657590005081147,
+        "Comparison / ReLU (32x64)": 23.01233899197541,
+        "Exp (32x64)": 22.310839995043352,
+        "Reciprocal (32x64)": 86.9465499999933,
+        "InvSqrt (32x64)": 49.92458000197075,
+        "GeLU (32x64)": 108.83246900630184,
+        "SiLU (32x64)": 62.658670998644084,
+        "Softmax (4x32x32)": 307.55028998828493,
+        "LayerNorm (4x32x64)": 55.21297999075614
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 1050.383587979013,
+        "BertBase (1-Block, seq=16)": 946.1517379968427,
+        "GPT2 (1-Block, seq=16)": 946.1081270128489,
+        "Llama (1-Block, d=768, seq=16)": 933.7291679985356,
+        "ModernBert (1-Block, seq=16)": 756.8158890062477
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 4.111679998459294,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.2174800105858594,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 19.140317977871746,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 13.545839989092201,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 50.947120907949284,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 28.55592904961668,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 65.11829694500193,
+            "rounds": 35.0,
+            "bytes": 802816.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 41.84636101126671,
+            "rounds": 25.0,
+            "bytes": 720896.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 208.4104580571875,
+            "rounds": 105.0,
+            "bytes": 2571264.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 33.858703973237425,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 624.28227669443,
+            "rounds": 356.0,
+            "bytes": 10911232.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 667.2677567985374,
+            "rounds": 178.0,
+            "bytes": 79888896.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 610.4283369495533,
+            "rounds": 176.0,
+            "bytes": 79692288.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 626.1151659709867,
+            "rounds": 178.0,
+            "bytes": 66650624.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 487.8994791652076,
+            "rounds": 177.0,
+            "bytes": 51184128.0
+          }
+        }
+      }
+    },
+    "poly": {
+      "micro": {
+        "Private MatMul (128x128)": 7.834730000467971,
+        "Private Mul (128x128)": 4.64790899422951,
+        "Comparison / ReLU (32x64)": 17.92423997540027,
+        "Exp (32x64)": 31.854230008320883,
+        "Reciprocal (32x64)": 101.19388898601755,
+        "InvSqrt (32x64)": 59.77304998668842,
+        "GeLU (32x64)": 34.5668499940075,
+        "SiLU (32x64)": 33.732170006260276,
+        "Softmax (4x32x32)": 298.7586730159819,
+        "LayerNorm (4x32x64)": 56.10071198316291
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 860.9761910047382,
+        "BertBase (1-Block, seq=16)": 850.7697379973251,
+        "GPT2 (1-Block, seq=16)": 749.0214340214152,
+        "Llama (1-Block, d=768, seq=16)": 775.8880140027031,
+        "ModernBert (1-Block, seq=16)": 710.5509809916839
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 4.16606999351643,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.1283009846229106,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 14.877439971314743,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 22.422690002713352,
+            "rounds": 11.0,
+            "bytes": 819200.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 55.11037801625207,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 34.217781969346106,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 23.504501936258748,
+            "rounds": 12.0,
+            "bytes": 1163264.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 23.69018003810197,
+            "rounds": 12.0,
+            "bytes": 1163264.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 203.41940876096487,
+            "rounds": 108.0,
+            "bytes": 3193856.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 31.997033016523346,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 557.8315191960428,
+            "rounds": 316.0,
+            "bytes": 13950464.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 653.2153641746845,
+            "rounds": 158.0,
+            "bytes": 89006592.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 529.3563767336309,
+            "rounds": 156.0,
+            "bytes": 88809984.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 548.8582370162476,
+            "rounds": 168.0,
+            "bytes": 74195456.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 486.4199409785215,
+            "rounds": 157.0,
+            "bytes": 54895104.0
+          }
+        }
+      }
+    },
+    "shaft": {
+      "micro": {
+        "Private MatMul (128x128)": 7.453609985532239,
+        "Private Mul (128x128)": 4.722890997072682,
+        "Comparison / ReLU (32x64)": 19.147041020914912,
+        "Exp (32x64)": 25.432830007048324,
+        "Reciprocal (32x64)": 94.03038400341757,
+        "InvSqrt (32x64)": 57.48504199436866,
+        "GeLU (32x64)": 31.43948200158775,
+        "SiLU (32x64)": 32.739490998210385,
+        "Softmax (4x32x32)": 161.6903749818448,
+        "LayerNorm (4x32x64)": 59.56529200193472
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 657.6702519960236,
+        "BertBase (1-Block, seq=16)": 705.6947119999677,
+        "GPT2 (1-Block, seq=16)": 659.0728209994268,
+        "Llama (1-Block, d=768, seq=16)": 631.100280006649,
+        "ModernBert (1-Block, seq=16)": 601.9219990121201
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 4.375529999379069,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 2.11706999107264,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 15.334241004893556,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 15.987369988579303,
+            "rounds": 8.0,
+            "bytes": 131072.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 57.32539005111903,
+            "rounds": 28.0,
+            "bytes": 622592.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 32.5086530065164,
+            "rounds": 17.0,
+            "bytes": 376832.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 22.773189964937046,
+            "rounds": 11.0,
+            "bytes": 1114112.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 23.983569029951468,
+            "rounds": 11.0,
+            "bytes": 1114112.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 91.44127092440613,
+            "rounds": 41.0,
+            "bytes": 3604480.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 34.82772101415321,
+            "rounds": 19.0,
+            "bytes": 155648.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 416.34904700913467,
+            "rounds": 200.0,
+            "bytes": 13574144.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 521.2433550623246,
+            "rounds": 100.0,
+            "bytes": 87877632.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 465.8092590107117,
+            "rounds": 98.0,
+            "bytes": 87681024.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 434.113569004694,
+            "rounds": 110.0,
+            "bytes": 73459712.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 417.5311920407694,
+            "rounds": 99.0,
+            "bytes": 54503424.0
+          }
+        }
+      }
+    },
+    "lut": {
+      "micro": {
+        "Private MatMul (128x128)": 11.154799984069541,
+        "Private Mul (128x128)": 9.781039989320561,
+        "Comparison / ReLU (32x64)": 19.84053000342101,
+        "Exp (32x64)": 38.316621008561924,
+        "Reciprocal (32x64)": 17.910080001456663,
+        "InvSqrt (32x64)": 26.514680008403957,
+        "GeLU (32x64)": 15.390879998449236,
+        "SiLU (32x64)": 17.01953000156209,
+        "Softmax (4x32x32)": 231.6547849914059,
+        "LayerNorm (4x32x64)": 27.69526999327354
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 770.1386570115574,
+        "BertBase (1-Block, seq=16)": 664.0865840017796,
+        "GPT2 (1-Block, seq=16)": 603.9596330083441,
+        "Llama (1-Block, d=768, seq=16)": 727.9690350114834,
+        "ModernBert (1-Block, seq=16)": 617.3660130007192
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 6.759750016499311,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 4.329521005274728,
+            "rounds": 2.0,
+            "bytes": 393216.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 15.832960983971134,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 27.392388990847394,
+            "rounds": 13.0,
+            "bytes": 458752.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 8.447809988865629,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 15.404390025651082,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 8.356881007784978,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 7.568809000076726,
+            "rounds": 4.0,
+            "bytes": 81920.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 165.39214499061927,
+            "rounds": 87.0,
+            "bytes": 3225600.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 13.407859980361536,
+            "rounds": 8.0,
+            "bytes": 268288.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 475.2703419944737,
+            "rounds": 236.0,
+            "bytes": 5830656.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 504.0584610833321,
+            "rounds": 118.0,
+            "bytes": 64670208.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 458.09183004894294,
+            "rounds": 113.0,
+            "bytes": 64449024.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 505.30578088364564,
+            "rounds": 138.0,
+            "bytes": 59034112.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 430.4793019837234,
+            "rounds": 119.0,
+            "bytes": 47196672.0
+          }
+        }
+      }
+    },
+    "fission": {
+      "micro": {
+        "Private MatMul (128x128)": 8.521689975168556,
+        "Private Mul (128x128)": 5.233060015598312,
+        "Comparison / ReLU (32x64)": 21.150851011043414,
+        "Exp (32x64)": 2.688149979803711,
+        "Reciprocal (32x64)": 2.83354998100549,
+        "InvSqrt (32x64)": 2.6692409883253276,
+        "GeLU (32x64)": 2.9287099896464497,
+        "SiLU (32x64)": 2.7767010033130646,
+        "Softmax (4x32x32)": 2.913721022196114,
+        "LayerNorm (4x32x64)": 4.469060018891469
+      },
+      "llm": {
+        "BertTiny (2-Block, seq=16)": 223.10528199886903,
+        "BertBase (1-Block, seq=16)": 521.163085999433,
+        "GPT2 (1-Block, seq=16)": 432.96498400741257,
+        "Llama (1-Block, d=768, seq=16)": 583.0091550014913,
+        "ModernBert (1-Block, seq=16)": 398.59894401161
+      },
+      "comm": {
+        "micro": {
+          "Private MatMul (128x128)": {
+            "comm_ms": 4.985629988368601,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Private Mul (128x128)": {
+            "comm_ms": 3.075489978073165,
+            "rounds": 1.0,
+            "bytes": 262144.0
+          },
+          "Comparison / ReLU (32x64)": {
+            "comm_ms": 17.419720970792696,
+            "rounds": 9.0,
+            "bytes": 376832.0
+          },
+          "Exp (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Reciprocal (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "InvSqrt (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "GeLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "SiLU (32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "Softmax (4x32x32)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          },
+          "LayerNorm (4x32x64)": {
+            "comm_ms": 0.0,
+            "rounds": 0.0,
+            "bytes": 0.0
+          }
+        },
+        "llm": {
+          "BertTiny (2-Block, seq=16)": {
+            "comm_ms": 116.8449511169456,
+            "rounds": 35.0,
+            "bytes": 3837952.0
+          },
+          "BertBase (1-Block, seq=16)": {
+            "comm_ms": 345.6380939169321,
+            "rounds": 16.0,
+            "bytes": 58552320.0
+          },
+          "GPT2 (1-Block, seq=16)": {
+            "comm_ms": 231.67193194967695,
+            "rounds": 14.0,
+            "bytes": 58429440.0
+          },
+          "Llama (1-Block, d=768, seq=16)": {
+            "comm_ms": 342.24701509810984,
+            "rounds": 47.0,
+            "bytes": 54915328.0
+          },
+          "ModernBert (1-Block, seq=16)": {
+            "comm_ms": 235.65373296150938,
+            "rounds": 20.0,
+            "bytes": 42553344.0
+          }
+        }
       }
     }
   }

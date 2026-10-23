@@ -44,9 +44,9 @@ MODE_KEYS = [m[0] for m in MODES]
 
 FRAMEWORK_LABELS = {
     "crypten": "CrypTen (PyTorch)",
-    "prix": "PriX (JAX)",
+    "prix": "PriX (JAX)",  # default TCP transport
+    "prix_shm": "PriX (JAX, shared-memory transport)",
     "prix_gloo": "PriX (JAX, gloo transport)",
-    "prix_tcp": "PriX (JAX, TCP transport)",
 }
 
 
@@ -420,13 +420,13 @@ def _prix_worker(a):
             x.share.block_until_ready()
 
     _run_workload(
-        a, {"gloo": "prix_gloo", "tcp": "prix_tcp"}.get(a.get("transport"), "prix"), prix, comm,
+        a, {"gloo": "prix_gloo", "shm": "prix_shm"}.get(a.get("transport"), "prix"), prix, comm,
         to_private=lambda v: prix.cryptensor(v, device=device),
         sync=sync, no_grad=prix.no_grad,
     )
 
 
-def run_prix(prix_root, device, tmp_dir, modes, bench_args, transport="shm"):
+def run_prix(prix_root, device, tmp_dir, modes, bench_args, transport="tcp"):
     sys.path.insert(0, prix_root)
     from prix.launcher import MultiProcessLauncher
 
@@ -441,6 +441,7 @@ def run_prix(prix_root, device, tmp_dir, modes, bench_args, transport="shm"):
                         **bench_args)
         launcher = MultiProcessLauncher(
             2, n_eval, _prix_worker, args, cfg_file=cfg_path,
+            # 'gloo' patches the shared-memory communicator's all_reduce (ablation only).
             transport="tcp" if transport == "tcp" else "shm",
         )
         launcher.start()
@@ -770,10 +771,10 @@ if __name__ == "__main__":
         help="Also record per-run communication time, rounds and bytes (communicator verbose mode)",
     )
     parser.add_argument(
-        "--prix-transport", choices=["shm", "gloo", "tcp"], default="shm",
-        help="PriX transport: 'shm' (shared memory), 'tcp' (PriX's own peer-to-peer TCP "
-             "transport; results under 'prix_tcp'), or 'gloo' (ablation: PriX's 2-party "
-             "all_reduce over torch.distributed/gloo like CrypTen; results under 'prix_gloo')",
+        "--prix-transport", choices=["tcp", "shm", "gloo"], default="tcp",
+        help="PriX transport: 'tcp' (default; PriX's peer-to-peer TCP transport, results under "
+             "'prix'), 'shm' (shared memory; 'prix_shm'), or 'gloo' (ablation: PriX's 2-party "
+             "all_reduce over torch.distributed/gloo like CrypTen; 'prix_gloo')",
     )
     args = parser.parse_args()
     if args.framework == "curl":
@@ -817,7 +818,7 @@ if __name__ == "__main__":
                 args.crypten_root, args.device, tmp_dir, modes, bench_args, prix_root=args.prix_root
             )
         key = args.framework
-        if args.framework == "prix" and args.prix_transport != "shm":
+        if args.framework == "prix" and args.prix_transport != "tcp":
             key = f"prix_{args.prix_transport}"
         data.setdefault(key, {}).update(res)
         with open(args.out, "w") as f:
