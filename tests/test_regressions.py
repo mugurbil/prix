@@ -61,6 +61,67 @@ def _mha_vs_plaintext():
     return np.asarray(mha.encrypt(src=0)(x, x, x).reconstruct()), plain
 
 
+def _ttp_trig_and_perm():
+    assert prix.get_default_provider().NAME == "TTP"
+    provider = prix.get_default_provider()
+    # Verify trig triple produces 61-bit positive t and accurate Fourier GeLU
+    t, u, v = provider.generate_trig_triple((32,), 8.0, 8)
+    t_raw = np.asarray(prix.comm.get().all_reduce(t.share))
+    assert np.all((t_raw >= 0) & (t_raw < (1 << 61)))
+    # Verify permutation comes from the joint MPC generator and matches across parties
+    perm, inv_perm = provider.generate_permutation((16,))
+    p_np = np.asarray(perm)
+    ip_np = np.asarray(inv_perm)
+    assert np.array_equal(p_np[ip_np], np.arange(16))
+    # Verify disallowed RPC is rejected on client before wire send
+    rejected = False
+    if prix.comm.get().get_rank() == 0:
+        try:
+            prix.provider.TTPClient.get().ttp_request("_get_additive_PRSS", "cpu", (4,))
+        except ValueError:
+            rejected = True
+    else:
+        rejected = True
+    return bool(rejected), p_np
+
+
+def _sigma_fss_checks():
+    c = prix.comm.get()
+    c.set_verbosity(True)
+    x_np = np.linspace(-6.0, 6.0, 128, dtype=np.float32)
+    x = prix.array(x_np, src=0)
+
+    c.reset_communication_stats()
+    y = x.relu()
+    relu_rounds, relu_bytes = c.comm_rounds, c.comm_bytes
+    relu_out = np.asarray(y.reconstruct())
+
+    from prix.approximations import _ltz_and_abs_lt
+    c.reset_communication_stats()
+    ltz, check, neg_part = _ltz_and_abs_lt(x, 4.0, return_neg_part=True)
+    way3_rounds, way3_bytes = c.comm_rounds, c.comm_bytes
+    ltz_out = np.asarray(ltz.reconstruct())
+    chk_out = np.asarray(check.reconstruct())
+    neg_out = np.asarray(neg_part.reconstruct())
+
+    emb = nn.Embedding(64, 16)
+    idx_np = np.array([0, 7, 19, 63], dtype=np.int64)
+    emb_plain = np.asarray(emb(idx_np))
+    idx_enc = prix.array(idx_np, precision=0, src=1)
+    emb.encrypt(src=0)
+    c.reset_communication_stats()
+    emb_out = emb(idx_enc)
+    emb_bytes = c.comm_bytes
+    emb_got = np.asarray(emb_out.reconstruct())
+
+    return {
+        "x_np": x_np,
+        "relu": (relu_rounds, relu_bytes, relu_out),
+        "way3": (way3_rounds, way3_bytes, ltz_out, chk_out, neg_out),
+        "emb": (emb_bytes, emb_got, emb_plain),
+    }
+
+
 class TestRegressions(unittest.TestCase):
     def test_large_return_value(self):
         out = prix.run(_large_return, world_size=2, timeout=180)
@@ -84,7 +145,7 @@ class TestRegressions(unittest.TestCase):
         self.assertEqual(prix.cfg.encoder.trunc_method.prod, before)
 
     def test_multihead_attention_matches_plaintext(self):
-        for mode in ("shaft", "fission"):
+        for mode in ("sigma", "shaft", "fission"):
             got, plain = prix.run(_mha_vs_plaintext, world_size=2, mode=mode, timeout=180)
             self.assertEqual(got.shape, plain.shape)
             np.testing.assert_allclose(got, plain, atol=2e-2, err_msg=mode)
@@ -94,6 +155,49 @@ class TestRegressions(unittest.TestCase):
         for layer in (nn.ReLU(), nn.GELU(), nn.SiLU(), nn.Tanh(), nn.Sigmoid(), nn.Softmax(-1),
                       nn.LogSoftmax(-1), nn.Hardtanh(), nn.LayerNorm(4)):
             self.assertEqual(np.asarray(layer(x)).shape, x.shape, type(layer).__name__)
+
+    def test_ttp_hardening_and_trig_triple(self):
+        prev_provider = prix.cfg.mpc.provider
+        try:
+            prix.cfg.mpc.provider = "TTP"
+            rejected, perm = prix.run(_ttp_trig_and_perm, world_size=2, timeout=180)
+            self.assertTrue(rejected)
+            self.assertEqual(sorted(perm.tolist()), list(range(16)))
+        finally:
+            prix.cfg.mpc.provider = prev_provider
+
+    def test_lut_cache_hardening(self):
+        import os
+        import stat
+        from prix.approximations import LookupTables
+
+        cdir = LookupTables._safe_cache_dir()
+        st = os.lstat(cdir)
+        self.assertTrue(stat.S_ISDIR(st.st_mode))
+        self.assertEqual(st.st_mode & 0o077, 0)
+        p1 = LookupTables._cache_path("bior", "test", 4, 6, False, function=lambda x: x + 1.0)
+        p2 = LookupTables._cache_path("bior", "test", 4, 6, False, function=lambda x: x + 2.0)
+        self.assertNotEqual(p1, p2)
+
+    def test_sigma_fss_protocol(self):
+        res = prix.run(_sigma_fss_checks, world_size=2, mode="sigma", timeout=180)
+        x_np = res["x_np"]
+        relu_rounds, relu_bytes, relu_out = res["relu"]
+        self.assertEqual(relu_rounds, 2)
+        self.assertEqual(relu_bytes, 128 * 8 + 16)  # 8.125 B/elem with 64-to-1 bit packing
+        np.testing.assert_allclose(relu_out, np.maximum(x_np, 0.0), atol=1e-4)
+
+        way3_rounds, way3_bytes, ltz_out, chk_out, neg_out = res["way3"]
+        self.assertEqual(way3_rounds, 2)
+        self.assertEqual(way3_bytes, 128 * 8 + 32)  # 8.25 B/elem with 2 packed bits/elem
+        np.testing.assert_allclose(ltz_out, (x_np < 0).astype(np.float32), atol=1e-4)
+        np.testing.assert_allclose(chk_out, (np.abs(x_np) < 4.0).astype(np.float32), atol=1e-4)
+        np.testing.assert_allclose(neg_out, np.minimum(x_np, 0.0), atol=1e-4)
+
+        emb_bytes, emb_got, emb_plain = res["emb"]
+        # Static-weight linear triple: only 4 indices (32B) + 4*64 one-hot (2048B) opened, not 64*16 table (8192B)
+        self.assertEqual(emb_bytes, 4 * 8 + 4 * 64 * 8)
+        np.testing.assert_allclose(emb_got, emb_plain, atol=1e-3)
 
 
 if __name__ == "__main__":

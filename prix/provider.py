@@ -188,6 +188,8 @@ class TupleProvider:
 
     TRACEABLE_FUNCTIONS = [
         "generate_additive_triple",
+        "generate_linear_triple",
+        "generate_dcf_key",
         "square",
         "generate_binary_triple",
         "wrap_rng",
@@ -342,7 +344,9 @@ def _cache_key(func_name, args, kwargs):
         if isinstance(v, (list, tuple)):
             return tuple(_freeze(e) for e in v)
         if isinstance(v, dict):
-            return tuple(sorted((k, _freeze(e)) for k, e in v.items()))
+            return tuple(sorted((k, _freeze(e)) for k, e in v.items() if k != "_w_plain"))
+        if hasattr(v, "shape") and hasattr(v, "dtype"):
+            return ("array", tuple(v.shape), str(v.dtype), id(v))
         try:
             hash(v)
             return v
@@ -414,6 +418,36 @@ def _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_s
         c = _int64_matmul(a, b)
         return diff_a + a, diff_b + b, diff_c + c
     return diff_a, diff_b, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "c_shape", "is_rank0"))
+def _tfp_linear_matmul_jit(w_plain, c_loc, c0, c1, s_loc, s0, s1, s0_shape, c_shape, is_rank0):
+    n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
+    n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+    tot = n0 + n2
+    diff_all = _sm64_raw(s0, c0, (tot,)) - _sm64_raw(s1, c1, (tot,))
+    diff_a = diff_all[:n0].reshape(s0_shape)
+    diff_c = diff_all[n0:].reshape(c_shape)
+    if is_rank0:
+        a = _sm64_raw(s_loc, c_loc, s0_shape)
+        c = _int64_matmul(a, w_plain)
+        return diff_a + a, diff_c + c
+    return diff_a, diff_c
+
+
+@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "c_shape", "is_rank0"))
+def _tfp_linear_mul_jit(w_plain, c_loc, c0, c1, s_loc, s0, s1, s0_shape, c_shape, is_rank0):
+    n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
+    n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+    tot = n0 + n2
+    diff_all = _sm64_raw(s0, c0, (tot,)) - _sm64_raw(s1, c1, (tot,))
+    diff_a = diff_all[:n0].reshape(s0_shape)
+    diff_c = diff_all[n0:].reshape(c_shape)
+    if is_rank0:
+        a = _sm64_raw(s_loc, c_loc, s0_shape)
+        c = a * w_plain
+        return diff_a + a, diff_c + c
+    return diff_a, diff_c
 
 
 @functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
@@ -945,6 +979,71 @@ class TrustedFirstParty(TupleProvider):
             shares, ("arithmetic", "arithmetic", "arithmetic"), device=device, precision=prec
         )
 
+    def generate_linear_triple(self, size0, size1, op="matmul", device=None, _w_plain=None, *args, **kwargs):
+        """
+        Generates a static-weight linear correlation (a, c = op(a, W)) where W is
+        a model weight parameter of shape `size1`. Only `a` and `c` are shared;
+        in the online phase, only `x - a` is opened (0 online bytes for W).
+        """
+        s0, s1 = tuple(size0), tuple(size1)
+        is_rank0 = self.rank == 0
+        if op == "matmul":
+            c_shape = jnp.broadcast_shapes(s0[:-2], s1[:-2]) + (s0[-2], s1[-1])
+            n0 = int(np.prod(s0)) if len(s0) > 0 else 1
+            n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n2, n0 if is_rank0 else 0)
+            w_arg = _w_plain if (is_rank0 and _w_plain is not None) else jnp.zeros(s1, dtype=DATATYPE)
+            shares = _tfp_linear_matmul_jit(
+                w_arg, c_loc, c0, c1, s_loc, sd0, sd1, s0, c_shape, is_rank0
+            )
+            return _wrap_shares(shares, ("arithmetic", "arithmetic"), device=device)
+
+        if op == "mul":
+            c_shape = jnp.broadcast_shapes(s0, s1)
+            n0 = int(np.prod(s0)) if len(s0) > 0 else 1
+            n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
+            c_loc, c0, c1, s_loc, sd0, sd1 = _get_prng_offsets(n0 + n2, n0 if is_rank0 else 0)
+            w_arg = _w_plain if (is_rank0 and _w_plain is not None) else jnp.zeros(s1, dtype=DATATYPE)
+            shares = _tfp_linear_mul_jit(
+                w_arg, c_loc, c0, c1, s_loc, sd0, sd1, s0, c_shape, is_rank0
+            )
+            return _wrap_shares(shares, ("arithmetic", "arithmetic"), device=device)
+
+        if is_rank0:
+            a = generate_random_ring_element(s0, device=device)
+            w_arg = _w_plain if _w_plain is not None else jnp.zeros(s1, dtype=DATATYPE)
+            c = _eval_ring_op(op, a, w_arg, *args, **kwargs)
+            tensors = [a, c]
+            c_shape = c.shape
+        else:
+            tensors = [None, None]
+            a_dummy = jnp.zeros(s0, dtype=DATATYPE)
+            b_dummy = jnp.zeros(s1, dtype=DATATYPE)
+            c_shape = _eval_ring_op(op, a_dummy, b_dummy, *args, **kwargs).shape
+        return tuple(_share_batch(tensors, (s0, c_shape), ("arithmetic", "arithmetic"), device=device))
+
+    def generate_dcf_key(self, size, nbits=63, mode="ltz", device=None):
+        """
+        Generates correlated FSS/DCF comparison keys and B2A / DReLU-mul masks
+        for `mode` in ('ltz', 'relu', 'ltz_abs_lt').
+        """
+        import prix
+        from prix.fss import _tfp_dcf_key_jit
+
+        shape = tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        is_rank0 = self.rank == 0
+        g_glob = prix.generators.get("global")
+        g0 = prix.generators.get("prev")
+        g1 = prix.generators.get("next")
+        s_glob, c_glob = g_glob.next_offset(4 * n)
+        k_przs = 4 if mode == "ltz" else (5 if mode == "relu" else 7)
+        s0, c0 = g0.next_offset(k_przs * n)
+        s1, c1 = g1.next_offset(k_przs * n)
+        return _tfp_dcf_key_jit(
+            c_glob, c0, c1, s_glob, s0, s1, shape, int(nbits), str(mode), is_rank0
+        )
+
 
 class TrustedThirdParty(TupleProvider):
     """Trusted Third Party provider communicating with a dedicated TTPServer process."""
@@ -1138,6 +1237,70 @@ class TrustedThirdParty(TupleProvider):
             Array.from_shares(v, precision=prec, device=device),
         )
 
+    def generate_linear_triple(self, size0, size1, op="matmul", device=None, _w_plain=None, *args, **kwargs):
+        from prix.array import Array
+
+        if device is None:
+            device = self.device
+        generator = TTPClient.get().get_generator(device=device)
+        s0, s1 = tuple(size0), tuple(size1)
+        a = generate_random_ring_element(s0, generator=generator, device=device)
+        if comm.get().get_rank() == 0:
+            w_arg = _w_plain if _w_plain is not None else jnp.zeros(s1, dtype=DATATYPE)
+            c = TTPClient.get().ttp_request(
+                "linear_triple", device, s0, s1, op, np.asarray(w_arg, dtype=np.int64), *args, **kwargs
+            )
+        else:
+            b_dummy = jnp.zeros(s1, dtype=DATATYPE)
+            c_shape = _eval_ring_op(op, a, b_dummy, *args, **kwargs).shape
+            c = generate_random_ring_element(c_shape, generator=generator, device=device)
+        return (
+            Array.from_shares(a, precision=0, device=device),
+            Array.from_shares(c, precision=0, device=device),
+        )
+
+    def generate_dcf_key(self, size, nbits=63, mode="ltz", device=None):
+        if device is None:
+            device = self.device
+        generator = TTPClient.get().get_generator(device=device)
+        shape = tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        nbits_i = int(nbits)
+        mode_s = str(mode)
+
+        r_in_sh = generate_random_ring_element(shape, generator=generator, device=device)
+        s_raw = generate_random_ring_element((n,), generator=generator, device=device)
+        s_init = jax.lax.bitcast_convert_type(s_raw, jnp.uint64) & ~jnp.uint64(3)
+        msb_raw = generate_kbit_random_tensor((n,), bitlength=1, generator=generator, device=device)
+        msb_r_sh = jax.lax.bitcast_convert_type(msb_raw, jnp.uint64)
+        b2a_shape = ((2,) + shape) if mode_s == "ltz_abs_lt" else shape
+        rB_sh = generate_kbit_random_tensor(b2a_shape, bitlength=1, generator=generator, device=device)
+
+        if comm.get().get_rank() == 0:
+            cw_i64 = TTPClient.get().ttp_request("dcf_cw", device, shape, nbits_i, mode_s)
+            cw_all = jax.lax.bitcast_convert_type(cw_i64, jnp.uint64)
+            msb_0_i64 = TTPClient.get().ttp_request("dcf_msb", device)
+            msb_r_sh = jax.lax.bitcast_convert_type(msb_0_i64, jnp.uint64)
+            rA_sh = TTPClient.get().ttp_request("dcf_rA", device)
+            if mode_s in ("relu", "ltz_abs_lt"):
+                w_sh = TTPClient.get().ttp_request("dcf_w", device)
+        else:
+            ttp_rank = comm.get().get_ttp_rank()
+            old_v = comm.get().is_verbose()
+            comm.get().set_verbosity(False)
+            try:
+                cw_i64 = comm.get().recv(src=ttp_rank)
+            finally:
+                comm.get().set_verbosity(old_v)
+            cw_all = jax.lax.bitcast_convert_type(to_jax(cw_i64, device=device, dtype=DATATYPE), jnp.uint64)
+            rA_sh = generate_random_ring_element(b2a_shape, generator=generator, device=device)
+            if mode_s in ("relu", "ltz_abs_lt"):
+                w_sh = generate_random_ring_element(shape, generator=generator, device=device)
+
+        if mode_s == "ltz":
+            return r_in_sh, s_init, cw_all, msb_r_sh, rA_sh, rB_sh
+        return r_in_sh, s_init, cw_all, msb_r_sh, rA_sh, rB_sh, w_sh
+
     @staticmethod
     def _init(device=None):
         TTPClient._init(device)
@@ -1188,8 +1351,13 @@ class TTPClient:
                 "kwargs": kwargs,
             }
             ttp_rank = comm.get().get_ttp_rank()
-            comm.get().send_obj(message, ttp_rank, self.ttp_group)
-            result = comm.get().recv(src=ttp_rank)
+            old_v = comm.get().is_verbose()
+            comm.get().set_verbosity(False)
+            try:
+                comm.get().send_obj(message, ttp_rank, self.ttp_group)
+                result = comm.get().recv(src=ttp_rank)
+            finally:
+                comm.get().set_verbosity(old_v)
             dev = resolve_device(device)
             if dev is not None:
                 result = jax.device_put(result, dev)
@@ -1222,6 +1390,11 @@ class TTPServer:
 
     _ALLOWED_RPC_METHODS = frozenset({
         "additive",
+        "linear_triple",
+        "dcf_cw",
+        "dcf_msb",
+        "dcf_rA",
+        "dcf_w",
         "square",
         "binary",
         "wraps",
@@ -1351,6 +1524,66 @@ class TTPServer:
         self._pending_trig_v = None
         uv_shape = (int(terms),) + tuple(size)
         return v - self._get_additive_PRSS(uv_shape, remove_rank=True)
+
+    def linear_triple(self, size0, size1, op, w_plain, *args, **kwargs):
+        a = self._get_additive_PRSS(size0)
+        w = jnp.asarray(w_plain, dtype=DATATYPE)
+        c = _eval_ring_op(op, a, w, *args, **kwargs)
+        return c - self._get_additive_PRSS(c.shape, remove_rank=True)
+
+    def dcf_cw(self, shape, nbits, mode):
+        from prix.fss import dpf_gen_jit
+
+        shape = tuple(shape)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        nbits_i = int(nbits)
+        mode_s = str(mode)
+
+        r_in = self._get_additive_PRSS(shape)
+        s0_raw = generate_random_ring_element((n,), generator=self.generators[0])
+        s1_raw = generate_random_ring_element((n,), generator=self.generators[1])
+        k0_0 = jax.lax.bitcast_convert_type(s0_raw, jnp.uint64) & ~jnp.uint64(3)
+        k1_0 = jax.lax.bitcast_convert_type(s1_raw, jnp.uint64) & ~jnp.uint64(3)
+
+        neg_r_u = jax.lax.bitcast_convert_type(-r_in.reshape(-1), jnp.uint64)
+        low_mask = (
+            (jnp.uint64(1) << jnp.uint64(nbits_i)) - jnp.uint64(1)
+            if nbits_i < 64
+            else ~jnp.uint64(0)
+        )
+        alpha = neg_r_u & low_mask
+        msb_r = ((neg_r_u >> jnp.uint64(nbits_i)) & jnp.uint64(1)).astype(DATATYPE)
+        _ = generate_kbit_random_tensor((n,), bitlength=1, generator=self.generators[0])
+        msb_1 = generate_kbit_random_tensor((n,), bitlength=1, generator=self.generators[1])
+        self._pending_dcf_msb = msb_r ^ msb_1
+
+        cw_all = dpf_gen_jit(alpha, k0_0, k1_0, nbits_i)
+        cw_i64 = jax.lax.bitcast_convert_type(cw_all, DATATYPE)
+        comm.get().send(cw_i64, 1)
+
+        b2a_shape = ((2,) + shape) if mode_s == "ltz_abs_lt" else shape
+        rB = self._get_binary_PRSS(b2a_shape, bitlength=1)
+        self._pending_dcf_rA = rB - self._get_additive_PRSS(b2a_shape, remove_rank=True)
+        if mode_s in ("relu", "ltz_abs_lt"):
+            r0 = rB[0] if mode_s == "ltz_abs_lt" else rB
+            w = r0 * r_in
+            self._pending_dcf_w = w - self._get_additive_PRSS(shape, remove_rank=True)
+        return cw_i64
+
+    def dcf_msb(self):
+        res = self._pending_dcf_msb
+        self._pending_dcf_msb = None
+        return res
+
+    def dcf_rA(self):
+        res = self._pending_dcf_rA
+        self._pending_dcf_rA = None
+        return res
+
+    def dcf_w(self):
+        res = self._pending_dcf_w
+        self._pending_dcf_w = None
+        return res
 
 
 _PROVIDER_INSTANCES = {}

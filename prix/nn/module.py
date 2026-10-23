@@ -240,7 +240,13 @@ class Module:
             for name, param in list(self._parameters.items()):
                 if mode:
                     if not isinstance(param, prix.Array):
-                        self.set_parameter(name, prix.cryptensor(param, src=src, device=dev))
+                        enc_param = prix.cryptensor(param, src=src, device=dev)
+                        enc_param._is_parameter = True
+                        if param is not None and prix.comm.get().get_rank() == src:
+                            enc_param._plain_encoded = prix.encoder.encode(
+                                param, precision=enc_param.precision, device=dev
+                            )
+                        self.set_parameter(name, enc_param)
                 else:
                     if isinstance(param, prix.Array):
                         self.set_parameter(name, param.get_plain_text())

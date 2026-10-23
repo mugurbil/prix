@@ -124,6 +124,8 @@ class Array:
         else:
             self.precision = int(precision)
         self.device = device
+        self._is_parameter = False
+        self._plain_encoded = None
 
         if src == SENTINEL:
             self.share = None
@@ -140,6 +142,8 @@ class Array:
             self.precision = array.precision if precision is None else int(precision)
             self.device = array.device if device is None else device
             self.ptype = array.ptype
+            self._is_parameter = getattr(array, "_is_parameter", False)
+            self._plain_encoded = getattr(array, "_plain_encoded", None)
             return
 
         world_size = comm.get().get_world_size()
@@ -752,7 +756,7 @@ class Array:
 
     def evaluate_embed(self, embed):
         result = self.clone()
-        result.share = _evaluate_embed(result, embed.share).share
+        result.share = _evaluate_embed(result, embed.share, embed_obj=embed).share
         result.precision = embed.precision
         return result
 
@@ -770,6 +774,10 @@ class Array:
     def _ltz(self):
         """Returns 1 for elements that are < 0 and 0 otherwise (with precision=0)."""
         if comm.get().get_world_size() == 2:
+            if getattr(cfg.mpc, "protocol", "beaver") == "fss":
+                from prix import fss
+
+                return fss.fss_ltz(self)
             from prix import circuit
 
             provider = get_default_provider()
@@ -926,6 +934,10 @@ class Array:
             index = jnp.asarray(index)
         result = self.shallow_copy()
         result.share = self.share[index]
+        if getattr(self, "_is_parameter", False):
+            result._is_parameter = True
+            if getattr(self, "_plain_encoded", None) is not None:
+                result._plain_encoded = self._plain_encoded[index]
         return result
 
     def __setitem__(self, index, value):
@@ -938,6 +950,10 @@ class Array:
             shape = tuple(shape[0])
         result = self.shallow_copy()
         result.share = self.share.reshape(shape)
+        if getattr(self, "_is_parameter", False):
+            result._is_parameter = True
+            if getattr(self, "_plain_encoded", None) is not None:
+                result._plain_encoded = self._plain_encoded.reshape(shape)
         return result
 
     def view(self, *shape):
@@ -965,6 +981,10 @@ class Array:
         axes[dim0], axes[dim1] = axes[dim1], axes[dim0]
         result = self.shallow_copy()
         result.share = jnp.transpose(self.share, axes)
+        if getattr(self, "_is_parameter", False):
+            result._is_parameter = True
+            if getattr(self, "_plain_encoded", None) is not None:
+                result._plain_encoded = jnp.transpose(self._plain_encoded, axes)
         return result
 
     def t(self):
@@ -978,6 +998,10 @@ class Array:
             dims = tuple(dims[0])
         result = self.shallow_copy()
         result.share = jnp.transpose(self.share, dims)
+        if getattr(self, "_is_parameter", False):
+            result._is_parameter = True
+            if getattr(self, "_plain_encoded", None) is not None:
+                result._plain_encoded = jnp.transpose(self._plain_encoded, dims)
         return result
 
     def squeeze(self, dim=None):
@@ -1410,11 +1434,61 @@ def _beaver_matmul_combine(c_share, eps, delta, a_share, b_share, trunc_div: int
     return res
 
 
+@functools.partial(jax.jit, static_argnames=("trunc_div",))
+def _linear_mul_combine(c_share, eps, y_share, trunc_div: int):
+    res = c_share + eps * y_share
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
+@functools.partial(jax.jit, static_argnames=("trunc_div",))
+def _linear_matmul_combine(c_share, eps, y_share, trunc_div: int):
+    if eps.ndim > y_share.ndim:
+        pad = (1,) * (eps.ndim - y_share.ndim)
+        y_share = y_share.reshape(pad + y_share.shape)
+    elif y_share.ndim > eps.ndim:
+        pad = (1,) * (y_share.ndim - eps.ndim)
+        eps = eps.reshape(pad + eps.shape)
+    res = c_share + _int64_matmul(eps, y_share)
+    if trunc_div > 1:
+        res = jax.lax.div(res, jnp.int64(trunc_div))
+    return res
+
+
 # Protocol helper functions
 def _beaver_protocol(op, x, y, *args, _trunc_div=1, **kwargs):
     """Performs Beaver protocol for additively secret-shared Arrays x and y."""
     provider = get_default_provider()
     is_rank0 = comm.get().get_rank() == 0
+    if (
+        getattr(cfg.mpc, "protocol", "beaver") == "fss"
+        and not getattr(cfg.mpc, "active_security", False)
+    ):
+        if op == "mul" and getattr(x, "_is_parameter", False) and not getattr(y, "_is_parameter", False):
+            x, y = y, x
+        if getattr(y, "_is_parameter", False):
+            a, c = provider.generate_linear_triple(
+                x.size(),
+                y.size(),
+                op,
+                device=x.device,
+                _w_plain=getattr(y, "_plain_encoded", None),
+                *args,
+                **kwargs,
+            )
+            eps_s = _sub_jit(x.share, a.share)
+            epsilon = comm.get().all_reduce(eps_s, op="sum")
+            if op == "mul":
+                c.share = _linear_mul_combine(c.share, epsilon, y.share, _trunc_div)
+            elif op == "matmul":
+                c.share = _linear_matmul_combine(c.share, epsilon, y.share, _trunc_div)
+            else:
+                z = _eval_ring_op(op, epsilon, y.share, *args, **kwargs)
+                c.share = c.share + z
+                if _trunc_div > 1:
+                    c.share = jax.lax.div(c.share, jnp.int64(_trunc_div))
+            return c
     if (
         op == "mul"
         and x.size() == y.size()
@@ -1711,7 +1785,7 @@ def _evaluate_bior_lut(x, luts, scale, bias):
     return result
 
 
-def _evaluate_embed(x, embed_share):
+def _evaluate_embed(x, embed_share, embed_obj=None):
     """Evaluates an embedding lookup using secret-shared indices x."""
     provider = get_default_provider()
     size = embed_share.shape[0]
@@ -1719,6 +1793,9 @@ def _evaluate_embed(x, embed_share):
     x_flat = x.flatten()
 
     embed = Array.from_shares(embed_share, precision=0, device=x.device)
+    if embed_obj is not None and getattr(embed_obj, "_is_parameter", False):
+        embed._is_parameter = True
+        embed._plain_encoded = getattr(embed_obj, "_plain_encoded", None)
     r, one_hot_r = provider.generate_one_hot(x_flat.size(), size, device=x.device)
 
     with IgnoreEncodings([x_flat, r]):
@@ -1776,7 +1853,12 @@ def _b2a_single_bit(xB):
 
     provider = get_default_provider()
     rA, rB = provider.B2A_rng(xB.size(), device=xB.device)
-    z = (xB ^ rB).reveal()
+    if getattr(cfg.mpc, "protocol", "beaver") == "fss":
+        from prix import fss
+
+        z = fss.reveal_packed_bits(xB.share ^ rB.share)
+    else:
+        z = (xB ^ rB).reveal()
     out_share = _b2a_combine(rA.share, z, comm.get().get_rank() == 0)
     return Array.from_shares(out_share, precision=0, device=xB.device, ptype=Ptype.arithmetic)
 

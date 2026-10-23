@@ -1211,10 +1211,17 @@ def sin(self):
     return cossin(self)[1]
 
 
-def _ltz_and_abs_lt(self, width):
+def _ltz_and_abs_lt(self, width, return_neg_part=False):
     """Computes (self < 0, |self| < width) in a single batched _ltz() call."""
+    if comm.get().get_world_size() == 2 and getattr(cfg.mpc, "protocol", "beaver") == "fss":
+        from prix import fss
+
+        return fss.fss_ltz_and_abs_lt(self, width, return_neg_part=return_neg_part)
     ltz_all = prix.stack([self, self - width, -self - width])._ltz()
-    return ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+    ltz, check = ltz_all[0], ltz_all[1] + ltz_all[2] - 1
+    if return_neg_part:
+        return ltz, check, self * ltz
+    return ltz, check
 
 
 def sigmoid(self):
@@ -1223,11 +1230,10 @@ def sigmoid(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        ltz, check = _ltz_and_abs_lt(
-            self, 2 ** cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits - 1
+        ltz, check, neg_part = _ltz_and_abs_lt(
+            self, 2 ** cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits - 1, return_neg_part=True
         )
-        sgn = 1 - 2 * ltz
-        abs_val = sgn * self
+        abs_val = self - 2 * neg_part
         if method == "haar":
             st_truncation = (
                 cfg.functions.sigmoid_tanh.sigmoid_lut_max_bits
@@ -1492,11 +1498,11 @@ def tanh(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        ltz, check = _ltz_and_abs_lt(
-            self, 2 ** cfg.functions.sigmoid_tanh.tanh_lut_max_bits - 1
+        ltz, check, neg_part = _ltz_and_abs_lt(
+            self, 2 ** cfg.functions.sigmoid_tanh.tanh_lut_max_bits - 1, return_neg_part=True
         )
         sgn = 1 - 2 * ltz
-        abs_val = sgn * self
+        abs_val = self - 2 * neg_part
         if method == "haar":
             st_truncation = (
                 cfg.functions.sigmoid_tanh.tanh_lut_max_bits
@@ -1557,9 +1563,9 @@ def tanh(self):
         out = tanh_polys_flipped.matmul(coeffs)
         return out.hardtanh()
     elif method == "poly":
-        ltz, do_poly = _ltz_and_abs_lt(self, 2.95)
+        ltz, do_poly, neg_part = _ltz_and_abs_lt(self, 2.95, return_neg_part=True)
         sgn = 1 - 2 * ltz
-        abs_x = sgn * self
+        abs_x = self - 2 * neg_part
         poly_x = abs_x.polynomial([1.1950192, -0.49313435, 0.0737858, -0.00147019]) - 0.01758266
         return sgn * (do_poly * (poly_x - 1) + 1)
     elif method == "fourier":
@@ -1643,9 +1649,9 @@ def erf(self):
     elif method == "tanh":
         return tanh(math.sqrt(4.0 / math.pi) * (self + 0.044715 * self.pow(3)))
     elif method == "poly":
-        ltz, do_poly = _ltz_and_abs_lt(self, 2.5)
+        ltz, do_poly, neg_part = _ltz_and_abs_lt(self, 2.5, return_neg_part=True)
         sgn = 1 - 2 * ltz
-        abs_x = sgn * self
+        abs_x = self - 2 * neg_part
         poly_x = abs_x.polynomial([1.30561301, -0.45803194, -0.01699669, 0.02278162]) - 0.01501806
         return sgn * (do_poly * (poly_x - 1) + 1)
     elif method == "fourier":
@@ -1666,8 +1672,9 @@ def gelu(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        ltz, check = _ltz_and_abs_lt(self, 2 ** cfg.functions.gelu.lut_max_bits)
-        neg_part = self * ltz
+        ltz, check, neg_part = _ltz_and_abs_lt(
+            self, 2 ** cfg.functions.gelu.lut_max_bits, return_neg_part=True
+        )
         abs_val = self - 2 * neg_part
         relu_val = self - neg_part
         if method == "haar":
@@ -1723,8 +1730,7 @@ def gelu(self):
     elif method == "erf":
         return self * (1 + (self / math.sqrt(2)).erf()) / 2
     elif method == "poly":
-        ltz, do_poly = _ltz_and_abs_lt(self, 3)
-        neg_part = self * ltz
+        ltz, do_poly, neg_part = _ltz_and_abs_lt(self, 3, return_neg_part=True)
         abs_x = self - 2 * neg_part
         relu_x = self - neg_part
         poly_x = abs_x.polynomial([-0.55386347, 0.5658561, -0.19719836, 0.02328962]) + 0.00410626
@@ -1733,8 +1739,7 @@ def gelu(self):
         period = getattr(cfg.functions.gelu, "fs_period", 8)
         width = period / 2.0
         terms = getattr(cfg.functions.gelu, "fs_terms", 8)
-        ltz, do_fs = _ltz_and_abs_lt(self, width)
-        neg_part = self * ltz
+        ltz, do_fs, neg_part = _ltz_and_abs_lt(self, width, return_neg_part=True)
         abs_x = self - 2 * neg_part
         relu_x = self - neg_part
         _, _, beta_sin = _cached_fourier_coeffs("gelu", float(width), int(terms))
@@ -1751,8 +1756,9 @@ def silu(self):
 
     if method in ("haar", "bior"):
         luts = LookupTables(self.device)
-        ltz, check = _ltz_and_abs_lt(self, 2 ** cfg.functions.silu.lut_max_bits - 1)
-        neg_part = self * ltz
+        ltz, check, neg_part = _ltz_and_abs_lt(
+            self, 2 ** cfg.functions.silu.lut_max_bits - 1, return_neg_part=True
+        )
         abs_val = self - 2 * neg_part
         relu_val = self - neg_part
         if method == "haar":
@@ -1808,8 +1814,7 @@ def silu(self):
     elif method == "sigmoid":
         return self * self.sigmoid()
     elif method == "poly":
-        ltz, do_poly = _ltz_and_abs_lt(self, 6)
-        neg_part = self * ltz
+        ltz, do_poly, neg_part = _ltz_and_abs_lt(self, 6, return_neg_part=True)
         abs_x = self - 2 * neg_part
         relu_x = self - neg_part
         poly_x = abs_x.polynomial([-0.47465521, 0.27018027, -0.05269808, 0.00348313]) - 0.00951912
@@ -1818,8 +1823,7 @@ def silu(self):
         period = getattr(cfg.functions.silu, "fs_period", 16)
         width = period / 2.0
         terms = getattr(cfg.functions.silu, "fs_terms", 12)
-        ltz, do_fs = _ltz_and_abs_lt(self, width)
-        neg_part = self * ltz
+        ltz, do_fs, neg_part = _ltz_and_abs_lt(self, width, return_neg_part=True)
         abs_x = self - 2 * neg_part
         relu_x = self - neg_part
         _, _, beta_sin = _cached_fourier_coeffs("silu", float(width), int(terms))
@@ -1841,7 +1845,10 @@ def softmax(self, dim=-1, **kwargs):
 
     method = cfg.functions.softmax.method
     if method == "approximation":
-        maximum_value = self.max(dim, keepdim=True)[0]
+        if getattr(cfg.mpc, "protocol", "beaver") == "fss" or cfg.functions.max.method == "tree":
+            maximum_value = self.max(dim, keepdim=True, return_argmax=False)
+        else:
+            maximum_value = self.max(dim, keepdim=True)[0]
         logits = self - maximum_value
         with cfg.temp_override({"functions.exp.all_neg": True}):
             numerator = logits.exp()
@@ -1886,7 +1893,10 @@ def log_softmax(self, dim=-1, **kwargs):
 
     method = cfg.functions.log_softmax.method
     if method == "approximation":
-        maximum_value = self.max(dim, keepdim=True)[0]
+        if getattr(cfg.mpc, "protocol", "beaver") == "fss" or cfg.functions.max.method == "tree":
+            maximum_value = self.max(dim, keepdim=True, return_argmax=False)
+        else:
+            maximum_value = self.max(dim, keepdim=True)[0]
         logits = self - maximum_value
         with cfg.temp_override({"functions.exp.all_neg": True}):
             normalize_term = logits.exp().sum(dim, keepdim=True)
@@ -1973,6 +1983,10 @@ def relu(self):
     method = getattr(cfg.functions, "relu", None)
     if method is not None and getattr(method, "method", None) == "fission":
         return permute_reveal_evaluate_share(self, "relu")
+    if comm.get().get_world_size() == 2 and getattr(cfg.mpc, "protocol", "beaver") == "fss":
+        from prix import fss
+
+        return fss.fss_relu(self)
     return self * self.ge(0)
 
 
@@ -2017,11 +2031,11 @@ def argmin(self, dim=None, keepdim=False, one_hot=True):
     return (-self).argmax(dim=dim, keepdim=keepdim, one_hot=one_hot)
 
 
-def max(self, dim=None, keepdim=False, one_hot=True):
+def max(self, dim=None, keepdim=False, one_hot=True, return_argmax=True):
     """Returns the maximum value of all elements in the input tensor."""
     method = cfg.functions.max.method
     if dim is None:
-        if method in ["log_reduction", "double_log_reduction"]:
+        if method in ["tree", "log_reduction", "double_log_reduction"]:
             max_result = _max_helper_all_tree_reductions(self, method=method)
         else:
             with cfg.temp_override({"functions.max.method": method}):
@@ -2029,6 +2043,18 @@ def max(self, dim=None, keepdim=False, one_hot=True):
             max_result = self.mul(argmax_result).sum()
         return max_result
     else:
+        if not return_argmax and method in [
+            "tree",
+            "log_reduction",
+            "double_log_reduction",
+            "accelerated_cascade",
+        ]:
+            max_result = _max_helper_all_tree_reductions(self, dim=dim, method=method)
+            if keepdim:
+                max_result = (
+                    max_result.unsqueeze(dim) if max_result.dim() < self.dim() else max_result
+                )
+            return max_result
         argmax_result, max_result = _argmax_helper(
             self, dim=dim, one_hot=True, method=method, _return_max=True
         )
@@ -2073,15 +2099,37 @@ def _argmax_helper_pairwise(enc_tensor, dim=None):
 
 
 def _compute_pairwise_comparisons_for_steps(input_tensor, dim, steps):
+    use_fss = (
+        comm.get().get_world_size() == 2
+        and getattr(cfg.mpc, "protocol", "beaver") == "fss"
+    )
+    if use_fss:
+        from prix import fss
     enc_tensor_reduced = input_tensor.clone()
     for _ in range(steps):
         m = enc_tensor_reduced.size(dim)
         if m <= 1:
             break
         x, y, remainder = enc_tensor_reduced.split([m // 2, m // 2, m % 2], dim=dim)
-        pairwise_max = prix.where(x >= y, x, y)
+        if use_fss:
+            pairwise_max = fss.fss_max_pairwise(x, y)
+        else:
+            pairwise_max = prix.where(x >= y, x, y)
         enc_tensor_reduced = prix.cat([pairwise_max, remainder], dim=dim)
     return enc_tensor_reduced
+
+
+def _max_helper_tree_reduction(enc_tensor, dim=None):
+    if enc_tensor.dim() == 0:
+        return enc_tensor
+    inp, dim_used = enc_tensor, dim
+    if dim is None:
+        dim_used = 0
+        inp = enc_tensor.flatten()
+    n = inp.size(dim_used)
+    steps = int(math.ceil(math.log2(builtins.max(n, 1))))
+    enc_tensor_reduced = _compute_pairwise_comparisons_for_steps(inp, dim_used, steps)
+    return enc_tensor_reduced.squeeze(dim_used)
 
 
 def _max_helper_log_reduction(enc_tensor, dim=None):
@@ -2160,7 +2208,9 @@ def _max_helper_accelerated_cascade(enc_tensor, dim=None):
 
 
 def _max_helper_all_tree_reductions(enc_tensor, dim=None, method="log_reduction"):
-    if method == "log_reduction":
+    if method == "tree":
+        return _max_helper_tree_reduction(enc_tensor, dim)
+    elif method == "log_reduction":
         return _max_helper_log_reduction(enc_tensor, dim)
     elif method == "double_log_reduction":
         return _max_helper_double_log_reduction(enc_tensor, dim)
@@ -2192,7 +2242,7 @@ def _argmax_helper(enc_tensor, dim=None, one_hot=True, method="pairwise", _retur
 
     if method == "pairwise":
         result_args, result_val = _argmax_helper_pairwise(updated_enc_tensor, dim)
-    elif method in ["log_reduction", "double_log_reduction", "accelerated_cascade"]:
+    elif method in ["tree", "log_reduction", "double_log_reduction", "accelerated_cascade"]:
         result_args, result_val = _argmax_helper_all_tree_reductions(
             updated_enc_tensor, dim, method
         )

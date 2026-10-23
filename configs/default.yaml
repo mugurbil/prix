@@ -16,7 +16,7 @@ functions:
     iterations: 8
     haar_size_bits: 5
     bior_size_bits: 5
-    lut_max_bits: 6
+    lut_max_bits: 4
     all_neg: True
     neg_lut_size: 256 # 2^8
   log:
@@ -34,7 +34,7 @@ functions:
     all_pos: True
     initial: null
     haar_size_bits: 8
-    bior_size_bits: 7
+    bior_size_bits: 8
     lut_max_bits: 6
   sqrt:
     method: "bior"

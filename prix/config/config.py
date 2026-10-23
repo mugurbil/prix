@@ -74,6 +74,8 @@ class PrixConfig:
         "default": "default.yaml",
         "lut": "default.yaml",
         "curl": "default.yaml",
+        "sigma": "sigma.yaml",
+        "fss": "sigma.yaml",
         "poly": "poly.yaml",
         "puma": "poly.yaml",
         "nimbus": "poly.yaml",
