@@ -9,12 +9,18 @@ import logging
 from .communicator import Communicator
 from .distributed_communicator import DistributedCommunicator
 from .process_communicator import InProcessCommunicator
+from .tcp_communicator import TCPCommunicator
 
-_use_distributed = False
+_TRANSPORTS = {
+    "shm": InProcessCommunicator,
+    "tcp": TCPCommunicator,
+    "jax": DistributedCommunicator,
+}
+_transport = "shm"
 
 
 def _get_cls():
-    return DistributedCommunicator if _use_distributed else InProcessCommunicator
+    return _TRANSPORTS[_transport]
 
 
 def get():
@@ -34,18 +40,40 @@ def _init(
     distributed=False,
     use_distributed=False,
     coordinator_address=None,
+    transport=None,
+    peers=None,
+    tls=None,
+    session=None,
     **kwargs,
 ):
-    global _use_distributed
-    distributed = distributed or use_distributed
-    _use_distributed = distributed
+    """
+    Selects and initializes the communicator. `transport` is "shm" (single-host processes,
+    the default), "tcp" (direct peer-to-peer TCP, optionally TLS; needs `peers`), or "jax"
+    (legacy: messages relayed through the jax.distributed coordinator).
+    """
+    global _transport
+    if transport is None:
+        transport = "jax" if (distributed or use_distributed) else "shm"
+    if transport not in _TRANSPORTS:
+        raise ValueError(f"Unknown transport {transport!r}; choose from {sorted(_TRANSPORTS)}")
+    _transport = transport
     cls = _get_cls()
 
     if cls.is_initialized():
         logging.info("Communicator is already initialized")
         return
 
-    if distributed:
+    if transport == "tcp":
+        cls.initialize(
+            rank=rank,
+            world_size=world_size,
+            evaluator_size=evaluator_size,
+            init_ttp=init_ttp,
+            peers=peers,
+            tls=tls,
+            session=session,
+        )
+    elif transport == "jax":
         cls.initialize(
             rank=rank,
             world_size=world_size,
@@ -78,6 +106,7 @@ __all__ = [
     "Communicator",
     "InProcessCommunicator",
     "DistributedCommunicator",
+    "TCPCommunicator",
     "get",
     "_init",
     "uninit",

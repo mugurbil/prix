@@ -108,10 +108,20 @@ def init(
     mode=None,
     use_distributed=False,
     coordinator_address=None,
+    transport=None,
+    peers=None,
+    tls=None,
+    session=None,
 ):
     """
     Initialize PriX: loads config, initializes communicator, PRNG generators,
     Wavelet LookupTables, TTPClient (if configured), and EvaluatorClient (if configured).
+
+    Multi-host runs use `transport="tcp"` with `peers`, one "host:port" per process in rank
+    order (MPC parties, then the TTP if `cfg.mpc.provider == "TTP"`, then evaluators), and
+    optionally `tls={"certfile": ..., "keyfile": ..., "cafile": ...}` for mutually
+    authenticated, encrypted channels. Processes with rank >= world_size should call
+    `prix.serve(...)` instead.
     """
     jax.config.update("jax_enable_x64", True)
 
@@ -135,6 +145,10 @@ def init(
         init_ttp=init_ttp,
         use_distributed=use_distributed,
         coordinator_address=coordinator_address,
+        transport=transport,
+        peers=peers,
+        tls=tls,
+        session=session,
     )
 
     rank = comm.get().get_rank()
@@ -170,6 +184,25 @@ def uninit():
 
 def is_initialized():
     return comm.is_initialized()
+
+
+def serve(rank, world_size, evaluator_size=0, cfg_file=None, mode=None, **comm_kwargs):
+    """
+    Runs a helper process for multi-host deployments: the TTP dealer (rank == world_size when
+    `cfg.mpc.provider == "TTP"`) or a Fission evaluator (any later rank). Takes the same
+    transport arguments as `prix.init` (e.g. `transport="tcp", peers=[...], tls={...}`) and
+    returns when the MPC parties shut down.
+    """
+    init(rank, world_size, evaluator_size, cfg_file=cfg_file, mode=mode, **comm_kwargs)
+    try:
+        if rank < world_size:
+            raise ValueError("prix.serve is for TTP/evaluator ranks; MPC parties call prix.init")
+        if cfg.mpc.provider == "TTP" and rank == world_size:
+            TTPServer()
+        else:
+            EvaluatorServer()
+    finally:
+        comm.uninit()
 
 
 def array(*args, **kwargs):

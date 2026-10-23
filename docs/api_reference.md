@@ -12,10 +12,15 @@
   - If JAX has already run computations in the calling process, forking can deadlock the children. In that case `"auto"` switches to **`spawn`**: the function and its arguments are serialized with `cloudpickle`, and the parent's `prix.cfg` settings (including `temp_override`) are copied to the children. This adds about 2 s of startup per run.
   - `"fork"`, `"spawn"` and `"forkserver"` force a specific method.
   - Plain scripts that use `spawn` must put their top-level code under `if __name__ == "__main__":`.
+- **Transport (`transport=`, `tls=`)** — accepted by `prix.run`, `@prix.mpc.run_multiprocess` and `MultiProcessLauncher`; the default can be set with `PRIX_TRANSPORT`.
+  - `"tcp"` (default): direct peer-to-peer TCP over loopback, the same code path as a multi-host deployment. `tls={"certfile", "keyfile", "cafile"}` enables mutual TLS. See [Transports](transports.md).
+  - `"shm"`: shared memory between local processes, a single-host simulation shortcut.
 - **`prix.set_mode(mode, device=None)`**
   Switches PriX's active configuration preset (`"lut"` / `"default"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`) and refreshes wavelet lookup tables if already initialized.
-- **`prix.init(rank=0, world_size=1, evaluator_size=0, ..., device=None, mode=None, cfg_file=None)`**
-  Initializes the communicator, PRNG streams, wavelet lookup tables, and optional TTP/Evaluator clients for a single worker process.
+- **`prix.init(rank=0, world_size=1, evaluator_size=0, ..., device=None, mode=None, cfg_file=None, transport=None, peers=None, tls=None, session=None)`**
+  Initializes the communicator, PRNG streams, wavelet lookup tables, and optional TTP/Evaluator clients for a single worker process. For multi-host runs pass `transport="tcp"` and `peers` (one `"host:port"` per process in rank order: parties, then the TTP if used, then evaluators).
+- **`prix.serve(rank, world_size, evaluator_size=0, mode=None, cfg_file=None, **transport_kwargs)`**
+  Runs a TTP dealer or Fission evaluator process in a multi-host deployment and returns when the parties shut down.
 - **`prix.uninit()`**
   Tears down active communicator and client connections.
 

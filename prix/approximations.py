@@ -7,9 +7,11 @@
 
 import builtins
 import functools
+import hashlib
 import logging
 import math
 import os
+import stat
 import tempfile
 
 import jax
@@ -135,25 +137,80 @@ class LookupTables:
             arr_i64 = jax.device_put(arr_i64, resolve_device(device))
         return arr_i64
 
+    _LUT_CACHE_VERSION = "v2"
+
     @classmethod
-    def _cache_path(cls, kind, name, max_bits, lut_bits, negative_values):
-        cache_dir = os.path.join(tempfile.gettempdir(), "prix_lut_cache")
-        os.makedirs(cache_dir, exist_ok=True)
-        fname = f"{kind}_{name}_p{cfg.encoder.precision_bits}_m{max_bits}_l{lut_bits}_n{int(negative_values)}.npy"
+    def _safe_cache_dir(cls):
+        uid = os.getuid() if hasattr(os, "getuid") else "default"
+        cache_dir = os.path.join(tempfile.gettempdir(), f"prix_lut_cache_{uid}")
+        os.makedirs(cache_dir, mode=0o700, exist_ok=True)
+        st = os.lstat(cache_dir)
+        if stat.S_ISLNK(st.st_mode) or not stat.S_ISDIR(st.st_mode):
+            raise RuntimeError(f"Refusing to use non-directory LUT cache path: {cache_dir}")
+        if hasattr(os, "getuid") and st.st_uid != os.getuid():
+            raise RuntimeError(f"LUT cache directory {cache_dir} is not owned by current user")
+        if hasattr(os, "chmod") and (st.st_mode & 0o077) != 0:
+            os.chmod(cache_dir, 0o700)
+        return cache_dir
+
+    @classmethod
+    def _cache_path(cls, kind, name, max_bits, lut_bits, negative_values, function=None):
+        cache_dir = cls._safe_cache_dir()
+        code = getattr(function, "__code__", None)
+        if code is not None:
+            func_bytes = code.co_code + repr(code.co_consts).encode("utf-8")
+        else:
+            func_bytes = getattr(function, "__name__", repr(function)).encode("utf-8")
+        fn_hash = hashlib.sha256(func_bytes).hexdigest()[:12]
+        fname = (
+            f"{cls._LUT_CACHE_VERSION}_{kind}_{name}_p{cfg.encoder.precision_bits}"
+            f"_m{max_bits}_l{lut_bits}_n{int(bool(negative_values))}_{fn_hash}.npy"
+        )
         return os.path.join(cache_dir, fname)
 
     @classmethod
+    def _load_cached_lut(cls, cpath, expected_shape):
+        if not os.path.exists(cpath):
+            return None
+        try:
+            st = os.lstat(cpath)
+            if not stat.S_ISREG(st.st_mode):
+                return None
+            if hasattr(os, "getuid") and st.st_uid != os.getuid():
+                return None
+            arr_np = np.load(cpath, allow_pickle=False)
+            if arr_np.dtype != np.int64 or arr_np.shape != expected_shape:
+                return None
+            return arr_np
+        except Exception:
+            return None
+
+    @classmethod
+    def _save_cached_lut(cls, cpath, arr_np):
+        try:
+            tmp_p = f"{cpath}.{os.getpid()}.tmp.npy"
+            np.save(tmp_p, arr_np, allow_pickle=False)
+            if hasattr(os, "chmod"):
+                os.chmod(tmp_p, 0o600)
+            os.replace(tmp_p, cpath)
+        except Exception:
+            pass
+
+    @classmethod
     def generate_haar(cls, max_bits, lut_bits, function, name, negative_values=False, device=None):
-        cpath = cls._cache_path("haar", name, max_bits, lut_bits, negative_values)
-        if os.path.exists(cpath):
-            try:
-                arr_i64 = jnp.asarray(np.load(cpath), dtype=DATATYPE)
+        expected_shape = (2 ** (int(lut_bits) + int(bool(negative_values))),)
+        cpath = None
+        try:
+            cpath = cls._cache_path("haar", name, max_bits, lut_bits, negative_values, function=function)
+            cached = cls._load_cached_lut(cpath, expected_shape)
+            if cached is not None:
+                arr_i64 = jnp.asarray(cached, dtype=DATATYPE)
                 if device is not None:
                     arr_i64 = jax.device_put(arr_i64, resolve_device(device))
                 dict.__setitem__(cls.LUTs, name, arr_i64)
                 return
-            except Exception:
-                pass
+        except Exception:
+            cpath = None
         scale = 2 ** cfg.encoder.precision_bits
         max_element = 2 ** max_bits
         depth = max_bits + cfg.encoder.precision_bits - lut_bits
@@ -164,12 +221,8 @@ class LookupTables:
         full = function(xs)
         coeffs, *_ = pywt.wavedec(full, "haar", level=depth)
         arr_np = cls._to_int64_np(coeffs * (2 ** (-depth / 2.0)) * scale)
-        try:
-            tmp_p = f"{cpath}.{os.getpid()}.tmp.npy"
-            np.save(tmp_p, arr_np)
-            os.replace(tmp_p, cpath)
-        except Exception:
-            pass
+        if cpath is not None:
+            cls._save_cached_lut(cpath, arr_np)
         arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
         if device is not None:
             arr_i64 = jax.device_put(arr_i64, resolve_device(device))
@@ -177,16 +230,19 @@ class LookupTables:
 
     @classmethod
     def generate_bior(cls, max_bits, lut_bits, function, name, negative_values=False, device=None):
-        cpath = cls._cache_path("bior", name, max_bits, lut_bits, negative_values)
-        if os.path.exists(cpath):
-            try:
-                arr_i64 = jnp.asarray(np.load(cpath), dtype=DATATYPE)
+        expected_shape = (2, 2 ** (int(lut_bits) + int(bool(negative_values))))
+        cpath = None
+        try:
+            cpath = cls._cache_path("bior", name, max_bits, lut_bits, negative_values, function=function)
+            cached = cls._load_cached_lut(cpath, expected_shape)
+            if cached is not None:
+                arr_i64 = jnp.asarray(cached, dtype=DATATYPE)
                 if device is not None:
                     arr_i64 = jax.device_put(arr_i64, resolve_device(device))
                 dict.__setitem__(cls.LUTs, name, arr_i64)
                 return
-            except Exception:
-                pass
+        except Exception:
+            cpath = None
         scale = 2 ** cfg.encoder.precision_bits
         max_element = 2 ** max_bits
         depth = max_bits + cfg.encoder.precision_bits - lut_bits
@@ -211,12 +267,8 @@ class LookupTables:
                 ]
             )
         arr_np = cls._to_int64_np((coeffs * scale) * (2 ** (depth * 0.5)))
-        try:
-            tmp_p = f"{cpath}.{os.getpid()}.tmp.npy"
-            np.save(tmp_p, arr_np)
-            os.replace(tmp_p, cpath)
-        except Exception:
-            pass
+        if cpath is not None:
+            cls._save_cached_lut(cpath, arr_np)
         arr_i64 = jnp.asarray(arr_np, dtype=DATATYPE)
         if device is not None:
             arr_i64 = jax.device_put(arr_i64, resolve_device(device))

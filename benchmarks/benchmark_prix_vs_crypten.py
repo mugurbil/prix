@@ -42,7 +42,12 @@ MODES = [
 ]
 MODE_KEYS = [m[0] for m in MODES]
 
-FRAMEWORK_LABELS = {"crypten": "CrypTen (PyTorch)", "prix": "PriX (JAX)", "prix_gloo": "PriX (JAX, gloo transport)"}
+FRAMEWORK_LABELS = {
+    "crypten": "CrypTen (PyTorch)",
+    "prix": "PriX (JAX)",
+    "prix_gloo": "PriX (JAX, gloo transport)",
+    "prix_tcp": "PriX (JAX, TCP transport)",
+}
 
 
 class AttrDict(dict):
@@ -396,7 +401,7 @@ def _prix_worker(a):
             x.share.block_until_ready()
 
     _run_workload(
-        a, "prix_gloo" if a.get("transport") == "gloo" else "prix", prix, comm,
+        a, {"gloo": "prix_gloo", "tcp": "prix_tcp"}.get(a.get("transport"), "prix"), prix, comm,
         to_private=lambda v: prix.cryptensor(v, device=device),
         sync=sync, no_grad=prix.no_grad,
     )
@@ -415,7 +420,10 @@ def run_prix(prix_root, device, tmp_dir, modes, bench_args, transport="shm"):
         args = AttrDict(config_path=cfg_path, out_path=part, device=device, mode=key, transport=transport,
                         gloo_rendezvous=os.path.join(tmp_dir, f"_prix_gloo_{key}_{os.getpid()}_{time.time_ns()}"),
                         **bench_args)
-        launcher = MultiProcessLauncher(2, n_eval, _prix_worker, args, cfg_file=cfg_path)
+        launcher = MultiProcessLauncher(
+            2, n_eval, _prix_worker, args, cfg_file=cfg_path,
+            transport="tcp" if transport == "tcp" else "shm",
+        )
         launcher.start()
         launcher.join()
         launcher.terminate()
@@ -743,9 +751,10 @@ if __name__ == "__main__":
         help="Also record per-run communication time, rounds and bytes (communicator verbose mode)",
     )
     parser.add_argument(
-        "--prix-transport", choices=["shm", "gloo"], default="shm",
-        help="Transport ablation: run PriX's 2-party all_reduce over gloo/TCP like CrypTen "
-             "(results stored under 'prix_gloo')",
+        "--prix-transport", choices=["shm", "gloo", "tcp"], default="shm",
+        help="PriX transport: 'shm' (shared memory), 'tcp' (PriX's own peer-to-peer TCP "
+             "transport; results under 'prix_tcp'), or 'gloo' (ablation: PriX's 2-party "
+             "all_reduce over torch.distributed/gloo like CrypTen; results under 'prix_gloo')",
     )
     args = parser.parse_args()
     if args.framework == "curl":
@@ -788,7 +797,9 @@ if __name__ == "__main__":
             res = run_crypten(
                 args.crypten_root, args.device, tmp_dir, modes, bench_args, prix_root=args.prix_root
             )
-        key = "prix_gloo" if (args.framework == "prix" and args.prix_transport == "gloo") else args.framework
+        key = args.framework
+        if args.framework == "prix" and args.prix_transport != "shm":
+            key = f"prix_{args.prix_transport}"
         data.setdefault(key, {}).update(res)
         with open(args.out, "w") as f:
             json.dump(data, f, indent=2)

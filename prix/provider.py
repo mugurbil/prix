@@ -1071,10 +1071,16 @@ class TrustedThirdParty(TupleProvider):
         return r, one_hot_r
 
     def generate_permutation(self, tensor_size, device=None):
+        # Shared by all MPC parties (via the jointly-seeded "global" generator)
+        # but unknown to the TTP / Fission evaluators; fresh on every call.
+        import prix
+
         if device is None:
             device = self.device
-        generator = TTPClient.get().get_permutation_generator(device=device)
-        return generate_permutation(tensor_size, generator=generator, device=device)
+        gen = prix.generators.get("global")
+        if gen is None:
+            raise RuntimeError("prix.init() must be called before generating permutations")
+        return generate_permutation(tensor_size, generator=gen, device=device)
 
     def egk_trunc_pr_rng(self, size, l, m, device=None):
         from prix.array import Array
@@ -1116,11 +1122,13 @@ class TrustedThirdParty(TupleProvider):
         shape = tuple(size)
         uv_shape = (int(terms),) + shape
 
-        t = generate_random_ring_element(shape, generator=generator, device=device)
+        _ = generate_random_ring_element(shape, generator=generator, device=device)
         if comm.get().get_rank() == 0:
+            t = TTPClient.get().ttp_request("trig_triple_t", device, shape, float(period), int(terms), prec)
             u = TTPClient.get().ttp_request("trig_triple_u", device, shape, float(period), int(terms), prec)
             v = TTPClient.get().ttp_request("trig_triple_v", device, shape, float(period), int(terms), prec)
         else:
+            t = generate_random_ring_element(shape, generator=generator, device=device)
             u = generate_random_ring_element(uv_shape, generator=generator, device=device)
             v = generate_random_ring_element(uv_shape, generator=generator, device=device)
 
@@ -1156,21 +1164,23 @@ class TTPClient:
             seed = comm.get().recv(src=ttp_rank)
             self.generator = PRNGGenerator(seed=int(seed.item()), device=device)
 
-            perm_seed = comm.get().recv(src=ttp_rank)
-            self.permutation_generator = PRNGGenerator(
-                seed=int(perm_seed.item()), device=device
-            )
-
         def get_generator(self, device=None):
             return self.generator
 
         def get_permutation_generator(self, device=None):
-            return self.permutation_generator
+            import prix
+
+            gen = prix.generators.get("global")
+            if gen is None:
+                raise RuntimeError("prix.init() must be called before generating permutations")
+            return gen
 
         def ttp_request(self, func_name, device, *args, **kwargs):
             assert (
                 comm.get().get_rank() == 0
             ), "Only party 0 communicates with the TTPServer"
+            if func_name not in TTPServer._ALLOWED_RPC_METHODS:
+                raise ValueError(f"Disallowed TTP RPC method: {func_name!r}")
             message = {
                 "function": func_name,
                 "device": str(device) if device is not None else None,
@@ -1210,10 +1220,25 @@ class TTPClient:
 class TTPServer:
     """Trusted Third Party server process."""
 
+    _ALLOWED_RPC_METHODS = frozenset({
+        "additive",
+        "square",
+        "binary",
+        "wraps",
+        "B2A",
+        "generate_one_hot",
+        "egk_trunc_pr_rng",
+        "trig_triple_t",
+        "trig_triple_u",
+        "trig_triple_v",
+    })
+
     def __init__(self):
         self.ttp_group = comm.get().ttp_group
         self.comm_group = comm.get().ttp_comm_group
         self.device = "cpu"
+        self._pending_trig_u = None
+        self._pending_trig_v = None
         self._setup_generators()
         logging.info("TTPServer Initialized")
 
@@ -1225,6 +1250,8 @@ class TTPServer:
                     return
 
                 function = message["function"]
+                if function not in self._ALLOWED_RPC_METHODS:
+                    raise ValueError(f"Disallowed TTP RPC method: {function!r}")
                 args = message["args"]
                 kwargs = message["kwargs"]
 
@@ -1240,10 +1267,6 @@ class TTPServer:
             seed_i = int.from_bytes(os.urandom(8), "big") - 2**63
             comm.get().send(jnp.array(seed_i, dtype=DATATYPE), i)
             self.generators.append(PRNGGenerator(seed=seed_i))
-
-        perm_seed = int.from_bytes(os.urandom(8), "big") - 2**63
-        for i in range(ws):
-            comm.get().send(jnp.array(perm_seed, dtype=DATATYPE), i)
 
     def _get_additive_PRSS(self, size, remove_rank=False):
         gens = self.generators[1:] if remove_rank else self.generators
@@ -1305,16 +1328,21 @@ class TTPServer:
             r = (raw.view(jnp.uint64) & jnp.uint64((1 << int(exp)) - 1)).astype(DATATYPE)
         return r - self._get_additive_PRSS(size, remove_rank=True)
 
-    def trig_triple_u(self, size, period, terms, prec):
+    def trig_triple_t(self, size, period, terms, prec):
         scale = 1 << int(prec)
         period_scaled = int(round(float(period) * scale))
-        t = self._get_additive_PRSS(size)
-        t_mod = (t % jnp.int64(period_scaled)).astype(jnp.float32) / jnp.float32(scale)
+        raw = self._get_additive_PRSS(size)
+        t = (raw.view(jnp.uint64) & jnp.uint64((1 << 61) - 1)).astype(DATATYPE)
+        t_mod = jnp.mod(t, jnp.int64(period_scaled)).astype(jnp.float32) / jnp.float32(scale)
         ks = jnp.arange(1, int(terms) + 1, dtype=jnp.float32) * jnp.float32(2.0 * np.pi / float(period))
         angles = jnp.tensordot(ks, t_mod, axes=0)
-        u = jnp.round(jnp.sin(angles) * jnp.float32(scale)).astype(DATATYPE)
-        v = jnp.round(jnp.cos(angles) * jnp.float32(scale)).astype(DATATYPE)
-        self._pending_trig_v = v
+        self._pending_trig_u = jnp.round(jnp.sin(angles) * jnp.float32(scale)).astype(DATATYPE)
+        self._pending_trig_v = jnp.round(jnp.cos(angles) * jnp.float32(scale)).astype(DATATYPE)
+        return t - self._get_additive_PRSS(size, remove_rank=True)
+
+    def trig_triple_u(self, size, period, terms, prec):
+        u = self._pending_trig_u
+        self._pending_trig_u = None
         uv_shape = (int(terms),) + tuple(size)
         return u - self._get_additive_PRSS(uv_shape, remove_rank=True)
 

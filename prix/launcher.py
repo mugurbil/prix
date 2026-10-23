@@ -13,6 +13,8 @@ import multiprocessing
 import multiprocessing.connection
 import os
 import pickle
+import secrets
+import socket
 import threading
 import time
 import uuid
@@ -81,6 +83,20 @@ def _resolve_start_method(start_method):
     return method
 
 
+def _free_ports(n):
+    """Reserves n distinct free loopback TCP ports (released just before the children bind them)."""
+    socks = []
+    try:
+        for _ in range(n):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.bind(("127.0.0.1", 0))
+            socks.append(s)
+        return [s.getsockname()[1] for s in socks]
+    finally:
+        for s in socks:
+            s.close()
+
+
 def _config_snapshot():
     """Plain-dict copy of the active PriX config, so children see the parent's settings."""
 
@@ -115,6 +131,8 @@ class MultiProcessLauncher:
         mode=None,
         device=None,
         start_method=None,
+        transport=None,
+        tls=None,
     ):
         # Support both (world_size, evaluator_size, run_process_fn, fn_args)
         # and (world_size, run_process_fn, fn_args, cfg_file) signatures
@@ -162,14 +180,28 @@ class MultiProcessLauncher:
         self._result_recv, self._result_send = ctx.Pipe(duplex=False)
         self._result_received = False
         self.return_value = None
-        if world_size == 2:
+        transport = transport or os.environ.get("PRIX_TRANSPORT", "tcp")
+        if transport not in ("shm", "tcp"):
+            raise ValueError(f"transport must be 'shm' or 'tcp', got {transport!r}")
+        self.transport = transport
+        comm_kwargs = {}
+        if transport == "tcp":
+            # Every process (parties, TTP, evaluators) gets its own loopback port; the parties
+            # then talk over direct TCP connections exactly as they would across hosts.
+            comm_kwargs = {
+                "transport": "tcp",
+                "peers": [f"127.0.0.1:{p}" for p in _free_ports(total_ranks)],
+                "session": secrets.token_hex(16),
+                "tls": tls,
+            }
+        if world_size == 2 and transport == "shm":
             shm_elems = InProcessCommunicator.SHM_SLOT_ELEMS
             shm_buffers = [ctx.RawArray(ctypes.c_int64, 4 * shm_elems) for _ in range(2)]
             peer_pipes = list(ctx.Pipe(duplex=True))
         else:
             shm_buffers = peer_pipes = None
         # Passed explicitly to every child (inherited state only exists under fork).
-        shared = (shm_buffers, peer_pipes, cfg_snapshot)
+        shared = (shm_buffers, peer_pipes, cfg_snapshot, comm_kwargs)
         # Keep the IPC primitives alive in the parent: Process.start() drops its reference
         # to `args`, and garbage-collecting a Queue/Barrier unlinks its named semaphores
         # before 'spawn'/'forkserver' children have attached to them.
@@ -270,8 +302,9 @@ class MultiProcessLauncher:
             run_process_fn = pickle.loads(run_process_fn)
         if isinstance(fn_args, bytes):
             fn_args = pickle.loads(fn_args)
+        comm_kwargs = {}
         if shared is not None:
-            shm_buffers, peer_pipes, cfg_snapshot = shared
+            shm_buffers, peer_pipes, cfg_snapshot, comm_kwargs = shared
             InProcessCommunicator.shm_buffers = shm_buffers
             InProcessCommunicator.peer_pipes = peer_pipes
             if cfg_snapshot is not None:
@@ -289,6 +322,7 @@ class MultiProcessLauncher:
             barrier,
             device=device,
             cfg_file=cfg_file,
+            **comm_kwargs,
         )
         logging.getLogger().setLevel(orig_logging_level)
         try:
@@ -308,7 +342,7 @@ class MultiProcessLauncher:
                 finally:
                     result_queue.close()
         finally:
-            if rank < world_size and prix.comm.is_initialized():
+            if prix.comm.is_initialized():
                 prix.uninit()
 
     def start(self):
@@ -389,6 +423,8 @@ def run(
     cfg_file=None,
     timeout=None,
     start_method=None,
+    transport=None,
+    tls=None,
     **kwargs,
 ):
     """
@@ -396,6 +432,11 @@ def run(
 
     `start_method` ('auto' by default, or 'fork' / 'spawn' / 'forkserver') controls how
     parties are started; see `_resolve_start_method`.
+
+    `transport` selects how the local processes talk: "tcp" (default; direct TCP connections
+    over loopback, the same code path as a multi-host deployment; `tls` optionally enables
+    mutual TLS) or "shm" (shared memory, a single-host simulation shortcut). The default can
+    also be set with the PRIX_TRANSPORT environment variable.
     """
     fn_args = ("__prix_call_args__", (args, kwargs)) if (args or kwargs) else None
     launcher = MultiProcessLauncher(
@@ -407,6 +448,8 @@ def run(
         mode=mode,
         device=device,
         start_method=start_method,
+        transport=transport,
+        tls=tls,
     )
     launcher.start()
     return launcher.join(timeout=timeout)
@@ -419,6 +462,8 @@ def run_multiprocess(
     device=None,
     cfg_file=None,
     start_method=None,
+    transport=None,
+    tls=None,
 ):
     """
     CrypTen-compatible decorator to run a function across `world_size` MPC parties:
@@ -450,6 +495,8 @@ def run_multiprocess(
                 device=device,
                 cfg_file=cfg_file,
                 start_method=start_method,
+                transport=transport,
+                tls=tls,
                 **kwargs,
             )
 
