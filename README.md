@@ -13,10 +13,10 @@ Write familiar JAX/PyTorch-style Python (`prix.array`, `@prix.mpc.run_multiproce
 
 > [!WARNING]
 > **Research prototype — not yet suitable for protecting real secrets.**
-> - The share/triple PRNG is SplitMix64 (GPU) / PCG64 (CPU), which is fast but **not a cryptographically secure PRF**; a party that learns some outputs can predict the stream. A keyed CSPRNG (e.g. Threefry/AES-CTR) is planned.
+> - By default, correlated randomness is expanded with a fast counter-mode `SplitMix64` stream (unified across CPU and GPU); set `cfg.mpc.prng = "siphash24"` to switch to a keyed `SipHash-2-4` cryptographic counter-mode PRF.
 > - The default `TFP` (Trusted First Party) provider lets party 0 generate all correlated randomness, so **party 0 can learn every secret** (as in CrypTen). Use it for benchmarking only; `TTP` assumes a non-colluding dealer.
-> - Security is semi-honest (honest-but-curious) only.
-> - Parties talk over direct peer-to-peer TCP (`prix.run`'s default; the same code runs across hosts). Enable mutual TLS for anything beyond experiments; see [Transports](docs/transports.md).
+> - Security is semi-honest (honest-but-curious) only (`cfg.mpc.active_security` is a lightweight Beaver multiplication consistency check, not a malicious-secure protocol).
+> - Parties talk over direct peer-to-peer TCP (`prix.run`'s default; the same code runs across hosts) using a pickle-free wire format. Enable mutual TLS for anything beyond experiments; see [Transports](docs/transports.md).
 
 ---
 

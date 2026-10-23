@@ -64,9 +64,7 @@ def worker(mode):
     out["softmax"] = [np.asarray(s.softmax(dim=-1).reconstruct(), dtype=np.float64).tolist() for _ in range(REPS)]
     ln = prix.array(LN_IN.astype(np.float32))
     out["layernorm"] = [np.asarray(ln.layernorm().reconstruct(), dtype=np.float64).tolist() for _ in range(REPS)]
-    # Write to a file instead of returning: prix.run currently hangs on return values > ~64 KB.
-    if prix.comm.get().get_rank() == 0:
-        json.dump(out, open(os.path.join(tempfile.gettempdir(), f"_acc_{mode}.json"), "w"))
+    return out
 
 
 def summarize(name, runs, ref):
@@ -94,8 +92,7 @@ if __name__ == "__main__":
     ln_ref = (LN_IN - LN_IN.mean(-1, keepdims=True)) / np.sqrt(LN_IN.var(-1, keepdims=True) + 1e-5)
     results = {}
     for mode in modes:
-        prix.run(worker, mode, world_size=2, mode=mode, start_method="fork", timeout=1800)
-        raw = json.load(open(os.path.join(tempfile.gettempdir(), f"_acc_{mode}.json")))
+        raw = prix.run(worker, mode, world_size=2, mode=mode, start_method="fork", timeout=1800)
         res = {name: summarize(name, raw[name], REF[name](GRIDS[name])) for name in GRIDS}
         res["softmax"] = summarize("softmax", raw["softmax"], sm_ref)
         res["layernorm"] = summarize("layernorm", raw["layernorm"], ln_ref)

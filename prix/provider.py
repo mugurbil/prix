@@ -8,7 +8,6 @@
 import functools
 import logging
 import os
-import pickle
 import tempfile
 
 import jax
@@ -16,6 +15,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import prix.communicator as comm
+from prix.communicator import wire
 from prix.config import cfg
 from prix.encoder import DATATYPE, resolve_device, to_jax
 from prix.random import (
@@ -221,7 +221,7 @@ class TupleProvider:
         if prefix is None:
             prefix = self._DEFAULT_CACHE_PATH
         os.makedirs(prefix, mode=0o700, exist_ok=True)
-        return os.path.join(prefix, f"request_cache-{self.rank}.pkl")
+        return os.path.join(prefix, f"request_cache-{self.rank}.bin")
 
     def _get_tuple_path(self, prefix=None):
         if prefix is None:
@@ -240,29 +240,33 @@ class TupleProvider:
         if len(self.request_cache) == 0:
             return
         path = self._get_request_path(prefix=filepath)
+        serialized = [_serialize_cache_obj(req) for req in self.request_cache]
         with open(path, "wb") as f:
-            pickle.dump(self.request_cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+            for part in wire.encode(serialized):
+                f.write(part)
         self.request_cache = []
 
     def _load_requests(self, filepath=None):
         path = self._get_request_path(prefix=filepath)
         if os.path.exists(path):
             with open(path, "rb") as f:
-                self.request_cache = pickle.load(f)
+                raw = wire.decode(bytearray(f.read()))
+            self.request_cache = [_deserialize_cache_obj(req, device=self.device) for req in raw]
 
     def _save_tuples(self, filepath=None):
         if len(self.tuple_cache) == 0:
             return
         dirpath = self._get_tuple_path(prefix=filepath)
-        os.makedirs(dirpath, exist_ok=True)
+        os.makedirs(dirpath, mode=0o700, exist_ok=True)
         existing_files = [
             f for f in os.listdir(dirpath) if f.startswith("tuple_batch_")
         ]
         next_index = len(existing_files)
-        batch_file = os.path.join(dirpath, f"tuple_batch_{next_index}.pkl")
-        tensor_cache = {k: list(v) for k, v in self.tuple_cache.items()}
+        batch_file = os.path.join(dirpath, f"tuple_batch_{next_index}.bin")
+        tensor_cache = {k: [_serialize_cache_obj(item) for item in v] for k, v in self.tuple_cache.items()}
         with open(batch_file, "wb") as f:
-            pickle.dump(tensor_cache, f, protocol=pickle.HIGHEST_PROTOCOL)
+            for part in wire.encode(tensor_cache):
+                f.write(part)
         self.tuple_cache.clear()
 
     def _load_tuples(self, filepath=None):
@@ -276,9 +280,10 @@ class TupleProvider:
         for batch_file in batch_files:
             batch_path = os.path.join(dirpath, batch_file)
             with open(batch_path, "rb") as f:
-                batch_data = pickle.load(f)
+                batch_data = wire.decode(bytearray(f.read()))
             for key, values in batch_data.items():
-                self.tuple_cache.setdefault(key, []).extend(values)
+                deser = [_deserialize_cache_obj(item, device=self.device) for item in values]
+                self.tuple_cache.setdefault(key, []).extend(deser)
 
     def load_cache(self, filepath=None):
         self._load_requests(filepath=filepath)
@@ -342,6 +347,37 @@ class TupleProvider:
         return func_from_cache
 
 
+def _serialize_cache_obj(v):
+    from prix.array import Array
+
+    if isinstance(v, Array):
+        return ("__prix_array__", np.asarray(v.share), v.precision, str(v.ptype.value))
+    if isinstance(v, tuple):
+        return tuple(_serialize_cache_obj(x) for x in v)
+    if isinstance(v, list):
+        return [_serialize_cache_obj(x) for x in v]
+    if isinstance(v, dict):
+        return {k: _serialize_cache_obj(x) for k, x in v.items()}
+    return v
+
+
+def _deserialize_cache_obj(v, device=None):
+    from prix.array import Array, Ptype, SENTINEL
+
+    if isinstance(v, tuple) and len(v) == 4 and v[0] == "__prix_array__":
+        _, share_np, precision, ptype_val = v
+        arr = Array(src=SENTINEL, precision=precision, device=device, ptype=Ptype(ptype_val))
+        arr.share = to_jax(share_np, device=device, dtype=DATATYPE)
+        return arr
+    if isinstance(v, tuple):
+        return tuple(_deserialize_cache_obj(x, device=device) for x in v)
+    if isinstance(v, list):
+        return [_deserialize_cache_obj(x, device=device) for x in v]
+    if isinstance(v, dict):
+        return {k: _deserialize_cache_obj(x, device=device) for k, x in v.items()}
+    return v
+
+
 def _cache_key(func_name, args, kwargs):
     """Hashable tuple-cache key that includes kwargs (e.g. conv stride/padding)."""
     def _freeze(v):
@@ -382,11 +418,11 @@ def _get_prng_offsets(n_przs, n_loc=0):
         g_loc = prix.generators.get("local")
         s_loc, c_loc = g_loc.next_offset(n_loc)
     else:
-        s_loc, c_loc = 0, 0
+        s_loc, c_loc = np.uint64(0), np.uint64(0)
     return c_loc, c0, c1, s_loc, s0, s1
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("s0_shape", "s1_shape", "c_shape", "is_rank0"))
 def _tfp_mul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shape, is_rank0):
     n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
     n1 = int(np.prod(s1_shape)) if len(s1_shape) > 0 else 1
@@ -405,7 +441,7 @@ def _tfp_mul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shap
     return diff_a, diff_b, diff_c
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("s0_shape", "s1_shape", "c_shape", "is_rank0"))
 def _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shape, is_rank0):
     n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
     n1 = int(np.prod(s1_shape)) if len(s1_shape) > 0 else 1
@@ -424,7 +460,7 @@ def _tfp_matmul_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_s
     return diff_a, diff_b, diff_c
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "c_shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("s0_shape", "c_shape", "is_rank0"))
 def _tfp_linear_matmul_jit(w_plain, c_loc, c0, c1, s_loc, s0, s1, s0_shape, c_shape, is_rank0):
     n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
     n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
@@ -439,7 +475,7 @@ def _tfp_linear_matmul_jit(w_plain, c_loc, c0, c1, s_loc, s0, s1, s0_shape, c_sh
     return diff_a, diff_c
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "c_shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("s0_shape", "c_shape", "is_rank0"))
 def _tfp_linear_mul_jit(w_plain, c_loc, c0, c1, s_loc, s0, s1, s0_shape, c_shape, is_rank0):
     n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
     n2 = int(np.prod(c_shape)) if len(c_shape) > 0 else 1
@@ -454,7 +490,7 @@ def _tfp_linear_mul_jit(w_plain, c_loc, c0, c1, s_loc, s0, s1, s0_shape, c_shape
     return diff_a, diff_c
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "is_rank0"))
 def _tfp_mul_triple_and_pre_jit(x_share, y_share, c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     diff = _sm64_raw(s0, c0, (3, *shape)) - _sm64_raw(s1, c1, (3, *shape))
     if is_rank0:
@@ -468,7 +504,7 @@ def _tfp_mul_triple_and_pre_jit(x_share, y_share, c_loc, c0, c1, s_loc, s0, s1, 
     return ed_share, a_sh, b_sh, c_sh
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "is_rank0"))
 def _tfp_square_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
     if is_rank0:
@@ -477,7 +513,7 @@ def _tfp_square_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     return diff[0], diff[1]
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "is_rank0"))
 def _tfp_square_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
     if is_rank0:
@@ -489,7 +525,7 @@ def _tfp_square_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, is_ran
     return x_share - r_sh, r_sh, r2_sh
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "s0_shape", "s1_shape", "c_shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("s0_shape", "s1_shape", "c_shape", "is_rank0"))
 def _tfp_binary_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_shape, is_rank0):
     n0 = int(np.prod(s0_shape)) if len(s0_shape) > 0 else 1
     n1 = int(np.prod(s1_shape)) if len(s1_shape) > 0 else 1
@@ -508,7 +544,7 @@ def _tfp_binary_triple_jit(c_loc, c0, c1, s_loc, s0, s1, s0_shape, s1_shape, c_s
     return diff_a, diff_b, diff_c
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "k_rounds", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "k_rounds", "is_rank0"))
 def _tfp_spk_triples_jit(c_loc, c0, c1, s_loc, s0, s1, shape, k_rounds, is_rank0):
     a_shape = (k_rounds,) + shape
     b_shape = (k_rounds, 2) + shape
@@ -528,7 +564,7 @@ def _tfp_spk_triples_jit(c_loc, c0, c1, s_loc, s0, s1, shape, k_rounds, is_rank0
     return diff_a, diff_b, diff_c
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "k_rounds", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "k_rounds", "is_rank0"))
 def _tfp_ltz_rng_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, k_rounds, is_rank0):
     n = int(np.prod(shape)) if len(shape) > 0 else 1
     a_shape = (k_rounds,) + shape
@@ -580,7 +616,7 @@ def _tfp_ltz_rng_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, k_rou
     return ed_share, a0_sh, b0_sh, c0_sh, a_all, b_all, c_all, rA_sh, rB_sh
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "is_rank0"))
 def _tfp_b2a_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     u0 = _sm64_raw(s0, c0, (2, *shape))
     u1 = _sm64_raw(s1, c1, (2, *shape))
@@ -592,7 +628,7 @@ def _tfp_b2a_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     return diff_a, diff_b
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "is_rank0"))
 def _tfp_wrap_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     diff = _sm64_raw(s0, c0, (2, *shape)) - _sm64_raw(s1, c1, (2, *shape))
     if is_rank0:
@@ -607,7 +643,7 @@ def _tfp_wrap_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, is_rank0):
     return diff[0], diff[1]
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "t_shape", "lut_size", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("t_shape", "lut_size", "is_rank0"))
 def _tfp_one_hot_jit(c_loc, c0, c1, s_loc, s0, s1, t_shape, lut_size, is_rank0):
     n_elem = int(np.prod(t_shape)) if len(t_shape) > 0 else 1
     oh_shape = (n_elem, lut_size)
@@ -629,7 +665,7 @@ def _tfp_one_hot_jit(c_loc, c0, c1, s_loc, s0, s1, t_shape, lut_size, is_rank0):
     return diff_r, diff_oh
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "l_minus_m", "m", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "l_minus_m", "m", "is_rank0"))
 def _tfp_egk_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, l_minus_m, m, is_rank0):
     diff = _sm64_raw(s0, c0, (3, *shape)) - _sm64_raw(s1, c1, (3, *shape))
     if is_rank0:
@@ -641,7 +677,7 @@ def _tfp_egk_rng_jit(c_loc, c0, c1, s_loc, s0, s1, shape, l_minus_m, m, is_rank0
     return diff[0], diff[1], diff[2]
 
 
-@functools.partial(jax.jit, static_argnames=("s_loc", "s0", "s1", "shape", "l", "m", "is_rank0"))
+@functools.partial(jax.jit, static_argnames=("shape", "l", "m", "is_rank0"))
 def _tfp_egk_rng_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, l, m, is_rank0):
     l_minus_m = l - m
     diff = _sm64_raw(s0, c0, (3, *shape)) - _sm64_raw(s1, c1, (3, *shape))
@@ -661,7 +697,7 @@ def _tfp_egk_rng_and_pre_jit(x_share, c_loc, c0, c1, s_loc, s0, s1, shape, l, m,
 
 @functools.partial(
     jax.jit,
-    static_argnames=("s_loc", "s0", "s1", "shape", "period_scaled", "period_f", "terms", "scale", "is_rank0"),
+    static_argnames=("shape", "period_scaled", "period_f", "terms", "scale", "is_rank0"),
 )
 def _tfp_trig_triple_jit(c_loc, c0, c1, s_loc, s0, s1, shape, period_scaled, period_f, terms, scale, is_rank0):
     n0 = int(np.prod(shape)) if len(shape) > 0 else 1

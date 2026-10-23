@@ -436,6 +436,97 @@ class TestRegressions(unittest.TestCase):
             self.assertEqual(bp_bytes, 128 * 40, f"{prov}:bior_prob_bytes")
             np.testing.assert_allclose(bp_out, gelu_ref, atol=0.25, err_msg=f"{prov}:bior_prob_acc")
 
+    def test_prng_cpu_gpu_stream_sync_and_siphash(self):
+        from prix.random import PRNGGenerator, _generate_kbit_jit, _przs_jit, _sm64_raw
+
+        # Verify CPU (next_uint64) and device (next_offset + _sm64_raw / _przs_jit) streams
+        # match bit-for-bit across both SplitMix64 and SipHash-2-4, including MSB-set seeds.
+        seed_a = 0xFEDCBA9876543210
+        seed_b = 0x89ABCDEF01234567
+        shape = (7, 13)
+        n = int(np.prod(shape))
+        for prng_mode, use_sip in (("splitmix64", False), ("siphash24", True)):
+            with prix.cfg.temp_override({"mpc.prng": prng_mode}):
+                g_cpu = PRNGGenerator(seed=seed_a)
+                g_dev = PRNGGenerator(seed=seed_a)
+                for _ in range(3):
+                    cpu_val = g_cpu.next_uint64(shape).view(np.int64)
+                    s, off = g_dev.next_offset(n)
+                    dev_val = np.asarray(_sm64_raw(s, off, shape, use_siphash=use_sip))
+                    np.testing.assert_array_equal(cpu_val, dev_val, err_msg=prng_mode)
+                    kbit_val = np.asarray(_generate_kbit_jit(off, s, shape, 19, use_siphash=use_sip))
+                    np.testing.assert_array_equal(cpu_val & ((1 << 19) - 1), kbit_val, err_msg=prng_mode)
+
+                g0_cpu, g1_cpu = PRNGGenerator(seed=seed_a), PRNGGenerator(seed=seed_b)
+                g0_dev, g1_dev = PRNGGenerator(seed=seed_a), PRNGGenerator(seed=seed_b)
+                u0_cpu, u1_cpu = g0_cpu.next_uint64(shape), g1_cpu.next_uint64(shape)
+                s0, c0 = g0_dev.next_offset(n)
+                s1, c1 = g1_dev.next_offset(n)
+                np.testing.assert_array_equal(
+                    (u0_cpu - u1_cpu).view(np.int64),
+                    np.asarray(_przs_jit(c0, c1, s0, s1, shape, False, use_siphash=use_sip)),
+                )
+                np.testing.assert_array_equal(
+                    (u0_cpu ^ u1_cpu).view(np.int64),
+                    np.asarray(_przs_jit(c0, c1, s0, s1, shape, True, use_siphash=use_sip)),
+                )
+
+        # End-to-end 2PC under SipHash-2-4 cryptographic counter-mode PRF
+        with prix.cfg.temp_override({"mpc.prng": "siphash24"}):
+            res = prix.run(_basic_2pc_siphash_check, world_size=2, mode="poly", timeout=120)
+        np.testing.assert_allclose(res["prod"], res["prod_ref"], atol=1e-2)
+        np.testing.assert_allclose(res["gelu"], res["gelu_ref"], atol=2e-2)
+
+    def test_tuple_provider_pickle_free_cache(self):
+        res = prix.run(_tuple_cache_check, world_size=2, mode="crypten", timeout=120)
+        np.testing.assert_allclose(res["cached_prod"], res["prod_ref"], atol=1e-2)
+        self.assertFalse(res["shares_reused"])
+
+
+def _tuple_cache_check():
+    provider = prix.get_default_provider()
+    rng = np.random.default_rng(99)
+    a_np = rng.uniform(-1.0, 1.0, size=(4, 4)).astype(np.float32)
+    b_np = rng.uniform(-1.0, 1.0, size=(4, 4)).astype(np.float32)
+    a = prix.array(a_np)
+    b = prix.array(b_np)
+
+    provider.trace(True)
+    _ = a * b
+    _ = a * b
+    provider.trace(False)
+    provider.fill_cache()
+    provider.load_cache()
+    t1 = provider.generate_additive_triple((4, 4), (4, 4), "mul")
+    t2 = provider.generate_additive_triple((4, 4), (4, 4), "mul")
+    shares_reused = bool(np.array_equal(np.asarray(t1[0].share), np.asarray(t2[0].share)))
+    provider.load_cache()
+    cached_prod = np.asarray((a * b).reconstruct())
+    provider.remove_cache()
+    return {
+        "cached_prod": cached_prod,
+        "prod_ref": a_np * b_np,
+        "shares_reused": shares_reused,
+    }
+
+
+def _basic_2pc_siphash_check():
+    from scipy.special import erf
+
+    rng = np.random.default_rng(77)
+    a_np = rng.uniform(-1.5, 1.5, size=(4, 8)).astype(np.float32)
+    b_np = rng.uniform(-1.5, 1.5, size=(8, 4)).astype(np.float32)
+    a = prix.array(a_np)
+    b = prix.array(b_np)
+    prod = np.asarray((a @ b).reconstruct())
+    gelu = np.asarray(a.gelu().reconstruct())
+    return {
+        "prod": prod,
+        "prod_ref": a_np @ b_np,
+        "gelu": gelu,
+        "gelu_ref": 0.5 * a_np * (1.0 + erf(a_np / np.sqrt(2.0))),
+    }
+
 
 
 if __name__ == "__main__":

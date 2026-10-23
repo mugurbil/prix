@@ -1,5 +1,11 @@
 \begin{thebibliography}{10}
 
+\bibitem{aumasson2012siphash}
+Jean-Philippe Aumasson and Daniel~J. Bernstein.
+\newblock {SipHash}: A fast short-input {PRF}.
+\newblock In {\em International Conference on Cryptology in India (INDOCRYPT)},
+  volume 7668 of {\em LNCS}, pages 489--508, 2012.
+
 \bibitem{beaver1991efficient}
 Donald Beaver.
 \newblock Efficient multiparty protocols using circuit randomization.

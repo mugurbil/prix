@@ -206,11 +206,13 @@ class Array:
         g1 = prix.generators.get("next")
         if g0 is not None and g1 is not None:
             if jax.default_backend() == "gpu":
+                from prix.random import _use_siphash
+
                 shape = tuple(size)
                 n = int(np.prod(shape)) if len(shape) > 0 else 1
                 s0, c0 = g0.next_offset(n)
                 s1, c1 = g1.next_offset(n)
-                diff = _przs_jit(c0, c1, s0, s1, shape, ptype == Ptype.binary)
+                diff = _przs_jit(c0, c1, s0, s1, shape, ptype == Ptype.binary, use_siphash=_use_siphash())
                 result.share = to_jax(diff, device=device, dtype=DATATYPE)
             else:
                 u0 = g0.next_uint64(size)

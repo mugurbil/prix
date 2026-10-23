@@ -12,15 +12,73 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+from prix.config import cfg
 from prix.encoder import DATATYPE, resolve_device, to_jax
 
 
+def _use_siphash():
+    return getattr(getattr(cfg, "mpc", None), "prng", "splitmix64") in ("siphash24", "siphash", "crypto")
+
+
+def _sm64_np(seed_u64, offset_u64, shape):
+    """Host NumPy SplitMix64 counter-based PRNG matching _splitmix64_raw bit-for-bit."""
+    n = int(np.prod(shape)) if len(shape) > 0 else 1
+    z = (
+        np.uint64(int(seed_u64) & 0xFFFFFFFFFFFFFFFF)
+        + (np.uint64(int(offset_u64) & 0xFFFFFFFFFFFFFFFF) + np.arange(n, dtype=np.uint64))
+        * np.uint64(0x9E3779B97F4A7C15)
+    )
+    z = (z ^ (z >> np.uint64(30))) * np.uint64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> np.uint64(27))) * np.uint64(0x94D049BB133111EB)
+    z = z ^ (z >> np.uint64(31))
+    return z.reshape(shape)
+
+
+def _siphash24_np(seed_u64, offset_u64, shape):
+    """Host NumPy SipHash-2-4 counter-mode cryptographic PRF matching _siphash24_raw bit-for-bit."""
+    n = int(np.prod(shape)) if len(shape) > 0 else 1
+    k0 = np.uint64(int(seed_u64) & 0xFFFFFFFFFFFFFFFF)
+    k1 = k0 ^ np.uint64(0x9E3779B97F4A7C15)
+    m = np.uint64(int(offset_u64) & 0xFFFFFFFFFFFFFFFF) + np.arange(n, dtype=np.uint64)
+    v0 = np.full(n, k0 ^ np.uint64(0x736F6D6570736575), dtype=np.uint64)
+    v1 = np.full(n, k1 ^ np.uint64(0x646F72616E646F6D), dtype=np.uint64)
+    v2 = np.full(n, k0 ^ np.uint64(0x6C7967656E657261), dtype=np.uint64)
+    v3 = (k1 ^ np.uint64(0x7465646279746573)) ^ m
+    s13, s51, s32 = np.uint64(13), np.uint64(51), np.uint64(32)
+    s16, s48, s21, s43 = np.uint64(16), np.uint64(48), np.uint64(21), np.uint64(43)
+    s17, s47 = np.uint64(17), np.uint64(47)
+    for _ in range(2):
+        v0 = v0 + v1
+        v1 = ((v1 << s13) | (v1 >> s51)) ^ v0
+        v0 = (v0 << s32) | (v0 >> s32)
+        v2 = v2 + v3
+        v3 = ((v3 << s16) | (v3 >> s48)) ^ v2
+        v0 = v0 + v3
+        v3 = ((v3 << s21) | (v3 >> s43)) ^ v0
+        v2 = v2 + v1
+        v1 = ((v1 << s17) | (v1 >> s47)) ^ v2
+        v2 = (v2 << s32) | (v2 >> s32)
+    v0 = v0 ^ m
+    v2 = v2 ^ np.uint64(0xFF)
+    for _ in range(4):
+        v0 = v0 + v1
+        v1 = ((v1 << s13) | (v1 >> s51)) ^ v0
+        v0 = (v0 << s32) | (v0 >> s32)
+        v2 = v2 + v3
+        v3 = ((v3 << s16) | (v3 >> s48)) ^ v2
+        v0 = v0 + v3
+        v3 = ((v3 << s21) | (v3 >> s43)) ^ v0
+        v2 = v2 + v1
+        v1 = ((v1 << s17) | (v1 >> s47)) ^ v2
+        v2 = (v2 << s32) | (v2 >> s32)
+    return (v0 ^ v1 ^ v2 ^ v3).reshape(shape)
+
+
 class PRNGGenerator:
-    """Stateful PRNG wrapper mimicking torch.Generator for MPC seed synchronization."""
+    """Counter-based PRNG/PRF wrapper with identical CPU and GPU streams."""
 
     def __init__(self, seed=0, device=None):
         self.device = resolve_device(device)
-        self._rng = None
         self._seed_u64 = 0
         self._counter = 0
         self.manual_seed(seed)
@@ -30,25 +88,29 @@ class PRNGGenerator:
             seed = int(seed.item())
         self._seed_u64 = int(seed) & 0xFFFFFFFFFFFFFFFF
         self._counter = 0
-        self._rng = np.random.Generator(np.random.PCG64(self._seed_u64))
         return self
 
     def next_offset(self, count=1):
         c = self._counter
         self._counter += int(count)
-        return self._seed_u64, c
+        return np.uint64(self._seed_u64), np.uint64(c)
 
     def next_uint64(self, shape):
+        shape = tuple(shape) if isinstance(shape, (tuple, list)) else ((int(shape),) if isinstance(shape, int) else ())
         n = int(np.prod(shape)) if len(shape) > 0 else 1
+        c = self._counter
         self._counter += n
-        return self._rng.integers(0, 0xFFFFFFFFFFFFFFFF, size=shape, dtype=np.uint64, endpoint=True)
+        if _use_siphash():
+            return _siphash24_np(self._seed_u64, c, shape)
+        return _sm64_np(self._seed_u64, c, shape)
 
     def next_permutation(self, n):
-        self._counter += int(n)
-        return self._rng.permutation(int(n)).astype(np.int64)
+        n = int(n)
+        keys = self.next_uint64((n,))
+        return np.argsort(keys, kind="stable").astype(np.int64)
 
 
-def _sm64_raw(seed_u64, offset_u64, shape):
+def _splitmix64_raw(seed_u64, offset_u64, shape):
     """Device-native SplitMix64 counter-based PRNG for inside @jax.jit kernels."""
     n = int(np.prod(shape)) if len(shape) > 0 else 1
     z = (
@@ -62,19 +124,66 @@ def _sm64_raw(seed_u64, offset_u64, shape):
     return jax.lax.bitcast_convert_type(z.reshape(shape), DATATYPE)
 
 
-@functools.partial(jax.jit, static_argnames=("seed_u64", "shape", "bitlength"))
-def _generate_kbit_jit(offset_u64, seed_u64, shape, bitlength):
-    val = _sm64_raw(seed_u64, offset_u64, shape)
+def _siphash24_raw(seed_u64, offset_u64, shape):
+    """Device-native SipHash-2-4 counter-mode cryptographic PRF for inside @jax.jit kernels."""
+    n = int(np.prod(shape)) if len(shape) > 0 else 1
+    k0 = jnp.uint64(seed_u64)
+    k1 = k0 ^ jnp.uint64(0x9E3779B97F4A7C15)
+    m = jnp.uint64(offset_u64) + jnp.arange(n, dtype=jnp.uint64)
+    v0 = (k0 ^ jnp.uint64(0x736F6D6570736575)) + jnp.zeros(n, dtype=jnp.uint64)
+    v1 = (k1 ^ jnp.uint64(0x646F72616E646F6D)) + jnp.zeros(n, dtype=jnp.uint64)
+    v2 = (k0 ^ jnp.uint64(0x6C7967656E657261)) + jnp.zeros(n, dtype=jnp.uint64)
+    v3 = (k1 ^ jnp.uint64(0x7465646279746573)) ^ m
+    s13, s51, s32 = jnp.uint64(13), jnp.uint64(51), jnp.uint64(32)
+    s16, s48, s21, s43 = jnp.uint64(16), jnp.uint64(48), jnp.uint64(21), jnp.uint64(43)
+    s17, s47 = jnp.uint64(17), jnp.uint64(47)
+    for _ in range(2):
+        v0 = v0 + v1
+        v1 = ((v1 << s13) | (v1 >> s51)) ^ v0
+        v0 = (v0 << s32) | (v0 >> s32)
+        v2 = v2 + v3
+        v3 = ((v3 << s16) | (v3 >> s48)) ^ v2
+        v0 = v0 + v3
+        v3 = ((v3 << s21) | (v3 >> s43)) ^ v0
+        v2 = v2 + v1
+        v1 = ((v1 << s17) | (v1 >> s47)) ^ v2
+        v2 = (v2 << s32) | (v2 >> s32)
+    v0 = v0 ^ m
+    v2 = v2 ^ jnp.uint64(0xFF)
+    for _ in range(4):
+        v0 = v0 + v1
+        v1 = ((v1 << s13) | (v1 >> s51)) ^ v0
+        v0 = (v0 << s32) | (v0 >> s32)
+        v2 = v2 + v3
+        v3 = ((v3 << s16) | (v3 >> s48)) ^ v2
+        v0 = v0 + v3
+        v3 = ((v3 << s21) | (v3 >> s43)) ^ v0
+        v2 = v2 + v1
+        v1 = ((v1 << s17) | (v1 >> s47)) ^ v2
+        v2 = (v2 << s32) | (v2 >> s32)
+    return jax.lax.bitcast_convert_type((v0 ^ v1 ^ v2 ^ v3).reshape(shape), DATATYPE)
+
+
+def _sm64_raw(seed_u64, offset_u64, shape, use_siphash=False):
+    """Device-native counter-based PRNG/PRF (SplitMix64 or SipHash-2-4)."""
+    if use_siphash:
+        return _siphash24_raw(seed_u64, offset_u64, shape)
+    return _splitmix64_raw(seed_u64, offset_u64, shape)
+
+
+@functools.partial(jax.jit, static_argnames=("shape", "bitlength", "use_siphash"))
+def _generate_kbit_jit(offset_u64, seed_u64, shape, bitlength, use_siphash=False):
+    val = _sm64_raw(seed_u64, offset_u64, shape, use_siphash=use_siphash)
     if bitlength is not None and bitlength < 64:
         mask = jnp.int64((1 << int(bitlength)) - 1)
         val = val & mask
     return val
 
 
-@functools.partial(jax.jit, static_argnames=("s0", "s1", "shape", "is_binary"))
-def _przs_jit(c0, c1, s0, s1, shape, is_binary):
-    u0 = _sm64_raw(s0, c0, shape)
-    u1 = _sm64_raw(s1, c1, shape)
+@functools.partial(jax.jit, static_argnames=("shape", "is_binary", "use_siphash"))
+def _przs_jit(c0, c1, s0, s1, shape, is_binary, use_siphash=False):
+    u0 = _sm64_raw(s0, c0, shape, use_siphash=use_siphash)
+    u1 = _sm64_raw(s1, c1, shape, use_siphash=use_siphash)
     return (u0 ^ u1) if is_binary else (u0 - u1)
 
 
@@ -138,7 +247,11 @@ def generate_random_ring_element(*size, ring_size=(2**64), generator=None, devic
         gen = _get_default_generator(generator, device)
         n = int(np.prod(shape)) if len(shape) > 0 else 1
         seed_u64, offset_u64 = gen.next_offset(n)
-        return to_jax(_generate_kbit_jit(offset_u64, seed_u64, shape, None), device=device, dtype=DATATYPE)
+        return to_jax(
+            _generate_kbit_jit(offset_u64, seed_u64, shape, None, use_siphash=_use_siphash()),
+            device=device,
+            dtype=DATATYPE,
+        )
     arr_np = generate_random_ring_element_np(*size, ring_size=ring_size, generator=generator, device=device)
     return to_jax(arr_np, device=device, dtype=DATATYPE)
 
@@ -151,7 +264,11 @@ def generate_kbit_random_tensor(*size, bitlength=None, generator=None, device=No
         n = int(np.prod(shape)) if len(shape) > 0 else 1
         seed_u64, offset_u64 = gen.next_offset(n)
         bl = None if (bitlength is None or bitlength >= 64) else int(bitlength)
-        return to_jax(_generate_kbit_jit(offset_u64, seed_u64, shape, bl), device=device, dtype=DATATYPE)
+        return to_jax(
+            _generate_kbit_jit(offset_u64, seed_u64, shape, bl, use_siphash=_use_siphash()),
+            device=device,
+            dtype=DATATYPE,
+        )
     arr_np = generate_kbit_random_tensor_np(*size, bitlength=bitlength, generator=generator, device=device)
     return to_jax(arr_np, device=device, dtype=DATATYPE)
 

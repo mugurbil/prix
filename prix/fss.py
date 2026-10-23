@@ -357,7 +357,7 @@ def _ltz_abs_lt_combine_jit(x_share, x_hat, rA_share, w_share, z_both, is_rank0:
 
 @functools.partial(
     jax.jit,
-    static_argnames=("s_glob", "s0", "s1", "shape", "nbits", "mode", "is_rank0"),
+    static_argnames=("shape", "nbits", "mode", "is_rank0"),
 )
 def _tfp_dcf_key_jit(
     c_glob, c0, c1, s_glob, s0, s1, shape, nbits: int, mode: str, is_rank0: bool
@@ -777,7 +777,7 @@ def grotto_segment_parities_jit(
 
 @functools.partial(
     jax.jit,
-    static_argnames=("s_glob", "s0", "s1", "shape", "J", "j_depth", "mode", "is_rank0"),
+    static_argnames=("shape", "J", "j_depth", "mode", "is_rank0"),
 )
 def _tfp_wave_key_jit(
     c_glob,

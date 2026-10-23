@@ -21,10 +21,12 @@ key exists) and the provider is forced to TFP for both frameworks.
 """
 
 import argparse
+import datetime
 import json
 import math
 import multiprocessing as mp
 import os
+import platform
 import subprocess
 import sys
 import tempfile
@@ -61,7 +63,7 @@ class AttrDict(dict):
         self[key] = value
 
 
-def _bench_fn(fn, warmup, repeats, sync_fn=None, barrier=None, comm_get=None):
+def _bench_fn(fn, warmup, repeats, sync_fn=None, barrier=None, comm_get=None, return_samples=False):
     """
     Median wall time (ms) over `repeats` runs. If `comm_get` is given, also returns the median
     per-run communication statistics recorded by the communicator: time spent inside
@@ -85,12 +87,82 @@ def _bench_fn(fn, warmup, repeats, sync_fn=None, barrier=None, comm_get=None):
         if comm_get is not None:
             c = comm_get()
             comm.append((c.comm_time * 1000.0, c.comm_rounds, c.comm_bytes))
+    median_ms = float(np.median(times))
+    samples = [round(float(t), 4) for t in times]
     if comm_get is None:
-        return float(np.median(times))
+        return (median_ms, samples) if return_samples else median_ms
     arr = np.array(comm, dtype=np.float64)
     stats = {"comm_ms": float(np.median(arr[:, 0])), "rounds": float(np.median(arr[:, 1])),
              "bytes": float(np.median(arr[:, 2]))}
-    return float(np.median(times)), stats
+    return (median_ms, stats, samples) if return_samples else (median_ms, stats)
+
+
+def _git_head(repo_dir):
+    if not repo_dir or not os.path.isdir(repo_dir):
+        return None
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", repo_dir, "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+        ).strip()
+        return out or None
+    except Exception:
+        return None
+
+
+def _cpu_model():
+    try:
+        if os.path.exists("/proc/cpuinfo"):
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if line.lower().startswith("model name"):
+                        return line.split(":", 1)[1].strip()
+    except Exception:
+        pass
+    return platform.processor() or platform.machine()
+
+
+def _gpu_model():
+    try:
+        out = subprocess.check_output(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            stderr=subprocess.DEVNULL,
+            text=True,
+        ).strip()
+        if out:
+            return out.splitlines()[0].strip()
+    except Exception:
+        pass
+    return None
+
+
+def _collect_metadata(args):
+    meta = {
+        "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "platform": platform.platform(),
+        "python_version": platform.python_version(),
+        "cpu_model": _cpu_model(),
+        "gpu_model": _gpu_model(),
+        "device": args.device,
+        "prix_commit": _git_head(args.prix_root),
+        "crypten_commit": _git_head(args.crypten_root),
+        "warmup": args.warmup,
+        "repeats": args.repeats,
+        "llm_warmup": args.llm_warmup,
+        "llm_repeats": args.llm_repeats,
+    }
+    try:
+        import jax
+
+        meta["jax_version"] = jax.__version__
+    except Exception:
+        pass
+    try:
+        import torch
+
+        meta["torch_version"] = torch.__version__
+    except Exception:
+        pass
+    return meta
 
 
 def _save_part(path, data):
@@ -321,7 +393,7 @@ def _run_workload(a, fw, mod, comm, to_private, sync, no_grad):
     rank = comm.get().get_rank()
     barrier = comm.get().barrier
     tag = f"[{FRAMEWORK_LABELS[fw]} | {a['mode']} | {a['device']}]"
-    out = {"micro": {}, "llm": {}}
+    out = {"micro": {}, "llm": {}, "samples": {"micro": {}, "llm": {}}}
 
     comm_get = None
     if a.get("comm_stats"):
@@ -330,8 +402,8 @@ def _run_workload(a, fw, mod, comm, to_private, sync, no_grad):
         out["comm"] = {"micro": {}, "llm": {}}
 
     def bench(section, name, fn, warmup, repeats):
-        res = _bench_fn(fn, warmup, repeats, sync, barrier, comm_get)
-        ms, stats = res if comm_get is not None else (res, None)
+        res = _bench_fn(fn, warmup, repeats, sync, barrier, comm_get, return_samples=True)
+        ms, stats, samples = res if comm_get is not None else (res[0], None, res[1])
         if rank == 0:
             extra = ""
             if stats is not None:
@@ -339,6 +411,7 @@ def _run_workload(a, fw, mod, comm, to_private, sync, no_grad):
                 extra = f"  [comm {stats['comm_ms']:.2f} ms, {stats['rounds']:.0f} rounds, {stats['bytes'] / 1e6:.2f} MB]"
             print(f"{tag} {name}: {ms:.2f} ms{extra}", flush=True)
             out[section][name] = ms
+            out["samples"][section][name] = samples
 
     with no_grad():
         mod_luts = getattr(mod, "LookupTables", None) or mod.common.functions.approximations.LookupTables
@@ -776,6 +849,10 @@ if __name__ == "__main__":
              "'prix'), 'shm' (shared memory; 'prix_shm'), or 'gloo' (ablation: PriX's 2-party "
              "all_reduce over torch.distributed/gloo like CrypTen; 'prix_gloo')",
     )
+    parser.add_argument(
+        "--overwrite", action="store_true",
+        help="Start with a fresh output JSON instead of merging into an existing --out file",
+    )
     args = parser.parse_args()
     if args.framework == "curl":
         args.framework = "crypten"
@@ -785,6 +862,8 @@ if __name__ == "__main__":
         parser.error(f"unknown modes {sorted(unknown)}; choose from {MODE_KEYS}")
 
     if args.framework == "all":
+        if args.overwrite and os.path.exists(args.out):
+            os.remove(args.out)
         cmd_base = [
             sys.executable, os.path.abspath(__file__),
             "--device", args.device, "--modes", ",".join(modes),
@@ -802,7 +881,7 @@ if __name__ == "__main__":
 
     tmp_dir = os.path.dirname(os.path.abspath(args.out))
     data = {}
-    if os.path.exists(args.out):
+    if os.path.exists(args.out) and not args.overwrite:
         with open(args.out, "r") as f:
             data = json.load(f)
     bench_args = dict(
@@ -811,6 +890,17 @@ if __name__ == "__main__":
     )
 
     if args.framework in ("prix", "crypten"):
+        new_meta = _collect_metadata(args)
+        old_meta = data.get("metadata")
+        if isinstance(old_meta, dict):
+            for k in ("device", "cpu_model", "gpu_model"):
+                if old_meta.get(k) and new_meta.get(k) and old_meta.get(k) != new_meta.get(k):
+                    raise RuntimeError(
+                        f"Refusing to merge benchmark results with mismatched {k} "
+                        f"({old_meta.get(k)!r} vs {new_meta.get(k)!r}) into {args.out}; "
+                        f"pass --overwrite or a different --out path."
+                    )
+        data["metadata"] = new_meta
         if args.framework == "prix":
             res = run_prix(args.prix_root, args.device, tmp_dir, modes, bench_args, transport=args.prix_transport)
         else:
