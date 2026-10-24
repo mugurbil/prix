@@ -1161,6 +1161,27 @@ class TrustedFirstParty(TupleProvider):
             c_glob, c0, c1, s_glob, s0, s1, shape, int(nbits), str(mode), is_rank0
         )
 
+    def generate_sigma_tr_key(self, size, j_depth, device=None):
+        """
+        Generates the key for SIGMA's 1-round faithful Truncate-Reduce (Pi^TR, Theorem 4):
+        shares of the mask `r` and of `r >> j_depth`, plus a single-path `j_depth`-level
+        arithmetic DCF key for the carry `1{x_hat_lo < r_lo}`.
+        """
+        import prix
+        from prix.fss import _tfp_sigma_tr_key_jit
+
+        shape = tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        is_rank0 = self.rank == 0
+        g_glob = prix.generators.get("global")
+        g0 = prix.generators.get("prev")
+        g1 = prix.generators.get("next")
+        s_glob, c_glob = g_glob.next_offset(3 * n)
+        s0, c0 = g0.next_offset(2 * n)
+        s1, c1 = g1.next_offset(2 * n)
+        _acct_fss_key(n, dcf_levels=int(j_depth), ring_elems=2)  # j-level arithmetic DCF + (r, r_hi) shares
+        return _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, int(j_depth), is_rank0)
+
     def generate_wave_key(self, size, J=5, j_depth=14, mode="bior", device=None):
         """
         Generates correlated Wave FSS keys (`mode` in ('haar', 'bior')):
@@ -1519,6 +1540,41 @@ class TrustedThirdParty(TupleProvider):
                 bvr_sh = generate_random_ring_element((8, n), generator=generator, device=device)
             return r_sh, r_lo_sh, s_dpf, cw_dpf, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, bvr_sh
 
+    def generate_sigma_tr_key(self, size, j_depth, device=None):
+        if device is None:
+            device = self.device
+        generator = TTPClient.get().get_generator(device=device)
+        shape = tuple(size)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        j_i = int(j_depth)
+
+        r_sh = generate_random_ring_element((n,), generator=generator, device=device)
+        s_dcf_raw = generate_random_ring_element((n,), generator=generator, device=device)
+        s_dcf = jax.lax.bitcast_convert_type(s_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+        if comm.get().get_rank() == 0:
+            cw_dcf_i64 = TTPClient.get().ttp_request("sigma_tr_cw", device, shape, j_i)
+            cw_dcf = jax.lax.bitcast_convert_type(cw_dcf_i64, jnp.uint64)
+            v_cw_dcf = TTPClient.get().ttp_request("sigma_tr_dcf_v", device)
+            g_cw_dcf = TTPClient.get().ttp_request("sigma_tr_dcf_g", device)
+            r_hi_sh = TTPClient.get().ttp_request("sigma_tr_r_hi", device)
+        else:
+            ttp_rank = comm.get().get_ttp_rank()
+            old_v = comm.get().is_verbose()
+            comm.get().set_verbosity(False)
+            try:
+                cw_dcf_i64 = comm.get().recv(src=ttp_rank)
+                v_cw_dcf_np = comm.get().recv(src=ttp_rank)
+                g_cw_dcf_np = comm.get().recv(src=ttp_rank)
+            finally:
+                comm.get().set_verbosity(old_v)
+            cw_dcf = jax.lax.bitcast_convert_type(
+                to_jax(cw_dcf_i64, device=device, dtype=DATATYPE), jnp.uint64
+            )
+            v_cw_dcf = to_jax(v_cw_dcf_np, device=device, dtype=DATATYPE)
+            g_cw_dcf = to_jax(g_cw_dcf_np, device=device, dtype=DATATYPE)
+            r_hi_sh = generate_random_ring_element((n,), generator=generator, device=device)
+        return r_sh, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf
+
     @staticmethod
     def _init(device=None):
         TTPClient._init(device)
@@ -1619,6 +1675,10 @@ class TTPServer:
         "wave_dcf_v",
         "wave_dcf_g",
         "wave_bvr",
+        "sigma_tr_cw",
+        "sigma_tr_dcf_v",
+        "sigma_tr_dcf_g",
+        "sigma_tr_r_hi",
         "square",
         "binary",
         "wraps",
@@ -1886,6 +1946,47 @@ class TTPServer:
             bvr_plain = jnp.stack([U, A, B, X, AXmB, UX, UA, UAXmB], axis=0)
             self._pending_wave_bvr = bvr_plain - self._get_additive_PRSS((8, n), remove_rank=True)
         return cw_dpf_i64
+
+    def sigma_tr_cw(self, shape, j_depth):
+        """Dealer side of SIGMA's Truncate-Reduce key: mirrors `TrustedThirdParty.generate_sigma_tr_key`."""
+        from prix.fss import dcf_gen_arith_jit
+
+        shape = tuple(shape)
+        n = int(np.prod(shape)) if len(shape) > 0 else 1
+        j_i = int(j_depth)
+        r_in = self._get_additive_PRSS((n,))  # parties hold r_sh from their TTP generators
+        r_u = jax.lax.bitcast_convert_type(r_in, jnp.uint64)
+        s0_raw = generate_random_ring_element((n,), generator=self.generators[0])
+        s1_raw = generate_random_ring_element((n,), generator=self.generators[1])
+        k0 = jax.lax.bitcast_convert_type(s0_raw, jnp.uint64) & ~jnp.uint64(3)
+        k1 = jax.lax.bitcast_convert_type(s1_raw, jnp.uint64) & ~jnp.uint64(3)
+        two_j_mask = jnp.uint64((1 << j_i) - 1)
+        r_lo = r_u & two_j_mask
+        r_hi_i64 = jax.lax.bitcast_convert_type(r_u >> jnp.uint64(j_i), DATATYPE)
+        cw_dcf, v_cw_dcf, g_cw_dcf = dcf_gen_arith_jit(r_lo, k0, k1, j_i)
+        cw_dcf_i64 = jax.lax.bitcast_convert_type(cw_dcf, DATATYPE)
+        comm.get().send(cw_dcf_i64, 1)
+        comm.get().send(v_cw_dcf, 1)
+        comm.get().send(g_cw_dcf, 1)
+        self._pending_sigma_tr_dcf_v = v_cw_dcf
+        self._pending_sigma_tr_dcf_g = g_cw_dcf
+        self._pending_sigma_tr_r_hi = r_hi_i64 - self._get_additive_PRSS((n,), remove_rank=True)
+        return cw_dcf_i64
+
+    def sigma_tr_dcf_v(self):
+        res = self._pending_sigma_tr_dcf_v
+        self._pending_sigma_tr_dcf_v = None
+        return res
+
+    def sigma_tr_dcf_g(self):
+        res = self._pending_sigma_tr_dcf_g
+        self._pending_sigma_tr_dcf_g = None
+        return res
+
+    def sigma_tr_r_hi(self):
+        res = self._pending_sigma_tr_r_hi
+        self._pending_sigma_tr_r_hi = None
+        return res
 
     def wave_r_lo(self):
         res = self._pending_wave_r_lo

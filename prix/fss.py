@@ -1127,37 +1127,27 @@ def sigma_tr_trunc(x, truncation: int):
     """
     SIGMA's 1-round faithful Truncate-Reduce (Pi^TR_{n,f}, Theorem 4):
     truncates `x` by `truncation` bits using 1 online round (8 B/elem) and a single-path
-    `truncation`-level arithmetic DCF evaluation (`truncation` PRG calls).
+    `truncation`-level arithmetic DCF evaluation (`truncation` PRG calls). Keys come from the
+    active provider (`TFP` simulated dealer or `TTP`); the result is exact modulo 2^(64 - j),
+    which is all its consumers (LUT bin indices, `x - 2^j * x_high`) require.
     """
     from prix.array import Array, Ptype
+    from prix.provider import get_default_provider
 
     j_depth = int(truncation)
     if j_depth <= 0:
         return x
     shape = x.size()
     x_flat = x.share.reshape(-1)
-    n = int(x_flat.size)
-    if n == 0:
+    if int(x_flat.size) == 0:
         return x
-    import prix
-
     party_id = comm.get().get_rank()
-    is_rank0 = party_id == 0
-    g_glob = prix.generators.get("global")
-    g0 = prix.generators.get("prev")
-    g1 = prix.generators.get("next")
-    s_glob, c_glob = g_glob.next_offset(3 * n)
-    s0, c0 = g0.next_offset(2 * n)
-    s1, c1 = g1.next_offset(2 * n)
-    from prix.provider import _acct_fss_key
-
-    _acct_fss_key(n, dcf_levels=j_depth, ring_elems=2)  # j-level arithmetic DCF + (r, r_hi) shares
-    r_sh, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf = _tfp_sigma_tr_key_jit(
-        c_glob, c0, c1, s_glob, s0, s1, shape, j_depth, is_rank0
+    r_sh, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf = get_default_provider().generate_sigma_tr_key(
+        shape, j_depth=j_depth, device=x.device
     )
-    x_hat = comm.get().all_reduce(x_flat + r_sh, op="sum")
+    x_hat = comm.get().all_reduce(x_flat + r_sh.reshape(-1), op="sum")
     msb_sh = _sigma_tr_eval_jit(
-        x_hat, r_hi_sh, s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, party_id, j_depth
+        x_hat, r_hi_sh.reshape(-1), s_dcf, cw_dcf, v_cw_dcf, g_cw_dcf, party_id, j_depth
     )
     return Array.from_shares(
         msb_sh.reshape(shape),

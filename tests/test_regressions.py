@@ -531,3 +531,121 @@ def _basic_2pc_siphash_check():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ----------------------------------------------------------------------------------------------
+# v0.2.1 audit tests: default preset (SIGMA Truncate-Reduce indexing, range-robust softmax /
+# LayerNorm, per-window LUT tables, preprocessing accounting, effective comparison bit-width).
+# ----------------------------------------------------------------------------------------------
+
+
+def _default_preset_checks():
+    from prix.provider import get_preproc_stats, reset_preproc_stats
+
+    c = prix.comm.get()
+    c.set_verbosity(True)
+    out = {}
+
+    # (a) GeLU through SIGMA-TR indexing: 3 rounds, 48 B/elem, deterministic.
+    x_np = np.linspace(-3.5, 3.5, 256, dtype=np.float32)
+    x = prix.array(x_np, src=0)
+    c.reset_communication_stats()
+    reset_preproc_stats()
+    y = x.gelu()
+    out["gelu"] = (int(c.comm_rounds), int(c.comm_bytes), np.asarray(y.reconstruct()), get_preproc_stats()["bytes_l128"])
+    out["x_np"] = x_np
+
+    # (b) Softmax with a 128-long row whose denominator is far above the old 64 limit.
+    rng = np.random.RandomState(0)
+    s_np = (rng.randn(4, 128) * 0.05).astype(np.float32)
+    out["softmax_in"] = s_np
+    out["softmax"] = np.asarray(prix.array(s_np, src=0).softmax(dim=-1).reconstruct())
+
+    # (c) Range-extended inv_sqrt across 7 decades of variance.
+    v_np = np.array([0.005, 0.05, 1.0, 100.0, 10000.0, 60000.0], dtype=np.float32)
+    c.reset_communication_stats()
+    inv = prix.array(v_np, src=0).inv_sqrt()
+    out["inv_sqrt"] = (int(c.comm_rounds), np.asarray(inv.reconstruct()))
+    out["inv_sqrt_in"] = v_np
+
+    # (d) Per-window table stack == separate calls (up to last-ULP rounding of the random masks).
+    from prix import fss
+    from prix.luts import LookupTables
+
+    luts = LookupTables(None)
+    j = int(prix.cfg.functions.gelu.lut_max_bits + prix.cfg.encoder.precision_bits - prix.cfg.functions.gelu.bior_size_bits)
+    table = luts.get_lut("gelu_bior_lut_only", None)
+    a = prix.array(np.linspace(-2.0, 2.0, 64, dtype=np.float32), src=0)
+    b = prix.array(np.linspace(-1.0, 3.0, 64, dtype=np.float32), src=0)
+    import jax.numpy as jnp
+
+    stacked = fss.wave_bior_lut(prix.stack([a, b]), jnp.stack([table, table]), truncation=j)
+    sep_a = fss.wave_bior_lut(a, table, truncation=j)
+    sep_b = fss.wave_bior_lut(b, table, truncation=j)
+    out["per_window"] = (
+        np.asarray(stacked.reconstruct()),
+        np.stack([np.asarray(sep_a.reconstruct()), np.asarray(sep_b.reconstruct())]),
+    )
+
+    # (e) fss_bits=48 comparisons: exact below 2^30, documented to fail above.
+    big_ok = prix.array(np.array([-(2.0**29), 2.0**29, -1.0, 1.0], dtype=np.float32), src=0)
+    out["ltz_ok"] = np.asarray((big_ok < 0).reconstruct())
+    return out
+
+
+def _sigma_key_size_check():
+    from prix.provider import get_preproc_stats, reset_preproc_stats
+
+    x = prix.array(np.linspace(-3.5, 3.5, 1000, dtype=np.float32), src=0)
+    _ = x.gelu()
+    reset_preproc_stats()
+    _ = x.gelu()
+    return get_preproc_stats()["bytes_l128"] / 1000.0
+
+
+class TestDefaultPresetAudit(unittest.TestCase):
+    def test_default_preset_tfp_and_ttp(self):
+        from scipy.special import erf
+
+        ref_tfp = None
+        for prov in ("TFP", "TTP"):
+            with prix.cfg.temp_override({"mpc.provider": prov}):
+                res = prix.run(_default_preset_checks, world_size=2, mode="default", timeout=300)
+
+            # (a) SIGMA-TR indexed bior(5,3) GeLU: 3 rounds, 48 B/elem, 32-knot accuracy.
+            rounds, nbytes, gelu, key_bytes = res["gelu"]
+            x64 = res["x_np"].astype(np.float64)
+            gelu_ref = 0.5 * x64 * (1.0 + erf(x64 / np.sqrt(2.0)))
+            self.assertEqual(rounds, 3, prov)
+            self.assertEqual(nbytes, 256 * 48, prov)
+            np.testing.assert_allclose(gelu, gelu_ref, atol=5e-3, err_msg=prov)
+            if prov == "TFP":
+                self.assertGreater(key_bytes, 0)  # accounting active under the simulated dealer
+                ref_tfp = gelu
+            else:
+                # TTP must run the same protocol as TFP (keys now come from the dealer process).
+                np.testing.assert_allclose(gelu, ref_tfp, atol=2e-4, err_msg="TTP vs TFP")
+
+            # (b) Softmax rows sum to 1 even when the denominator is ~128.
+            s = res["softmax_in"].astype(np.float64)
+            e = np.exp(s - s.max(-1, keepdims=True))
+            np.testing.assert_allclose(res["softmax"], e / e.sum(-1, keepdims=True), atol=1e-3, err_msg=prov)
+            np.testing.assert_allclose(res["softmax"].sum(-1), 1.0, atol=5e-3, err_msg=prov)
+
+            # (c) inv_sqrt over [0.005, 60000] within 3e-3 relative error (+2 ULP), 6 rounds.
+            inv_rounds, inv = res["inv_sqrt"]
+            v = res["inv_sqrt_in"].astype(np.float64)
+            self.assertEqual(inv_rounds, 6, prov)
+            np.testing.assert_allclose(inv, v ** -0.5, rtol=3e-3, atol=2.0**-15, err_msg=prov)  # + 2 ULP output quantisation
+
+            # (d) Per-window tables are bit-exact with separate evaluations.
+            stacked, separate = res["per_window"]
+            np.testing.assert_allclose(stacked, separate, atol=4e-5, err_msg=prov)  # masks differ -> last-ULP rounding
+
+            # (e) 48-bit comparisons are exact for |x| < 2^30.
+            np.testing.assert_array_equal(res["ltz_ok"], np.array([1.0, 0.0, 1.0, 0.0]), err_msg=prov)
+
+    def test_sigma_key_size_matches_paper(self):
+        # SIGMA (PoPETs 2024) Table 2 reports a 1.43 KB GeLU key at lambda = 128.
+        key_per_elem = prix.run(_sigma_key_size_check, world_size=2, mode="sigma", timeout=180)
+        self.assertAlmostEqual(key_per_elem / 1430.0, 1.0, delta=0.05)

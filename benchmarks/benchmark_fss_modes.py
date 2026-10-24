@@ -8,6 +8,7 @@ Compares, on identical inputs:
   wave_sigma_tr mode="wave"  lut_indexing="sigma"      3-rd bior(5,3) LUT, SIGMA 1-rd TR (j-level DCF) + J-level DPF
   wave_prob     mode="wave"  lut_indexing="wave_prob"  2-rd bior(5,3) LUT, local prob. split + J-level DPF
   sigma         mode="sigma"                               SIGMA (PoPETs'24) 0th-order Haar LUT protocols
+  sigma_ext     mode="sigma" + range-extended inv_sqrt     same, with the default preset's LayerNorm domain (range vs. protocol)
   curl          mode="curl"                                Curl 4-rd bior(5,3) LUTs (pre-expanded one-hot + EGK trunc)
   shaft         mode="shaft"                               SHAFT Fourier activations + ODE softmax
 
@@ -29,6 +30,7 @@ Usage:
   python benchmarks/benchmark_fss_modes.py                         # CPU
   python benchmarks/benchmark_fss_modes.py --device cuda           # GPU (single GPU, 2 processes)
   python benchmarks/benchmark_fss_modes.py --modes wave_det,sigma --models bert_base --repeats 3
+  python benchmarks/benchmark_fss_modes.py --ablation                     # truncation x indexing ablation of 2-round Wave
 """
 
 import argparse
@@ -58,6 +60,20 @@ VARIANTS = {
     "sigma": ("sigma", "sigma", "egk", 'SIGMA (mode="sigma")'),
     "curl": ("curl", None, None, 'Curl (mode="curl")'),
     "shaft": ("shaft", None, None, 'SHAFT (mode="shaft")'),
+    # Range-extended LayerNorm variant of SIGMA (same protocols, only the 1/sqrt(x) domain differs),
+    # so the block-MAE gap between `sigma` and `default` can be attributed to range vs. protocol.
+    "sigma_ext": ("sigma", None, None, 'SIGMA + range-extended inv_sqrt (mode="sigma", bior_scaled LayerNorm)'),
+}
+# `--ablation`: the four truncation x LUT-indexing combinations of 2-round Wave (paper Table "trunc ablation").
+ABLATION_VARIANTS = {
+    "wave_det_egk": ("wave", "wave", "egk", 'Wave det. (lut_indexing="wave", truncation="egk")'),
+    "wave_det_crypten": ("wave", "wave", "crypten", 'Wave det. (lut_indexing="wave", truncation="crypten")'),
+    "wave_prob_egk": ("wave", "wave_prob", "egk", 'Wave prob. (lut_indexing="wave_prob", truncation="egk")'),
+    "wave_prob_crypten": ("wave", "wave_prob", "crypten", 'Wave prob. (lut_indexing="wave_prob", truncation="crypten")'),
+}
+EXTRA_OVERRIDES = {
+    "sigma_ext": {"functions.inv_sqrt.method": "bior_scaled", "functions.inv_sqrt.lut_max_bits": 16,
+                  "functions.inv_sqrt.bior_size_bits": 12, "functions.inv_sqrt.range_scales": [16, 8, 0]},
 }
 
 MODELS = {
@@ -127,12 +143,14 @@ def _err(got, ref):
 
 
 def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
-    mode, lut_trunc, prod_trunc, title = VARIANTS[key]
+    mode, lut_trunc, prod_trunc, title = {**VARIANTS, **ABLATION_VARIANTS}[key]
     prix.set_mode(mode)
     if lut_trunc is not None:
         cfg.encoder.lut_indexing = lut_trunc
     if prod_trunc is not None:
         cfg.encoder.truncation = prod_trunc
+    for k, v in EXTRA_OVERRIDES.get(key, {}).items():
+        setattr(cfg, k, v)
     c = prix.comm.get()
     c.set_verbosity(True)
     rng = np.random.RandomState(42)
@@ -218,6 +236,24 @@ def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
     return res
 
 
+def _git_commit():
+    try:
+        root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
+        return subprocess.check_output(["git", "-C", root, "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _cpu_model():
+    try:
+        for line in open("/proc/cpuinfo"):
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return platform.processor() or None
+
+
 def _party_main(args):
     import jax
 
@@ -225,6 +261,13 @@ def _party_main(args):
     for key in args.variants:
         out[key] = run_variant(key, args.n_prim, args.repeats, args.models, args.skip_primitives, args.skip_sublayers)
     out["_env"] = {
+        "git_commit": _git_commit(),
+        "prix_version": getattr(prix, "__version__", None),
+        "host": platform.node(),
+        "loadavg_1m": (os.getloadavg()[0] if hasattr(os, "getloadavg") else None),
+        "repeats": args.repeats,
+        "n_prim": args.n_prim,
+        "variants": list(args.variants),
         "backend": jax.default_backend(),
         "devices": [str(d) for d in jax.devices()],
         "jax": jax.__version__,
@@ -232,6 +275,7 @@ def _party_main(args):
         "platform": platform.platform(),
         "timestamp": datetime.datetime.now().isoformat(timespec="seconds"),
     }
+    out["_env"]["cpu"] = _cpu_model()
     try:
         out["_env"]["gpu"] = subprocess.check_output(["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"], text=True).strip()
     except Exception:  # noqa: BLE001
@@ -242,7 +286,8 @@ def _party_main(args):
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--device", default="cpu", help="'cpu' or 'cuda'")
-    p.add_argument("--modes", default=",".join(VARIANTS), help=f"comma-separated subset of {list(VARIANTS)}")
+    p.add_argument("--modes", default=None, help=f"comma-separated subset of {list(VARIANTS) + list(ABLATION_VARIANTS)} (default: all main variants, or the four ablation variants with --ablation)")
+    p.add_argument("--ablation", action="store_true", help="run the truncation x LUT-indexing ablation of 2-round Wave instead of the main variants")
     p.add_argument("--models", default="bert_base,bert_large,gpt2_64", help=f"comma-separated subset of {list(MODELS)} (or '')")
     p.add_argument("--n-prim", type=int, default=1000, help="elements per primitive benchmark")
     p.add_argument("--repeats", type=int, default=3)
@@ -250,15 +295,19 @@ def main():
     p.add_argument("--skip-sublayers", action="store_true")
     p.add_argument("--out", default=None, help="JSON output path (default: benchmarks/results/fss_modes_<device>.json)")
     args = p.parse_args()
-    args.variants = [v for v in args.modes.split(",") if v]
+    if args.modes:
+        args.variants = [v for v in args.modes.split(",") if v]
+    else:
+        args.variants = list(ABLATION_VARIANTS) if args.ablation else list(VARIANTS)
     args.models = [m for m in args.models.split(",") if m]
     for v in args.variants:
-        assert v in VARIANTS, f"unknown variant {v!r}"
+        assert v in VARIANTS or v in ABLATION_VARIANTS, f"unknown variant {v!r}"
     for m in args.models:
         assert m in MODELS, f"unknown model {m!r}"
 
     results = prix.run(_party_main, args, world_size=2, device=args.device)
-    out = args.out or os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", f"fss_modes_{args.device.replace(':', '')}.json")
+    stem = "fss_trunc_ablation" if args.ablation else "fss_modes"
+    out = args.out or os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", f"{stem}_{args.device.replace(':', '')}.json")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     with open(out, "w") as f:
         json.dump(results, f, indent=2)

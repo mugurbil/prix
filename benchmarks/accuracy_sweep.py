@@ -86,7 +86,7 @@ def summarize(name, runs, ref):
 if __name__ == "__main__":
     import prix
 
-    modes = os.environ.get("MODES", "crypten,poly,shaft,lut,fission").split(",")
+    modes = os.environ.get("MODES", "default,wave,sigma,curl,poly,shaft,crypten,fission").split(",")
     sm_ref = np.exp(SOFTMAX_IN - SOFTMAX_IN.max(-1, keepdims=True))
     sm_ref /= sm_ref.sum(-1, keepdims=True)
     ln_ref = (LN_IN - LN_IN.mean(-1, keepdims=True)) / np.sqrt(LN_IN.var(-1, keepdims=True) + 1e-5)
@@ -98,8 +98,16 @@ if __name__ == "__main__":
         res["layernorm"] = summarize("layernorm", raw["layernorm"], ln_ref)
         results[mode] = res
         print(f"done {mode}", flush=True)
+    import datetime, platform, subprocess
+    try:
+        commit = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:  # noqa: BLE001
+        commit = None
+    results["_env"] = {"git_commit": commit, "prix_version": getattr(prix, "__version__", None), "host": platform.node(),
+                       "timestamp": datetime.datetime.now().isoformat(timespec="seconds"), "reps": REPS, "modes": modes}
     out = os.environ.get("OUT", "benchmarks/results/accuracy_sweep.json")
     json.dump(results, open(out, "w"), indent=1)
+    results.pop("_env", None)
     names = list(GRIDS) + ["softmax", "layernorm"]
     print("\n| Function | " + " | ".join(modes) + " |")
     print("|---|" + "---:|" * len(modes))
