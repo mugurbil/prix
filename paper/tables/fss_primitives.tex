@@ -1,46 +1,46 @@
-\begin{tabular}{@{}llccccccc@{}}
+\begin{tabular}{@{}llcccccccc@{}}
 \toprule
-\textbf{Primitive} & \textbf{Metric} & \textbf{PriX default} & \textbf{Wave} & \textbf{Wave + SIGMA TR} & \textbf{Wave-Prob} & \textbf{SIGMA} & \textbf{Curl} & \textbf{SHAFT} \\
- & & (\texttt{mode="default"}) & (\texttt{lut\_indexing="wave"}) & (\texttt{lut\_indexing="sigma"}) & (\texttt{lut\_indexing="wave\_prob"}) & (\texttt{mode="sigma"}) & (\texttt{mode="curl"}) & (\texttt{mode="shaft"}) \\
+\textbf{Primitive} & \textbf{Metric} & \textbf{PriX default} & \textbf{Wave} & \textbf{Wave + SIGMA TR} & \textbf{Wave-Prob} & \textbf{SIGMA} & \textbf{SIGMA + ext. LN} & \textbf{Curl} & \textbf{SHAFT} \\
+ & & (\texttt{mode="default"}) & (\texttt{lut\_indexing="wave"}) & (\texttt{lut\_indexing="sigma"}) & (\texttt{lut\_indexing="wave\_prob"}) & (\texttt{mode="sigma"}) & (\texttt{mode="sigma"}, wide $1/\sqrt{x}$) & (\texttt{mode="curl"}) & (\texttt{mode="shaft"}) \\
 \midrule
 \multirow{3}{*}{$\operatorname{GeLU}$}
- & Rounds / Online (B) & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
- & Key (B, $\lambda{=}128$) & 528 & 768 & 536 & \textbf{152} & 1,488 & 304 & 1,024 \\
- & Time / MAE & $9.8\,\text{ms}$ / $4.12\text{e}-4$ & $7.4\,\text{ms}$ / $1.75\text{e}-3$ & $5.7\,\text{ms}$ / $1.75\text{e}-3$ & $3.9\,\text{ms}$ / $8.62\text{e}-3$ & $14.8\,\text{ms}$ / $3.49\text{e}-4$ & $8.9\,\text{ms}$ / $8.96\text{e}-3$ & $13.7\,\text{ms}$ / $9.41\text{e}-4$ \\
+ & Rounds / Online (B) & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 6 / 56.3 & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
+ & Key (B, $\lambda{=}128$) & 528 & 768 & 536 & \textbf{152} & 1,488 & 1,488 & 304 & 1,024 \\
+ & Time / MAE & $6.8\,\text{ms}$ / $4.12\text{e}-4$ & $8.5\,\text{ms}$ / $1.75\text{e}-3$ & $4.8\,\text{ms}$ / $1.75\text{e}-3$ & $3.0\,\text{ms}$ / $8.13\text{e}-3$ & $15.9\,\text{ms}$ / $3.49\text{e}-4$ & $14.4\,\text{ms}$ / $3.49\text{e}-4$ & $8.9\,\text{ms}$ / $9.40\text{e}-3$ & $14.5\,\text{ms}$ / $9.42\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{SiLU}$}
- & Rounds / Online (B) & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
- & Key (B, $\lambda{=}128$) & 552 & 808 & 560 & \textbf{152} & 1,496 & 304 & 1,088 \\
- & Time / MAE & $7.1\,\text{ms}$ / $7.68\text{e}-4$ & $6.9\,\text{ms}$ / $3.47\text{e}-3$ & $9.2\,\text{ms}$ / $3.47\text{e}-3$ & $4.2\,\text{ms}$ / $1.62\text{e}-2$ & $24.3\,\text{ms}$ / $4.96\text{e}-4$ & $8.9\,\text{ms}$ / $1.75\text{e}-2$ & $16.1\,\text{ms}$ / $8.55\text{e}-4$ \\
+ & Rounds / Online (B) & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 6 / 56.3 & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
+ & Key (B, $\lambda{=}128$) & 552 & 808 & 560 & \textbf{152} & 1,496 & 1,496 & 304 & 1,088 \\
+ & Time / MAE & $6.8\,\text{ms}$ / $7.68\text{e}-4$ & $7.5\,\text{ms}$ / $3.47\text{e}-3$ & $6.1\,\text{ms}$ / $3.47\text{e}-3$ & $4.6\,\text{ms}$ / $1.71\text{e}-2$ & $26.1\,\text{ms}$ / $4.96\text{e}-4$ & $22.8\,\text{ms}$ / $4.96\text{e}-4$ & $7.1\,\text{ms}$ / $1.65\text{e}-2$ & $13.4\,\text{ms}$ / $8.55\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{Sigmoid}$}
- & Rounds / Online (B) & 7 / 88.3 & 6 / 80.3 & 7 / 88.3 & 6 / 80.3 & 7 / 72.3 & 15 / 592.0 & \textbf{1 / 8.0} \\
- & Key (B, $\lambda{=}128$) & 1,392 & 1,864 & 1,648 & 1,288 & 1,608 & 3,008 & \textbf{136} \\
- & Time / MAE & $18.5\,\text{ms}$ / $7.22\text{e}-5$ & $37.0\,\text{ms}$ / $7.22\text{e}-5$ & $20.0\,\text{ms}$ / $7.24\text{e}-5$ & $16.2\,\text{ms}$ / $3.50\text{e}-4$ & $18.9\,\text{ms}$ / $4.16\text{e}-3$ & $27.9\,\text{ms}$ / $3.62\text{e}-4$ & $3.5\,\text{ms}$ / $2.24\text{e}-2$ \\
+ & Rounds / Online (B) & 7 / 88.3 & 6 / 80.3 & 7 / 88.3 & 6 / 80.3 & 7 / 72.3 & 7 / 72.3 & 15 / 592.0 & \textbf{1 / 8.0} \\
+ & Key (B, $\lambda{=}128$) & 1,392 & 1,864 & 1,648 & 1,288 & 1,608 & 1,608 & 3,008 & \textbf{136} \\
+ & Time / MAE & $21.6\,\text{ms}$ / $7.24\text{e}-5$ & $36.3\,\text{ms}$ / $7.23\text{e}-5$ & $20.8\,\text{ms}$ / $7.25\text{e}-5$ & $15.2\,\text{ms}$ / $3.76\text{e}-4$ & $19.2\,\text{ms}$ / $4.16\text{e}-3$ & $21.9\,\text{ms}$ / $4.16\text{e}-3$ & $21.6\,\text{ms}$ / $3.86\text{e}-4$ & $2.1\,\text{ms}$ / $2.24\text{e}-2$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{Tanh}$}
- & Rounds / Online (B) & 7 / 88.3 & 6 / 80.3 & 7 / 88.3 & 6 / 80.3 & 7 / 72.3 & 15 / 592.0 & \textbf{1 / 8.0} \\
- & Key (B, $\lambda{=}128$) & 1,368 & 1,824 & 1,624 & 1,288 & 1,584 & 3,008 & \textbf{136} \\
- & Time / MAE & $19.1\,\text{ms}$ / $1.17\text{e}-4$ & $50.5\,\text{ms}$ / $1.17\text{e}-4$ & $19.4\,\text{ms}$ / $1.17\text{e}-4$ & $16.5\,\text{ms}$ / $6.56\text{e}-4$ & $16.3\,\text{ms}$ / $6.93\text{e}-3$ & $33.0\,\text{ms}$ / $6.48\text{e}-4$ & $3.6\,\text{ms}$ / $3.03\text{e}-2$ \\
+ & Rounds / Online (B) & 7 / 88.3 & 6 / 80.3 & 7 / 88.3 & 6 / 80.3 & 7 / 72.3 & 7 / 72.3 & 15 / 592.0 & \textbf{1 / 8.0} \\
+ & Key (B, $\lambda{=}128$) & 1,368 & 1,824 & 1,624 & 1,288 & 1,584 & 1,584 & 3,008 & \textbf{136} \\
+ & Time / MAE & $19.6\,\text{ms}$ / $1.17\text{e}-4$ & $34.9\,\text{ms}$ / $1.17\text{e}-4$ & $17.2\,\text{ms}$ / $1.17\text{e}-4$ & $19.1\,\text{ms}$ / $6.57\text{e}-4$ & $18.7\,\text{ms}$ / $6.93\text{e}-3$ & $19.3\,\text{ms}$ / $6.93\text{e}-3$ & $23.2\,\text{ms}$ / $6.18\text{e}-4$ & $3.3\,\text{ms}$ / $3.03\text{e}-2$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{Erf}$}
- & Rounds / Online (B) & 10 / 112.3 & 9 / 104.3 & 10 / 112.3 & 9 / 104.3 & 10 / 96.3 & 23 / 424.0 & \textbf{1 / 8.0} \\
- & Key (B, $\lambda{=}128$) & 2,144 & 2,856 & 2,656 & 2,320 & 2,616 & 2,728 & \textbf{88} \\
- & Time / MAE & $27.2\,\text{ms}$ / $1.67\text{e}-4$ & $46.6\,\text{ms}$ / $1.68\text{e}-4$ & $25.6\,\text{ms}$ / $1.68\text{e}-4$ & $18.6\,\text{ms}$ / $9.29\text{e}-4$ & $22.9\,\text{ms}$ / $8.93\text{e}-3$ & $25.5\,\text{ms}$ / $9.00\text{e}-4$ & $4.1\,\text{ms}$ / $2.37\text{e}-2$ \\
+ & Rounds / Online (B) & 10 / 112.3 & 9 / 104.3 & 10 / 112.3 & 9 / 104.3 & 10 / 96.3 & 10 / 96.3 & 23 / 424.0 & \textbf{1 / 8.0} \\
+ & Key (B, $\lambda{=}128$) & 2,144 & 2,856 & 2,656 & 2,320 & 2,616 & 2,616 & 2,728 & \textbf{88} \\
+ & Time / MAE & $24.3\,\text{ms}$ / $1.68\text{e}-4$ & $37.9\,\text{ms}$ / $1.68\text{e}-4$ & $24.4\,\text{ms}$ / $1.68\text{e}-4$ & $23.5\,\text{ms}$ / $9.16\text{e}-4$ & $25.4\,\text{ms}$ / $8.93\text{e}-3$ & $24.6\,\text{ms}$ / $8.93\text{e}-3$ & $26.1\,\text{ms}$ / $9.16\text{e}-4$ & $3.1\,\text{ms}$ / $2.37\text{e}-2$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{nexp}$}
- & Rounds / Online (B) & 6 / 72.1 & \textbf{5 / 64.1} & 6 / 72.1 & \textbf{5 / 64.1} & 12 / 120.1 & 13 / 224.0 & 8 / 64.0 \\
- & Key (B, $\lambda{=}128$) & 1,328 & 1,816 & 1,584 & 1,200 & 1,624 & 608 & \textbf{128} \\
- & Time / MAE & $16.9\,\text{ms}$ / $6.04\text{e}-4$ & $24.4\,\text{ms}$ / $6.04\text{e}-4$ & $10.9\,\text{ms}$ / $6.04\text{e}-4$ & $10.6\,\text{ms}$ / $2.31\text{e}-3$ & $27.8\,\text{ms}$ / $1.10\text{e}-5$ & $13.6\,\text{ms}$ / $2.51\text{e}-3$ & $15.5\,\text{ms}$ / $3.14\text{e}-4$ \\
+ & Rounds / Online (B) & 6 / 72.1 & \textbf{5 / 64.1} & 6 / 72.1 & \textbf{5 / 64.1} & 12 / 120.1 & 12 / 120.1 & 13 / 224.0 & 8 / 64.0 \\
+ & Key (B, $\lambda{=}128$) & 1,328 & 1,816 & 1,584 & 1,200 & 1,624 & 1,624 & 608 & \textbf{128} \\
+ & Time / MAE & $11.2\,\text{ms}$ / $6.04\text{e}-4$ & $13.4\,\text{ms}$ / $6.04\text{e}-4$ & $11.6\,\text{ms}$ / $6.04\text{e}-4$ & $12.3\,\text{ms}$ / $2.20\text{e}-3$ & $32.5\,\text{ms}$ / $1.16\text{e}-5$ & $28.3\,\text{ms}$ / $1.06\text{e}-5$ & $15.4\,\text{ms}$ / $2.36\text{e}-3$ & $14.6\,\text{ms}$ / $3.01\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$1/x$}
- & Rounds / Online (B) & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 32.0 & 4 / 40.0 & 28 / 304.0 \\
- & Key (B, $\lambda{=}128$) & 560 & 776 & 560 & \textbf{200} & 504 & 2,096 & 528 \\
- & Time / MAE & $10.2\,\text{ms}$ / $8.50\text{e}-5$ & $32.3\,\text{ms}$ / $8.52\text{e}-5$ & $9.5\,\text{ms}$ / $8.51\text{e}-5$ & $6.3\,\text{ms}$ / $3.49\text{e}-4$ & $14.5\,\text{ms}$ / $5.36\text{e}-4$ & $7.1\,\text{ms}$ / $3.16\text{e}-4$ & $52.4\,\text{ms}$ / $8.01\text{e}-5$ \\
+ & Rounds / Online (B) & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 3 / 32.0 & 3 / 32.0 & 4 / 40.0 & 28 / 304.0 \\
+ & Key (B, $\lambda{=}128$) & 560 & 776 & 560 & \textbf{200} & 504 & 504 & 2,096 & 528 \\
+ & Time / MAE & $8.9\,\text{ms}$ / $8.52\text{e}-5$ & $25.9\,\text{ms}$ / $8.54\text{e}-5$ & $8.7\,\text{ms}$ / $8.50\text{e}-5$ & $7.8\,\text{ms}$ / $3.24\text{e}-4$ & $16.4\,\text{ms}$ / $5.36\text{e}-4$ & $14.6\,\text{ms}$ / $5.36\text{e}-4$ & $7.2\,\text{ms}$ / $3.82\text{e}-4$ & $36.7\,\text{ms}$ / $7.82\text{e}-5$ \\
 \midrule
 \multirow{3}{*}{$1/\sqrt{x}$}
- & Rounds / Online (B) & 6 / 192.3 & \textbf{2 / 40.0} & 3 / 48.0 & \textbf{2 / 40.0} & 10 / 104.1 & 4 / 40.0 & 17 / 184.0 \\
- & Key (B, $\lambda{=}128$) & 3,888 & 712 & 560 & \textbf{296} & 1,888 & 8,240 & 320 \\
- & Time / MAE & $301.8\,\text{ms}$ / $1.88\text{e}-5$ & $988.3\,\text{ms}$ / $2.64\text{e}-5$ & $216.9\,\text{ms}$ / $2.61\text{e}-5$ & $204.3\,\text{ms}$ / $8.47\text{e}-5$ & $40.4\,\text{ms}$ / $2.25\text{e}-4$ & $15.1\,\text{ms}$ / $1.11\text{e}-4$ & $42.1\,\text{ms}$ / $4.65\text{e}-4$ \\
+ & Rounds / Online (B) & 6 / 192.3 & 5 / 168.3 & 6 / 192.3 & 5 / 168.3 & 10 / 104.1 & 6 / 192.3 & \textbf{4 / 40.0} & 17 / 184.0 \\
+ & Key (B, $\lambda{=}128$) & 3,888 & 5,336 & 4,400 & 2,888 & 1,888 & 4,400 & 8,240 & \textbf{320} \\
+ & Time / MAE & $245.7\,\text{ms}$ / $1.85\text{e}-5$ & $1374.7\,\text{ms}$ / $1.83\text{e}-5$ & $250.6\,\text{ms}$ / $1.87\text{e}-5$ & $271.6\,\text{ms}$ / $3.55\text{e}-5$ & $44.4\,\text{ms}$ / $2.25\text{e}-4$ & $266.7\,\text{ms}$ / $1.85\text{e}-5$ & $10.6\,\text{ms}$ / $2.33\text{e}-5$ & $22.0\,\text{ms}$ / $4.65\text{e}-4$ \\
 \bottomrule
 \end{tabular}

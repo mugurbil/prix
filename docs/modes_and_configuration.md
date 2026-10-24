@@ -97,25 +97,27 @@ def hybrid_curl_shaft():
 Each mode's approximations are only accurate on a limited input range, and **inputs outside that range are not clamped or flagged: they silently return wrong values.** The table shows the measured error of each function as shipped (default config of each mode, 2 parties, 10 repeats, compared with exact float64 results). Each cell is *median absolute error / typical worst error within one run*; ⚠ marks runs where some output was off by more than 1.
 
 <!-- generated:accuracy_ranges:begin -->
-| Function (inputs) | `curl` | `poly` | `shaft` | `crypten` | `fission` |
-|---|---:|---:|---:|---:|---:|
-| exp, [-8, 0] | 3e-4 / 0.158 | 2e-3 / 0.011 | 4e-4 / 2e-3 | 4e-4 / 2e-3 | 4e-6 / 8e-6 |
-| exp, [-4, 2] | 9e-3 / 7.39 | 3e-3 / 0.0115 | 1e-3 / 0.0602 | 1e-3 / 0.0702 | 5e-6 / 5e-5 |
-| log, [0.1, 50] | 1e-5 / 2.7 | 0.02 / 0.0335 | 0.0201 / 0.0339 | 0.0202 / 0.034 | 4e-6 / 6e-5 |
-| 1/x, [0.1, 50] | 7e-6 / 1.6e4 | 9e-5 / 7e-4 | 9e-5 / 7e-4 | 9e-5 / 7e-4 | 3e-6 / 6e-4 |
-| 1/sqrt{x}, [0.05, 50] | 0.125 / 193.21 | 2e-5 / 0.235 | 2e-5 / 0.239 | 2e-5 / 0.236 | 4e-6 / 1e-4 |
-| Sigmoid, [-8, 8] | 5e-5 / 4e-3 | 1e-3 / 9e-3 | 0.0187 / 0.5 | 2e-4 / 2e-3 | 4e-6 / 8e-6 |
-| Tanh, [-6, 6] | 2e-5 / 1e-2 | 1e-3 / 0.0176 | 0.0351 / 0.093 | 1e-4 / 5e-3 | 3e-6 / 9e-6 |
-| Erf, [-4, 4] | 5e-5 / 0.0112 | 2e-3 / 0.015 | 0.0273 / 0.0712 | 0.243 / 5.3e5 | 3e-6 / 8e-6 |
-| GeLU, [-6, 6] | 3e-4 / 0.183 | 4e-4 / 4e-3 | 4e-4 / 4e-3 | 0.919 / 5.8e7 | 3e-6 / 1e-5 |
-| SiLU, [-8, 8] | 3e-3 / 0.392 | 5e-3 / 0.0148 | 6e-4 / 5e-3 | 6e-4 / 2e-3 | 4e-6 / 8e-6 |
-| Softmax (L=32) | 1e-4 / 0.0185 | 6e-4 / 6e-3 | 3e-4 / 0.0523 | 1e-4 / 4e-3 | 4e-6 / 8e-6 |
-| LayerNorm (d=64) | 1e-5 / 9e-5 | 9e-6 / 9e-5 | 1e-5 / 2e-4 | 9e-6 / 1e-4 | 4e-6 / 1e-5 |
+| Function (inputs) | `default` | `wave` | `sigma` | `curl` | `poly` | `shaft` | `crypten` | `fission` |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| exp, [-8, 0] | 1e-4 / 0.0139 | 1e-4 / 0.0139 | 8e-6 / 3e-5 | 4e-4 / 0.158 | 2e-3 / 0.0109 | 4e-4 / 2e-3 | 4e-4 / 2e-3 | 4e-6 / 8e-6 |
+| exp, [-4, 2] | 3e-3 / 7.39 | 3e-3 / 7.39 | 3e-5 / 7.39 | 1e-2 / 7.39 | 3e-3 / 0.0115 | 1e-3 / 0.0764 | 1e-3 / 0.0702 | 5e-6 / 5e-5 |
+| log, [0.1, 50] | 2e-5 / 2.7 | 2e-5 / 2.7 | 3e-3 / 0.215 | 1e-5 / 2.7 | 0.0199 / 0.0341 | 0.02 / 0.0335 | 0.0202 / 0.0335 | 4e-6 / 6e-5 |
+| 1/x, [0.1, 50] | 2e-5 / 1.6e4 | 2e-5 / 1.6e4 | 2e-5 / 1.09 | 6e-6 / 1.6e4 | 8e-5 / 8e-4 | 9e-5 / 7e-4 | 9e-5 / 7e-4 | 3e-6 / 6e-4 |
+| 1/sqrt{x}, [0.05, 50] | 2e-5 / 2e-4 | 2e-5 / 2e-4 | 0.124 / 2.89 | 0.125 / 193.21 | 2e-5 / 0.24 | 2e-5 / 0.24 | 2e-5 / 0.24 | 4e-6 / 1e-4 |
+| Sigmoid, [-8, 8] | 3e-5 / 5e-4 | 3e-5 / 5e-4 | 4e-4 / 0.0312 | 5e-5 / 4e-3 | 1e-3 / 9e-3 | 0.0187 / 0.5 | 2e-4 / 2e-3 | 4e-6 / 8e-6 |
+| Tanh, [-6, 6] | 2e-5 / 1e-3 | 2e-5 / 1e-3 | 3e-4 / 0.0623 | 2e-5 / 1e-2 | 1e-3 / 0.0176 | 0.0351 / 0.093 | 1e-4 / 4e-3 | 3e-6 / 9e-6 |
+| Erf, [-4, 4] | 3e-5 / 1e-3 | 3e-5 / 1e-3 | 3e-4 / 0.0703 | 5e-5 / 0.0112 | 2e-3 / 0.015 | 0.0273 / 0.0712 | 0.243 / 5.3e5 | 3e-6 / 8e-6 |
+| GeLU, [-6, 6] | 4e-5 / 4e-3 | 1e-4 / 0.0158 | 6e-5 / 4e-3 | 3e-4 / 0.157 | 4e-4 / 4e-3 | 4e-4 / 4e-3 | 0.919 / 1.1e7 | 3e-6 / 1e-5 |
+| SiLU, [-8, 8] | 2e-4 / 0.0102 | 9e-4 / 0.0377 | 3e-4 / 6e-3 | 3e-3 / 0.471 | 5e-3 / 0.0148 | 6e-4 / 5e-3 | 6e-4 / 2e-3 | 4e-6 / 8e-6 |
+| Softmax (L=32) | 4e-5 / 3e-3 | 4e-5 / 3e-3 | 2e-5 / 2e-3 | 1e-4 / 0.0184 | 6e-4 / 6e-3 | 3e-4 / 0.0523 | 1e-4 / 4e-3 | 4e-6 / 8e-6 |
+| LayerNorm (d=64) | 2e-5 / 2e-4 | 2e-5 / 2e-4 | 3e-4 / 3e-3 | 1e-5 / 9e-5 | 9e-6 / 1e-4 | 9e-6 / 2e-4 | 9e-6 / 2e-4 | 4e-6 / 1e-5 |
 
 Each cell is median absolute error / worst-case absolute error over the test grid (10 runs); worst-case values above 1 indicate an input-range violation, not approximation error.
 <!-- generated:accuracy_ranges:end -->
 
 **Known limits:**
+- **`default` / `wave`:** `exp` assumes non-positive inputs (`all_neg: True`; positive inputs return about 0 — Softmax only ever needs $x - \max \le 0$). `reciprocal` and `log` are tabulated on $[0, 64)$ with spacing $1/4$ and are only accurate for $x \gtrsim 1$ (the $[0.1, 1)$ part of the test grid hits the pole; Softmax denominators are $\ge 1$ and the table is widened to the sequence length automatically). `inv_sqrt` is range-extended to variances in $[2^{-8}, 2^{16})$; GeLU/SiLU cover $|x| < 8$ / $|x| < 16$. Within those ranges every function is accurate to $\le 10^{-4}$ median error.
+- **`sigma`:** same `exp`/`reciprocal` conventions as SIGMA ($f=12$-style tables at $f=16$); `inv_sqrt` keeps SIGMA's two-interval table, which stops at 16 — **LayerNorm is wrong for row variances above 16** (the `sigma_ext` benchmark variant shows the effect of lifting this).
 - **`curl` (Curl defaults, identical to the Curl reference):**
   - `inv_sqrt` only covers inputs in [0, 2) (`lut_max_bits: 1`), so **LayerNorm is wrong whenever a row's variance is 2 or more**.
   - GeLU only covers |x| < 4 (`lut_max_bits: 2`).

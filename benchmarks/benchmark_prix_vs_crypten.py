@@ -145,6 +145,7 @@ def _collect_metadata(args):
         "device": args.device,
         "prix_commit": _git_head(args.prix_root),
         "crypten_commit": _git_head(args.crypten_root),
+        "loadavg_1m_at_start": (os.getloadavg()[0] if hasattr(os, "getloadavg") else None),
         "warmup": args.warmup,
         "repeats": args.repeats,
         "llm_warmup": args.llm_warmup,

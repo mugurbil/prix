@@ -1,39 +1,45 @@
-\begin{tabular}{@{}llccccccc@{}}
+\begin{tabular}{@{}llcccccccc@{}}
 \toprule
-\textbf{Benchmark} & \textbf{Metric} & \textbf{PriX default} & \textbf{Wave} & \textbf{Wave + SIGMA TR} & \textbf{Wave-Prob} & \textbf{SIGMA} & \textbf{Curl} & \textbf{SHAFT} \\
- & & (\texttt{mode="default"}) & (\texttt{lut\_indexing="wave"}) & (\texttt{lut\_indexing="sigma"}) & (\texttt{lut\_indexing="wave\_prob"}) & (\texttt{mode="sigma"}) & (\texttt{mode="curl"}) & (\texttt{mode="shaft"}) \\
+\textbf{Benchmark} & \textbf{Metric} & \textbf{PriX default} & \textbf{Wave} & \textbf{Wave + SIGMA TR} & \textbf{Wave-Prob} & \textbf{SIGMA} & \textbf{SIGMA + ext. LN} & \textbf{Curl} & \textbf{SHAFT} \\
+ & & (\texttt{mode="default"}) & (\texttt{lut\_indexing="wave"}) & (\texttt{lut\_indexing="sigma"}) & (\texttt{lut\_indexing="wave\_prob"}) & (\texttt{mode="sigma"}) & (\texttt{mode="sigma"}, wide $1/\sqrt{x}$) & (\texttt{mode="curl"}) & (\texttt{mode="shaft"}) \\
 \midrule
 \multirow{3}{*}{$\operatorname{GeLU}$ $(1,128,3072)$}
- & Rounds / Online (MB) & 3 / 18.9 & \textbf{2 / 15.7} & 3 / 18.9 & \textbf{2 / 15.7} & 6 / 22.1 & 4 / 15.7 & 11 / 213.9 \\
- & Key (GB, $\lambda{=}128$) & 0.208 & 0.302 & 0.211 & \textbf{0.060} & 0.585 & 0.119 & 0.403 \\
- & Time / MAE & $0.66\,\text{s}$ / $4.45\text{e}-4$ & $1.66\,\text{s}$ / $1.90\text{e}-3$ & $0.48\,\text{s}$ / $1.90\text{e}-3$ & $0.21\,\text{s}$ / $9.84\text{e}-3$ & $2.59\,\text{s}$ / $3.79\text{e}-4$ & $0.13\,\text{s}$ / $9.82\text{e}-3$ & $0.52\,\text{s}$ / $9.80\text{e}-4$ \\
+ & Rounds / Online (MB) & 3 / 18.9 & \textbf{2 / 15.7} & 3 / 18.9 & \textbf{2 / 15.7} & 6 / 22.1 & 6 / 22.1 & 4 / 15.7 & 11 / 213.9 \\
+ & Key (GB, $\lambda{=}128$) & 0.208 & 0.302 & 0.211 & \textbf{0.060} & 0.585 & 0.585 & 0.119 & 0.403 \\
+ & Time / MAE & $0.60\,\text{s}$ / $4.45\text{e}-4$ & $1.60\,\text{s}$ / $1.90\text{e}-3$ & $0.43\,\text{s}$ / $1.90\text{e}-3$ & $0.24\,\text{s}$ / $9.78\text{e}-3$ & $2.68\,\text{s}$ / $3.79\text{e}-4$ & $2.66\,\text{s}$ / $3.79\text{e}-4$ & $0.13\,\text{s}$ / $9.71\text{e}-3$ & $0.50\,\text{s}$ / $9.80\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{Softmax}$ $(1,12,128,128)$}
- & Rounds / Online (MB) & 25 / 19.0 & \textbf{23 / 17.4} & 25 / 19.0 & \textbf{23 / 17.4} & 31 / 28.4 & 98 / 155.9 & 41 / 173.0 \\
- & Key (GB, $\lambda{=}128$) & 0.418 & 0.564 & 0.518 & 0.442 & 0.526 & 0.312 & \textbf{0.271} \\
- & Time / MAE & $0.78\,\text{s}$ / $6.86\text{e}-5$ & $1.77\,\text{s}$ / $6.86\text{e}-5$ & $0.89\,\text{s}$ / $6.86\text{e}-5$ & $0.74\,\text{s}$ / $2.76\text{e}-4$ & $2.16\,\text{s}$ / $1.05\text{e}-5$ & $0.64\,\text{s}$ / $2.78\text{e}-4$ & $0.63\,\text{s}$ / $3.02\text{e}-4$ \\
+ & Rounds / Online (MB) & 25 / 19.0 & \textbf{23 / 17.4} & 25 / 19.0 & \textbf{23 / 17.4} & 31 / 28.4 & 31 / 28.4 & 98 / 155.9 & 41 / 173.0 \\
+ & Key (GB, $\lambda{=}128$) & 0.418 & 0.564 & 0.518 & 0.442 & 0.526 & 0.526 & 0.312 & \textbf{0.271} \\
+ & Time / MAE & $0.71\,\text{s}$ / $6.86\text{e}-5$ & $1.80\,\text{s}$ / $6.86\text{e}-5$ & $0.88\,\text{s}$ / $6.86\text{e}-5$ & $0.77\,\text{s}$ / $2.76\text{e}-4$ & $2.10\,\text{s}$ / $1.05\text{e}-5$ & $2.22\,\text{s}$ / $1.06\text{e}-5$ & $0.64\,\text{s}$ / $2.76\text{e}-4$ & $0.64\,\text{s}$ / $3.02\text{e}-4$ \\
 \midrule
 \multirow{3}{*}{$\operatorname{LayerNorm}$ $(1,128,768)$}
- & Rounds / Online (MB) & 12 / 4.7 & \textbf{8 / 4.7} & 9 / 4.7 & \textbf{8 / 4.7} & 16 / 4.7 & 10 / 4.7 & 20 / 2.4 \\
- & Key (GB, $\lambda{=}128$) & 0.008 & 0.007 & 0.007 & 0.007 & 0.007 & 0.008 & \textbf{0.005} \\
- & Time / MAE & $0.10\,\text{s}$ / $4.24\text{e}-5$ & $0.23\,\text{s}$ / $3.25\text{e}-5$ & $0.08\,\text{s}$ / $3.29\text{e}-5$ & $0.07\,\text{s}$ / $5.56\text{e}-5$ & $0.07\,\text{s}$ / $9.27\text{e}-4$ & $0.06\,\text{s}$ / $4.53\text{e}-5$ & $0.05\,\text{s}$ / $8.97\text{e}-4$ \\
+ & Rounds / Online (MB) & 12 / 4.7 & 11 / 4.7 & 12 / 4.7 & 11 / 4.7 & 16 / 4.7 & 12 / 4.7 & \textbf{10 / 4.7} & 20 / 2.4 \\
+ & Key (GB, $\lambda{=}128$) & 0.008 & 0.008 & 0.008 & 0.007 & 0.007 & 0.008 & 0.008 & \textbf{0.005} \\
+ & Time / MAE & $0.10\,\text{s}$ / $4.29\text{e}-5$ & $0.34\,\text{s}$ / $4.30\text{e}-5$ & $0.09\,\text{s}$ / $4.31\text{e}-5$ & $0.08\,\text{s}$ / $1.68\text{e}-4$ & $0.07\,\text{s}$ / $9.27\text{e}-4$ & $0.11\,\text{s}$ / $4.28\text{e}-5$ & $0.06\,\text{s}$ / $4.29\text{e}-5$ & $0.05\,\text{s}$ / $9.00\text{e}-4$ \\
 \midrule
 \multirow{4}{*}{\texttt{BERT-base} (12L)}
- & Rounds / Online 1P (GB) & 828 / 0.833 & \textbf{696 / 0.775} & 756 / 0.832 & \textbf{696 / 0.775} & 1,032 / 0.984 & 1,668 / 3.117 & 1,200 / 5.512 \\
- & Key 1P (GB, $\lambda{=}128$) & 8.07 & 10.94 & 9.30 & 6.57 & 13.89 & \textbf{6.43} & 9.12 \\
- & Time & $24.2\,\text{s}$ & $50.6\,\text{s}$ & $22.6\,\text{s}$ & \textbf{$17.7\,\text{s}$} & $65.9\,\text{s}$ & $18.0\,\text{s}$ & $20.5\,\text{s}$ \\
- & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0191$ & $0.0017$ & $0.0191$ & $0.0015$ \\
+ & Rounds / Online 1P (GB) & 828 / 0.833 & \textbf{768 / 0.776} & 828 / 0.833 & \textbf{768 / 0.776} & 1,032 / 0.984 & 936 / 0.984 & 1,668 / 3.117 & 1,200 / 5.512 \\
+ & Key 1P (GB, $\lambda{=}128$) & 8.07 & 10.96 & 9.31 & 6.58 & 13.89 & 13.90 & \textbf{6.43} & 9.12 \\
+ & Time & $22.7\,\text{s}$ & $53.5\,\text{s}$ & $23.4\,\text{s}$ & $19.0\,\text{s}$ & $62.1\,\text{s}$ & $66.6\,\text{s}$ & \textbf{$17.9\,\text{s}$} & $23.6\,\text{s}$ \\
+ & Block MAE & $0.0007$ & $0.0028$ & $0.0028$ & $0.0191$ & $0.0017$ & \textbf{$0.0006$} & $0.0192$ & $0.0015$ \\
 \midrule
 \multirow{4}{*}{\texttt{BERT-large} (24L)}
- & Rounds / Online 1P (GB) & 1,656 / 2.220 & \textbf{1,392 / 2.067} & 1,512 / 2.219 & \textbf{1,392 / 2.067} & 2,064 / 2.624 & 3,336 / 8.916 & 2,400 / 15.302 \\
- & Key 1P (GB, $\lambda{=}128$) & 21.50 & 29.18 & 24.79 & \textbf{17.52} & 37.03 & 17.74 & 24.92 \\
- & Time & $65.3\,\text{s}$ & $140.0\,\text{s}$ & $57.0\,\text{s}$ & \textbf{$49.4\,\text{s}$} & $189.4\,\text{s}$ & $55.3\,\text{s}$ & $61.8\,\text{s}$ \\
- & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0192$ & $0.0016$ & $0.0192$ & $0.0015$ \\
+ & Rounds / Online 1P (GB) & 1,656 / 2.220 & \textbf{1,536 / 2.068} & 1,656 / 2.220 & \textbf{1,536 / 2.068} & 2,064 / 2.624 & 1,872 / 2.625 & 3,336 / 8.916 & 2,400 / 15.302 \\
+ & Key 1P (GB, $\lambda{=}128$) & 21.50 & 29.21 & 24.81 & \textbf{17.54} & 37.03 & 37.04 & 17.74 & 24.92 \\
+ & Time & $67.0\,\text{s}$ & $135.9\,\text{s}$ & $61.7\,\text{s}$ & $50.5\,\text{s}$ & $183.1\,\text{s}$ & $200.8\,\text{s}$ & \textbf{$50.1\,\text{s}$} & $64.1\,\text{s}$ \\
+ & Block MAE & $0.0007$ & $0.0028$ & $0.0028$ & $0.0190$ & $0.0019$ & \textbf{$0.0006$} & $0.0193$ & $0.0015$ \\
 \midrule
 \multirow{4}{*}{\texttt{GPT-2} (12L, $L{=}64$)}
- & Rounds / Online 1P (GB) & 804 / 0.345 & \textbf{672 / 0.321} & 732 / 0.345 & \textbf{672 / 0.321} & 1,008 / 0.393 & 1,656 / 1.391 & 1,200 / 2.572 \\
- & Key 1P (GB, $\lambda{=}128$) & 2.76 & 3.76 & 3.07 & \textbf{1.94} & 5.34 & 2.56 & 4.08 \\
- & Time & $12.2\,\text{s}$ & $24.2\,\text{s}$ & $9.9\,\text{s}$ & \textbf{$8.5\,\text{s}$} & $27.6\,\text{s}$ & $12.9\,\text{s}$ & $12.3\,\text{s}$ \\
- & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0193$ & $0.0015$ & $0.0194$ & $0.0015$ \\
+ & Rounds / Online 1P (GB) & 804 / 0.345 & \textbf{744 / 0.322} & 804 / 0.345 & \textbf{744 / 0.322} & 1,008 / 0.393 & 912 / 0.393 & 1,656 / 1.391 & 1,200 / 2.572 \\
+ & Key 1P (GB, $\lambda{=}128$) & 2.76 & 3.77 & 3.08 & \textbf{1.94} & 5.34 & 5.35 & 2.56 & 4.08 \\
+ & Time & $10.9\,\text{s}$ & $23.2\,\text{s}$ & $13.1\,\text{s}$ & \textbf{$8.8\,\text{s}$} & $26.3\,\text{s}$ & $30.7\,\text{s}$ & $11.3\,\text{s}$ & $11.4\,\text{s}$ \\
+ & Block MAE & $0.0007$ & $0.0028$ & $0.0028$ & $0.0189$ & $0.0017$ & \textbf{$0.0006$} & $0.0194$ & $0.0015$ \\
+\midrule
+\multirow{4}{*}{\texttt{GPT-2} (12L, $L{=}128$)}
+ & Rounds / Online 1P (GB) & 828 / 0.833 & \textbf{768 / 0.776} & 828 / 0.833 & \textbf{768 / 0.776} & 1,032 / 0.984 & 936 / 0.984 & 1,668 / 3.117 & 1,200 / 5.512 \\
+ & Key 1P (GB, $\lambda{=}128$) & 8.07 & 10.96 & 9.31 & 6.58 & 13.89 & 13.90 & \textbf{6.43} & 9.12 \\
+ & Time & $22.6\,\text{s}$ & $52.3\,\text{s}$ & $21.9\,\text{s}$ & \textbf{$18.0\,\text{s}$} & $63.7\,\text{s}$ & $66.4\,\text{s}$ & $18.1\,\text{s}$ & $20.7\,\text{s}$ \\
+ & Block MAE & $0.0007$ & $0.0028$ & $0.0028$ & $0.0191$ & $0.0016$ & \textbf{$0.0006$} & $0.0194$ & $0.0015$ \\
 \bottomrule
 \end{tabular}

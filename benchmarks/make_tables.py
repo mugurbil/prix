@@ -139,7 +139,7 @@ def crypten_tables(d, tag, device_label):
     if d is None or "crypten" not in d or "prix" not in d:
         return
     env = env_of(d)
-    PROVENANCE.append((f"tab:{tag}_llm, tab:{tag}_ops, fig:llm_*", "benchmark_prix_vs_crypten.py", f"results/{tag_file[tag]}", env.get("prix_commit") or env.get("git_commit"), env.get("timestamp")))
+    PROVENANCE.append((f"tab:{tag}_llm, tab:{tag}_ops, fig:llm_*", "benchmark_prix_vs_crypten.py", f"results/{tag_file[tag]}", env.get("prix_commit") or env.get("git_commit"), env.get("timestamp") or env.get("timestamp_utc")))
     sp_llm, sp_ops = [], []
     # LLM table
     lines = []
@@ -163,10 +163,34 @@ def crypten_tables(d, tag, device_label):
             cells.append(f"{ct:.2f} / \\textbf{{{px:.2f} ({sp:.2f}$\\times$)}}")
         lines.append(f"{label:<36}& " + " & ".join(cells) + r" \\")
     write(os.path.join(TABLES, f"{tag}_ops.tex"), body(lines))
+    # per-cell macros, e.g. \cpuPrixCurlInvSqrt, \cpuCryptenCurlInvSqrt, \cpuSpCurlInvSqrt (speedup)
+    short = {"Private MatMul (128x128)": "MatMul", "Private Mul (128x128)": "Mul", "Comparison / ReLU (32x64)": "ReLU", "Exp (32x64)": "Exp",
+             "Reciprocal (32x64)": "Reciprocal", "InvSqrt (32x64)": "InvSqrt", "GeLU (32x64)": "GeLU", "SiLU (32x64)": "SiLU",
+             "Softmax (4x32x32)": "Softmax", "LayerNorm (4x32x64)": "LayerNorm", "BertTiny (2-Block, seq=16)": "BertTiny",
+             "BertBase (1-Block, seq=16)": "BertBase", "GPT2 (1-Block, seq=16)": "GPT", "Llama (1-Block, d=768, seq=16)": "Llama",
+             "ModernBert (1-Block, seq=16)": "ModernBert"}
+    for m in MODES5:
+        for sec in ("micro", "llm"):
+            for key, name in short.items():
+                if key in d["prix"][m][sec]:
+                    ct, px = d["crypten"][m][sec][key], d["prix"][m][sec][key]
+                    macro(f"{tag}Crypten{m.title()}{name}", f"{ct:.1f}"); macro(f"{tag}Prix{m.title()}{name}", f"{px:.1f}")
+                    macro(f"{tag}Sp{m.title()}{name}", f"{ct / px:.2f}")
+    relu_ct = [d["crypten"][m]["micro"]["Comparison / ReLU (32x64)"] for m in MODES5[:4]]
+    relu_px = [d["prix"][m]["micro"]["Comparison / ReLU (32x64)"] for m in MODES5]
+    relu_sp = [d["crypten"][m]["micro"]["Comparison / ReLU (32x64)"] / d["prix"][m]["micro"]["Comparison / ReLU (32x64)"] for m in MODES5]
+    mm_sp = [d["crypten"][m]["micro"]["Private MatMul (128x128)"] / d["prix"][m]["micro"]["Private MatMul (128x128)"] for m in MODES5]
+    macro(f"{tag}CryptenReLUMin", f"{min(relu_ct):.1f}"); macro(f"{tag}CryptenReLUMax", f"{max(relu_ct):.1f}")
+    macro(f"{tag}PrixReLUMin", f"{min(relu_px):.1f}"); macro(f"{tag}PrixReLUMax", f"{max(relu_px):.1f}")
+    macro(f"{tag}SpReLUMin", f"{min(relu_sp):.1f}"); macro(f"{tag}SpReLUMax", f"{max(relu_sp):.1f}")
+    macro(f"{tag}SpMatMulMin", f"{min(mm_sp):.1f}"); macro(f"{tag}SpMatMulMax", f"{max(mm_sp):.1f}")
     macro(f"{tag}LlmSpeedupMin", f"{min(sp_llm):.2f}"); macro(f"{tag}LlmSpeedupMax", f"{max(sp_llm):.2f}")
     macro(f"{tag}LlmSpeedupGeomean", f"{geomean(sp_llm):.2f}")
     macro(f"{tag}OpsSpeedupMin", f"{min(sp_ops):.1f}"); macro(f"{tag}OpsSpeedupMax", f"{max(sp_ops):.1f}")
     macro(f"{tag}AllFaster", "yes" if min(sp_llm + sp_ops) > 1 else "no")
+    macro(f"{tag}NumFaster", str(sum(1 for v in sp_llm + sp_ops if v > 1)))
+    macro(f"{tag}NumConfigs", str(len(sp_llm) + len(sp_ops)))
+    macro(f"{tag}OpsSpeedupGeomean", f"{geomean(sp_ops):.2f}")
     return sp_llm, sp_ops
 
 
@@ -231,7 +255,7 @@ def accuracy_table(a):
     for key, label in ACC_ROWS:
         cells = [cell(a[m][key]) if key in a[m] else "--" for m in modes]
         lines.append(f"{label:<26}& " + " & ".join(cells) + r" \\")
-    write(os.path.join(TABLES, "accuracy.tex"), body(lines))
+    write(os.path.join(TABLES, "accuracy.tex"), tabular("@{}l" + "r" * len(modes) + "@{}", "\n".join(lines) + "\n"))
     # markdown for docs
     md = ["| Function (inputs) | " + " | ".join(f"`{m}`" for m in modes) + " |", "|---|" + "---:|" * len(modes)]
     for key, label in ACC_ROWS:
@@ -380,6 +404,70 @@ def ablation_table(d):
     write(os.path.join(TABLES, "fss_trunc_ablation.tex"), tabular("@{}ll" + "c" * len(cols) + "@{}", header + "\n".join(lines) + "\n"))
 
 
+
+# ----------------------------------------------------------------------------- markdown (docs/benchmarks.md)
+MD_MODE_TITLES = {"crypten": "CrypTen approx.", "poly": "Piecewise poly", "shaft": "SHAFT (Fourier + ODE)", "curl": "Curl LUTs", "fission": "Fission"}
+
+
+def md_crypten(d):
+    """(llm latency table, llm speedup table, primitives table) in Markdown for one CrypTen-comparison JSON."""
+    if d is None or "crypten" not in d or "prix" not in d:
+        return None
+    hdr = "| Model | " + " | ".join(f"CrypTen · {MD_MODE_TITLES[m]} | PriX · {MD_MODE_TITLES[m]}" for m in MODES5) + " |"
+    lat = [hdr, "|---|" + "---:|" * (2 * len(MODES5))]
+    spd = ["| Model | " + " | ".join(MD_MODE_TITLES[m] for m in MODES5) + " |", "|---|" + "---:|" * len(MODES5)]
+    for key, _ in LLM_ROWS:
+        lat.append(f"| {key} | " + " | ".join(f"{d['crypten'][m]['llm'][key]:.2f} | {d['prix'][m]['llm'][key]:.2f}" for m in MODES5) + " |")
+        spd.append(f"| {key} | " + " | ".join(f"**{d['crypten'][m]['llm'][key] / d['prix'][m]['llm'][key]:.2f}x**" for m in MODES5) + " |")
+    ops = ["| Benchmark | " + " | ".join(MD_MODE_TITLES[m] for m in MODES5) + " |", "|---|" + "---:|" * len(MODES5)]
+    for key, _ in OP_ROWS:
+        cells = []
+        for m in MODES5:
+            ct, px = d["crypten"][m]["micro"][key], d["prix"][m]["micro"][key]
+            cells.append(f"{ct:.2f} / {px:.2f} (**{ct / px:.2f}x**)")
+        ops.append(f"| {key} | " + " | ".join(cells) + " |")
+    return "\n".join(lat), "\n".join(spd), "\n".join(ops)
+
+
+def md_transport(cpu, gpu):
+    sys.path.insert(0, HERE)
+    from transport_ablation import rows, summarize  # noqa: E402
+
+    out = ["| PriX speedup over CrypTen (geomean) | PriX over TCP (default) | PriX over gloo (CrypTen's transport) | PriX over shared memory |", "|---|---:|---:|---:|"]
+    bullets = []
+    for d, label in ((cpu, "CPU"), (gpu, "GPU")):
+        if d is None or not all(k in d for k in ("crypten", "prix", "prix_gloo", "prix_shm")):
+            continue
+        s_llm, s_ops = summarize(rows(d, "llm")), summarize(rows(d, "micro"))
+        n_llm, n_ops = len(rows(d, "llm")), len(rows(d, "micro"))
+        out.append(f"| {label} · Transformer blocks ({n_llm} configs) | **{s_llm['tcp']:.2f}x** | {s_llm['gloo']:.2f}x | {s_llm['shm']:.2f}x |")
+        out.append(f"| {label} · Primitives ({n_ops} configs) | **{s_ops['tcp']:.2f}x** | {s_ops['gloo']:.2f}x | {s_ops['shm']:.2f}x |")
+        bullets.append(f"- **{label}:** over CrypTen's own `gloo` transport PriX is still {s_llm['gloo']:.2f}x faster on Transformer blocks ({s_ops['gloo']:.2f}x on primitives); PriX's TCP transport is {s_llm['tcp_vs_gloo']:.2f}x faster than `gloo` on blocks ({s_ops['tcp_vs_gloo']:.2f}x on primitives); shared memory adds {100 * (s_llm['shm_vs_tcp'] - 1):.0f}% on blocks and {100 * (s_ops['shm_vs_tcp'] - 1):.0f}% on small, round-bound primitives.")
+    return "\n".join(out) + "\n\n" + "\n".join(bullets)
+
+
+def md_fss_sublayers(d):
+    cols = [c for c in FSS_COLS if c[0] in d]
+    hdr = "| Benchmark | Metric | " + " | ".join(f"**{c[1]}**" for c in cols) + " |"
+    out = [hdr, "|---|---|" + "---:|" * len(cols)]
+    for sub, label in [("gelu_128x3072", "GeLU `(1,128,3072)`"), ("softmax_12x128x128", "Softmax `(1,12,128,128)`"), ("layernorm_128x768", "LayerNorm `(1,128,768)`")]:
+        P = [d[c[0]]["sublayers"][sub] for c in cols]
+        out.append(f"| **{label}** | rounds / online 1P | " + " | ".join(f"{p['rounds']} / {p['online_bytes_1p'] / 1e6:.1f} MB" for p in P) + " |")
+        out.append("| | key 1P (λ=128) / time / MAE | " + " | ".join(f"{p['key_bytes_1p_l128'] / 1e6:.0f} MB / {p['time_s']:.2f} s / {p['mae']:.1e}" for p in P) + " |")
+    for mod, label in [("bert_base", "`BERT-base` (12L, L=128)"), ("bert_large", "`BERT-large` (24L, L=128)"), ("gpt2_64", "`GPT-2` (12L, L=64)"), ("gpt2_128", "`GPT-2` (12L, L=128)")]:
+        P = [d[c[0]]["models"].get(mod) for c in cols]
+        if any(p is None for p in P):
+            continue
+        out.append(f"| **{label}** | rounds / online 1P | " + " | ".join(f"{p['total_rounds']:,} / {p['total_online_gb_1p']:.3f} GB" for p in P) + " |")
+        out.append("| | key 1P (λ=128) / time / block MAE | " + " | ".join(f"{p['total_key_gb_1p_l128']:.2f} GB / {p['total_time_s']:.1f} s / {p['mae']:.4f}" for p in P) + " |")
+    return "\n".join(out)
+
+
+def md_env(d, keys):
+    env = env_of(d)
+    return " · ".join(f"{k}: `{env.get(k)}`" for k in keys if env.get(k) is not None)
+
+
 # ----------------------------------------------------------------------------- outputs
 def write_macros():
     lines = ["% Generated by benchmarks/make_tables.py -- do not edit by hand.", "% Every number quoted in prose comes from benchmarks/results/*.json through these macros."]
@@ -422,9 +510,17 @@ def main():
     ablation_table(load("fss_trunc_ablation_cpu.json"))
     write_macros()
     write_provenance()
+    docs_bench = os.path.join(ROOT, "docs", "benchmarks.md")
     if fss_md:
         replace_block(os.path.join(ROOT, "README.md"), "fss_bert_base", fss_md)
-        replace_block(os.path.join(ROOT, "docs", "benchmarks.md"), "fss_bert_base", "\n".join(fss_md.splitlines()[:-1]))
+        replace_block(docs_bench, "fss_bert_base", "\n".join(fss_md.splitlines()[:-1]))
+        replace_block(docs_bench, "fss_sublayers", md_fss_sublayers(load("fss_modes_cpu.json")))
+    for d, tag in ((cpu, "cpu"), (gpu, "gpu")):
+        t = md_crypten(d)
+        if t:
+            replace_block(docs_bench, f"{tag}_llm_latency", t[0]); replace_block(docs_bench, f"{tag}_llm_speedup", t[1]); replace_block(docs_bench, f"{tag}_ops", t[2])
+            replace_block(docs_bench, f"{tag}_env", md_env(d, ["cpu_model", "gpu_model", "python_version", "jax_version", "torch_version", "prix_commit", "timestamp_utc", "loadavg_1m_at_start"]))
+    replace_block(docs_bench, "transport", md_transport(cpu, gpu))
     if acc_md:
         replace_block(os.path.join(ROOT, "docs", "modes_and_configuration.md"), "accuracy_ranges", acc_md)
     print(f"wrote {len(os.listdir(TABLES))} files to paper/tables, {len(MACROS)} macros, {len(PROVENANCE)} provenance rows")

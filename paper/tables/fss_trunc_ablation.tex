@@ -1,0 +1,33 @@
+\begin{tabular}{@{}llcccc@{}}
+\toprule
+\textbf{Benchmark} & \textbf{Metric} & \textbf{\texttt{wave\_det\_egk}} & \textbf{\texttt{wave\_det\_crypten}} & \textbf{\texttt{wave\_prob\_egk}} & \textbf{\texttt{wave\_prob\_crypten}} \\
+ & & (\texttt{lut\_indexing="wave", truncation="egk"}) & (\texttt{lut\_indexing="wave", truncation="crypten"}) & (\texttt{lut\_indexing="wave\_prob", truncation="egk"}) & (\texttt{lut\_indexing="wave\_prob", truncation="crypten"}) \\
+\midrule
+\multirow{2}{*}{$\operatorname{GeLU}$ $(1, 128, 3072)$}
+ & Rounds / 2P Comm & \textbf{2 rds / $31.46\,\text{MB}$} & \textbf{2 rds / $31.46\,\text{MB}$} & \textbf{2 rds / $31.46\,\text{MB}$} & \textbf{2 rds / $31.46\,\text{MB}$} \\
+ & Time / MAE / Max & $1.647\,\text{s}$ / $1.90\text{e}-3$ / $1.58\text{e}-2$ & $1.703\,\text{s}$ / $1.90\text{e}-3$ / $1.58\text{e}-2$ & $0.263\,\text{s}$ / $9.77\text{e}-3$ / $2.10\text{e}-1$ & $0.221\,\text{s}$ / $9.80\text{e}-3$ / $2.08\text{e}-1$ \\
+\midrule
+\multirow{2}{*}{$\operatorname{Softmax}$ $(1, 12, 128, 128)$}
+ & Rounds / 2P Comm & 23 rds / $34.82\,\text{MB}$ & \textbf{22 rds / $31.68\,\text{MB}$} & 23 rds / $34.82\,\text{MB}$ & \textbf{22 rds / $31.68\,\text{MB}$} \\
+ & Time / MAE / Max & $1.873\,\text{s}$ / $6.86\text{e}-5$ / $1.35\text{e}-3$ & $1.805\,\text{s}$ / $6.86\text{e}-5$ / $1.36\text{e}-3$ & $0.809\,\text{s}$ / $2.77\text{e}-4$ / $1.03\text{e}-2$ & $0.782\,\text{s}$ / $2.75\text{e}-4$ / $1.08\text{e}-2$ \\
+\midrule
+\multirow{2}{*}{$\operatorname{LayerNorm}$ $(1, 128, 768)$}
+ & Rounds / 2P Comm & 11 rds / $9.48\,\text{MB}$ & \textbf{8 rds / $4.76\,\text{MB}$} & 11 rds / $9.48\,\text{MB}$ & \textbf{8 rds / $4.76\,\text{MB}$} \\
+ & Time / MAE / Max & $0.311\,\text{s}$ / $4.30\text{e}-5$ / $9.39\text{e}-4$ & $0.301\,\text{s}$ / $4.34\text{e}-5$ / $9.39\text{e}-4$ & $0.087\,\text{s}$ / $2.36\text{e}-4$ / $8.51\text{e}-3$ & $0.067\,\text{s}$ / $1.59\text{e}-4$ / $8.49\text{e}-3$ \\
+\midrule
+\multirow{3}{*}{\texttt{BERT-base} (12L, $L=128$)}
+ & Rounds / 2P Comm & 768 rds / $1.551\,\text{GB}$ & \textbf{576 rds / $1.136\,\text{GB}$} & 768 rds / $1.551\,\text{GB}$ & \textbf{576 rds / $1.136\,\text{GB}$} \\
+ & Total Time & $53.57\,\text{s}$ & $53.75\,\text{s}$ & $18.57\,\text{s}$ & \textbf{$18.12\,\text{s}$} \\
+ & Block MAE / Max & $0.0028$ / $0.0159$ & \textbf{$0.0028$ / $0.0155$} & $0.0191$ / $0.1146$ & $0.0191$ / $0.1092$ \\
+\midrule
+\multirow{3}{*}{\texttt{BERT-large} (24L, $L=128$)}
+ & Rounds / 2P Comm & 1,536 rds / $4.136\,\text{GB}$ & \textbf{1,152 rds / $3.029\,\text{GB}$} & 1,536 rds / $4.136\,\text{GB}$ & \textbf{1,152 rds / $3.029\,\text{GB}$} \\
+ & Total Time & $148.44\,\text{s}$ & $133.07\,\text{s}$ & $52.29\,\text{s}$ & \textbf{$46.49\,\text{s}$} \\
+ & Block MAE / Max & $0.0028$ / $0.0161$ & \textbf{$0.0028$ / $0.0160$} & $0.0192$ / $0.1067$ & $0.0193$ / $0.1120$ \\
+\midrule
+\multirow{3}{*}{\texttt{GPT-2} (12L, $L=64$)}
+ & Rounds / 2P Comm & 744 rds / $0.643\,\text{GB}$ & \textbf{552 rds / $0.464\,\text{GB}$} & 744 rds / $0.643\,\text{GB}$ & \textbf{552 rds / $0.464\,\text{GB}$} \\
+ & Total Time & $26.35\,\text{s}$ & $23.62\,\text{s}$ & $8.65\,\text{s}$ & \textbf{$7.89\,\text{s}$} \\
+ & Block MAE / Max & $0.0028$ / $0.0156$ & \textbf{$0.0028$ / $0.0140$} & $0.0191$ / $0.1014$ & $0.0194$ / $0.1227$ \\
+\bottomrule
+\end{tabular}
