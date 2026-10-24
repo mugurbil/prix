@@ -855,6 +855,15 @@ if __name__ == "__main__":
         help="Start with a fresh output JSON instead of merging into an existing --out file",
     )
     args = parser.parse_args()
+    if str(args.device).startswith("cuda") and args.framework in ("all", "prix"):
+        import jax
+
+        if jax.default_backend() != "gpu":
+            sys.exit(
+                f"--device {args.device} requested but this Python's JAX only sees {jax.devices()}. "
+                "Install the CUDA build *after* the CrypTen/torch dependencies "
+                '(pip install -U "jax[cuda12]") or use --device cpu.'
+            )
     if args.framework == "curl":
         args.framework = "crypten"
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
