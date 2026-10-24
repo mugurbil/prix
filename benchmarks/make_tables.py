@@ -463,6 +463,28 @@ def md_fss_sublayers(d):
     return "\n".join(out)
 
 
+def md_fss_gpu(gpu, cpu):
+    """CPU vs GPU block time per FSS variant (same protocols; rounds/bytes/MAE are device-independent)."""
+    if gpu is None:
+        return None
+    keys = [c for c in FSS_COLS if c[0] in gpu and c[0] in (cpu or {})]
+    env = env_of(gpu)
+    out = [f"GPU session: `{env.get('gpu')}` (Google Colab), JAX `{env.get('jax')}`, commit `{env.get('git_commit')}`, {env.get('repeats')} repeats, both parties on one GPU. CPU column: the session of §2.1/§2.2.", "",
+           "| Model | Metric | " + " | ".join(f"**{c[1]}**" for c in keys) + " |", "|---|---|" + "---:|" * len(keys)]
+    for mod, label in [("bert_base", "`BERT-base` (12L)"), ("bert_large", "`BERT-large` (24L)"), ("gpt2_64", "`GPT-2` (12L, L=64)")]:
+        G = [gpu[c[0]]["models"].get(mod) for c in keys]; C = [cpu[c[0]]["models"].get(mod) for c in keys]
+        if any(p is None for p in G + C):
+            continue
+        out.append(f"| **{label}** | time, CPU (AMD EPYC 7B12, 24 vCPU) | " + " | ".join(f"{p['total_time_s']:.1f} s" for p in C) + " |")
+        out.append("| | time, GPU (Tesla T4) | " + " | ".join(f"{p['total_time_s']:.1f} s" for p in G) + " |")
+        out.append("| | block MAE (GPU) | " + " | ".join(f"{p['mae']:.4f}" for p in G) + " |")
+        if mod == "bert_base":
+            for c, p in zip(keys, G):
+                K = c[0].replace("_", " ").title().replace(" ", "")
+                macro(f"GpuBertBase{K}TimeS", f"{p['total_time_s']:.1f}")
+    return "\n".join(out)
+
+
 def md_env(d, keys):
     env = env_of(d)
     return " · ".join(f"{k}: `{env.get(k)}`" for k in keys if env.get(k) is not None)
@@ -521,6 +543,12 @@ def main():
             replace_block(docs_bench, f"{tag}_llm_latency", t[0]); replace_block(docs_bench, f"{tag}_llm_speedup", t[1]); replace_block(docs_bench, f"{tag}_ops", t[2])
             replace_block(docs_bench, f"{tag}_env", md_env(d, ["cpu_model", "gpu_model", "python_version", "jax_version", "torch_version", "prix_commit", "timestamp_utc", "loadavg_1m_at_start"]))
     replace_block(docs_bench, "transport", md_transport(cpu, gpu))
+    fss_gpu_md = md_fss_gpu(load("fss_modes_gpu.json"), load("fss_modes_cpu.json"))
+    if fss_gpu_md:
+        replace_block(docs_bench, "fss_gpu", fss_gpu_md)
+        env = env_of(load("fss_modes_gpu.json"))
+        PROVENANCE.append(("docs §2.4 (FSS modes on GPU)", "benchmark_fss_modes.py --device cuda (Colab notebook 05)", "results/fss_modes_gpu.json", env.get("git_commit"), env.get("timestamp")))
+        write_provenance()
     if acc_md:
         replace_block(os.path.join(ROOT, "docs", "modes_and_configuration.md"), "accuracy_ranges", acc_md)
     print(f"wrote {len(os.listdir(TABLES))} files to paper/tables, {len(MACROS)} macros, {len(PROVENANCE)} provenance rows")

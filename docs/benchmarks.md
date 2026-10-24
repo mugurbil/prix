@@ -165,6 +165,26 @@ Two parties, CPU, $f=16$, `BERT-base` shapes ($L=128$). Online bytes and preproc
 > [!IMPORTANT]
 > **Input range matters more than table resolution.** Before v0.2.1 every LUT mode (Curl, SIGMA, Wave) had a Transformer-block MAE of 0.045–0.051 regardless of how accurate its primitives were: the softmax denominator $\sum_j e^{x_j-\max} \in [1, L]$ exceeded the reciprocal table's $[0, 64)$ domain whenever attention was near-uniform, and LayerNorm's `inv_sqrt` table stopped at variance 16. PriX now sizes the inverse table from the softmax length (as SIGMA §5.2.3 does) and the `default`/`wave` presets use a range-extended `inv_sqrt` (variances in $[2^{-8}, 2^{16})$). The `sigma_ext` column shows the same fix applied to SIGMA: its block MAE drops from 0.0017 to 0.0006, i.e. SIGMA's and Wave's protocols are equally accurate once both see in-range inputs. See Section 6.3 of the paper.
 
-### 2.3 Deterministic vs. probabilistic truncation (2-round Wave)
+### 2.3 FSS modes on a GPU (Tesla T4)
+
+Rounds, bytes, key sizes and errors are identical to the CPU session (the protocols do not change); only the local compute does. With both parties sharing one T4 and PriX's FP64-limb matrix multiplication (the T4 has 1/32-rate FP64), every FSS variant is **slower on the T4 than on the 24-vCPU CPU host**; the ranking between variants is the same. SIGMA's published GPU figures include key transfer and use AES-NI/CUTLASS kernels, so they are not comparable with this column (see the warning above).
+
+<!-- generated:fss_gpu:begin -->
+GPU session: `Tesla T4` (Google Colab), JAX `0.12.0.1`, commit `5ee61bc`, 3 repeats, both parties on one GPU. CPU column: the session of §2.1/§2.2.
+
+| Model | Metric | **Wave** | **Wave + SIGMA TR** | **Wave-Prob** | **SIGMA** | **Curl** | **SHAFT** |
+|---|---|---:|---:|---:|---:|---:|---:|
+| **`BERT-base` (12L)** | time, CPU (AMD EPYC 7B12, 24 vCPU) | 53.5 s | 23.4 s | 19.0 s | 62.1 s | 17.9 s | 23.6 s |
+| | time, GPU (Tesla T4) | 167.5 s | 61.9 s | 59.1 s | 297.1 s | 75.4 s | 80.0 s |
+| | block MAE (GPU) | 0.0028 | 0.0028 | 0.0192 | 0.0016 | 0.0191 | 0.0015 |
+| **`BERT-large` (24L)** | time, CPU (AMD EPYC 7B12, 24 vCPU) | 135.9 s | 61.7 s | 50.5 s | 183.1 s | 50.1 s | 64.1 s |
+| | time, GPU (Tesla T4) | 456.3 s | 188.1 s | 177.5 s | 844.5 s | 254.3 s | 265.0 s |
+| | block MAE (GPU) | 0.0028 | 0.0028 | 0.0193 | 0.0018 | 0.0188 | 0.0015 |
+| **`GPT-2` (12L, L=64)** | time, CPU (AMD EPYC 7B12, 24 vCPU) | 23.2 s | 13.1 s | 8.8 s | 26.3 s | 11.3 s | 11.4 s |
+| | time, GPU (Tesla T4) | 74.0 s | 35.5 s | 30.2 s | 114.2 s | 46.2 s | 50.9 s |
+| | block MAE (GPU) | 0.0028 | 0.0028 | 0.0193 | 0.0019 | 0.0188 | 0.0015 |
+<!-- generated:fss_gpu:end -->
+
+### 2.4 Deterministic vs. probabilistic truncation (2-round Wave)
 
 `benchmarks/benchmark_fss_modes.py --ablation` runs the four combinations of `lut_indexing ∈ {wave, wave_prob}` × `truncation ∈ {egk, crypten}`; the paper's Section 6.4 discusses them. In short: probabilistic LUT indexing (`wave_prob`) is ~3× faster locally and needs 40 % less key but raises block MAE from 0.0028 to 0.019 (Curl's level); local product truncation (`crypten`) saves 25 % of the rounds with no measurable accuracy change on these blocks, but is not a secure protocol in general (Section 6.4 of the paper explains the wrap-around failure modes).
