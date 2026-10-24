@@ -46,7 +46,7 @@ Eight nonlinearity modes share one API and are selected with a single argument, 
 | `crypten` / `poly` / `fission` | CrypTen Newton/limit · PUMA polynomials · hybrid evaluator | see [benchmarks](docs/benchmarks.md) | | | | |
 <!-- generated:fss_bert_base:end -->
 
-- **vs. CrypTen**: identical API (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn`), **1.5–6.6× faster Transformer blocks on CPU (geomean 4.0×) and 1.9–3.1× on GPU (geomean 2.3×)**, with the same protocols ([details](docs/benchmarks.md#prix-jax-vs-crypten-pytorch)).
+- **vs. CrypTen**: identical API (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn`), **1.5–6.6× faster Transformer blocks on CPU (geomean 4.0×) and 1.9–3.0× on a Tesla T4 GPU (geomean 2.3×)**, with the same protocols ([details](docs/benchmarks.md#prix-jax-vs-crypten-pytorch)).
 - **vs. SIGMA**: PriX's `sigma` mode reproduces SIGMA's communication and key sizes within 4% (Tables 2/5 of their paper); the `default` preset then needs **20% fewer rounds, 15% less online traffic, 42% smaller keys and ~2.7× less CPU time at equal accuracy** (block MAE 0.0007 vs. 0.0006 once SIGMA's LayerNorm table covers the same variance range — SIGMA's published configuration gives 0.0017). SIGMA's C++/CUDA build remains faster per PRG call (AES-NI; PriX is Python/XLA) and ships a cryptographic PRG.
 - **The protocol study** (paper §6) is reproducible with one script: `python benchmarks/benchmark_fss_modes.py [--device cuda]`, or the [GPU Colab](examples/prix_fss_wave_sigma_gpu_colab.ipynb).
 
