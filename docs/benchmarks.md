@@ -39,7 +39,7 @@ PriX was also run over CrypTen's own `torch.distributed`/`gloo` transport (its 2
 cpu_model: `AMD EPYC 7B12` · python_version: `3.13.15` · jax_version: `0.12.0` · torch_version: `2.14.1+cpu` · prix_commit: `56a6672c0151c0f9decab07b8951d45a63052bb8` · timestamp_utc: `2026-10-24T02:49:33Z` · loadavg_1m_at_start: `9.27`
 <!-- generated:cpu_env:end -->
 
-#### Transformer blocks — latency (ms)
+#### Transformer blocks: latency (ms)
 <!-- generated:cpu_llm_latency:begin -->
 | Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT (Fourier + ODE) | PriX · SHAFT (Fourier + ODE) | CrypTen · Curl LUTs | PriX · Curl LUTs | CrypTen · Fission | PriX · Fission |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -50,7 +50,7 @@ cpu_model: `AMD EPYC 7B12` · python_version: `3.13.15` · jax_version: `0.12.0`
 | ModernBert (1-Block, seq=16) | 1730.70 | 523.73 | 2078.42 | 502.62 | 1990.67 | 408.75 | 1552.91 | 400.21 | 1147.84 | 272.87 |
 <!-- generated:cpu_llm_latency:end -->
 
-#### Transformer blocks — PriX speedup over CrypTen
+#### Transformer blocks: PriX speedup over CrypTen
 <!-- generated:cpu_llm_speedup:begin -->
 | Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
@@ -83,7 +83,7 @@ cpu_model: `AMD EPYC 7B12` · python_version: `3.13.15` · jax_version: `0.12.0`
 cpu_model: `Intel(R) Xeon(R) CPU @ 2.00GHz` · gpu_model: `Tesla T4` · python_version: `3.13.16` · jax_version: `0.12.0.1` · torch_version: `2.11.0+cu130` · prix_commit: `f6194ab94d6347b7ce784816072504e080e1485a` · timestamp_utc: `2026-10-24T20:13:57Z` · loadavg_1m_at_start: `2.34326171875`
 <!-- generated:gpu_env:end -->
 
-#### Transformer blocks — latency (ms)
+#### Transformer blocks: latency (ms)
 <!-- generated:gpu_llm_latency:begin -->
 | Model | CrypTen · CrypTen approx. | PriX · CrypTen approx. | CrypTen · Piecewise poly | PriX · Piecewise poly | CrypTen · SHAFT (Fourier + ODE) | PriX · SHAFT (Fourier + ODE) | CrypTen · Curl LUTs | PriX · Curl LUTs | CrypTen · Fission | PriX · Fission |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -94,7 +94,7 @@ cpu_model: `Intel(R) Xeon(R) CPU @ 2.00GHz` · gpu_model: `Tesla T4` · python_v
 | ModernBert (1-Block, seq=16) | 1494.21 | 771.50 | 1705.33 | 783.20 | 1507.36 | 584.68 | 1562.69 | 631.61 | 716.10 | 341.34 |
 <!-- generated:gpu_llm_latency:end -->
 
-#### Transformer blocks — PriX speedup over CrypTen
+#### Transformer blocks: PriX speedup over CrypTen
 <!-- generated:gpu_llm_speedup:begin -->
 | Model | CrypTen approx. | Piecewise poly | SHAFT (Fourier + ODE) | Curl LUTs | Fission |
 |---|---:|---:|---:|---:|---:|
@@ -126,7 +126,7 @@ cpu_model: `Intel(R) Xeon(R) CPU @ 2.00GHz` · gpu_model: `Tesla T4` · python_v
 Two parties, CPU, $f=16$, `BERT-base` shapes ($L=128$). Online bytes and preprocessing key bytes are **per party**; key bytes count seed correction words at $\lambda=128$ (16 B per DPF level, as SIGMA/Orca do) so they are comparable with SIGMA's Table 2, which PriX's `sigma` mode reproduces within 4 %. `sigma_ext` is SIGMA with the default preset's range-extended `inv_sqrt`, so that the block-error gap between `sigma` and `default` can be attributed to LayerNorm input range rather than protocol. Script: `benchmarks/benchmark_fss_modes.py`.
 
 > [!WARNING]
-> All latencies are **online-phase** numbers with a **simulated dealer** (`provider=TFP`): both parties expand the same PRG seeds, so FSS correction words, Beaver tuples and masks are derived locally and **no key material is transmitted**. This is the convention of CrypTen's `TrustedFirstParty` and of the online columns in the SIGMA/Wave papers, but it is **not a secure deployment**, and SIGMA's published *GPU* latencies include host→device key transfer — do not compare device-local PriX timings against them. The key column is what a real dealer would have to send (`prix.provider.get_preproc_stats()`), and it exceeds the online traffic by 8–14× for every FSS scheme.
+> All latencies are **online-phase** numbers with a **simulated dealer** (`provider=TFP`): both parties expand the same PRG seeds, so FSS correction words, Beaver tuples and masks are derived locally and **no key material is transmitted**. This is the convention of CrypTen's `TrustedFirstParty` and of the online columns in the SIGMA/Wave papers, but it is **not a secure deployment**, and SIGMA's published *GPU* latencies include host→device key transfer; do not compare device-local PriX timings against them. The key column is what a real dealer would have to send (`prix.provider.get_preproc_stats()`), and it exceeds the online traffic by 8–14× for every FSS scheme.
 
 ### 2.1 `BERT-base`, per party
 <!-- generated:fss_bert_base:begin -->

@@ -7,7 +7,7 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/mugurbil/prix/blob/main/CONTRIBUTING.md)
 --------------------------------------------------------------------------------
 
-**PriX** is a JAX/XLA framework for **private Transformer inference with secure multi-party computation (MPC)**. It is a **drop-in alternative to [CrypTen](https://github.com/facebookresearch/CrypTen)** — same API, 2–4× faster, maintained on current Python/JAX — that **also subsumes [SIGMA](https://doi.org/10.56553/popets-2024-0107)/[Wave](https://doi.org/10.56553/popets-2025-0083)-style Function Secret Sharing (FSS)**: DPF/DCF comparisons, faithful truncation and wavelet look-up tables, all compiled to fused XLA kernels on CPU and GPU.
+**PriX** is a JAX/XLA framework for **private Transformer inference with secure multi-party computation (MPC)**. It is a **drop-in alternative to [CrypTen](https://github.com/facebookresearch/CrypTen)** (same API, 2–4× faster, maintained on current Python/JAX) that **also subsumes [SIGMA](https://doi.org/10.56553/popets-2024-0107)/[Wave](https://doi.org/10.56553/popets-2025-0083)-style Function Secret Sharing (FSS)**: DPF/DCF comparisons, faithful truncation and wavelet look-up tables, all compiled to fused XLA kernels on CPU and GPU.
 
 ```python
 import prix
@@ -24,7 +24,7 @@ print(demo())
 Eight nonlinearity modes share one API and are selected with a single argument, `mode="default" | "wave" | "sigma" | "curl" | "poly" | "shaft" | "crypten" | "fission"` (PriX's own default, then [Wave](https://doi.org/10.56553/popets-2025-0083), [SIGMA](https://doi.org/10.56553/popets-2024-0107), [Curl](https://eprint.iacr.org/2024/1127), [PUMA](https://arxiv.org/abs/2307.12533), [SHAFT](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), [CrypTen](https://arxiv.org/abs/2109.00984), [Fission](https://eprint.iacr.org/2025/653)), so a cross-paper ablation is a `for` loop.
 
 > [!WARNING]
-> **Research prototype — not suitable for protecting real secrets.** Security is semi-honest. The default `TFP` provider is a *simulated* dealer (both parties expand the same seeds, so no key material is ever transferred and party 0 could learn every secret — as in CrypTen); use `TTP` for a non-colluding dealer. FSS PRG trees are expanded with `SplitMix64` from 62-bit seeds (`cfg.mpc.prng="siphash24"` for a keyed PRF), which is *not* a cryptographic PRG at 128-bit security. See [Security](#security-and-what-prix-is-not).
+> **Research prototype: not suitable for protecting real secrets.** Security is semi-honest. The default `TFP` provider is a *simulated* dealer (both parties expand the same seeds, so no key material is ever transferred and party 0 could learn every secret, as in CrypTen); use `TTP` for a non-colluding dealer. FSS PRG trees are expanded with `SplitMix64` from 62-bit seeds (`cfg.mpc.prng="siphash24"` for a keyed PRF), which is *not* a cryptographic PRG at 128-bit security. See [Security](#security-and-what-prix-is-not).
 
 ---
 
@@ -47,7 +47,7 @@ Eight nonlinearity modes share one API and are selected with a single argument, 
 <!-- generated:fss_bert_base:end -->
 
 - **vs. CrypTen**: identical API (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn`), **1.5–6.6× faster Transformer blocks on CPU (geomean 4.0×) and 1.9–3.0× on a Tesla T4 GPU (geomean 2.3×)**, with the same protocols ([details](docs/benchmarks.md#prix-jax-vs-crypten-pytorch)).
-- **vs. SIGMA**: PriX's `sigma` mode reproduces SIGMA's communication and key sizes within 4% (Tables 2/5 of their paper); the `default` preset then needs **20% fewer rounds, 15% less online traffic, 42% smaller keys and ~2.7× less CPU time at equal accuracy** (block MAE 0.0007 vs. 0.0006 once SIGMA's LayerNorm table covers the same variance range — SIGMA's published configuration gives 0.0017). SIGMA's C++/CUDA build remains faster per PRG call (AES-NI; PriX is Python/XLA) and ships a cryptographic PRG.
+- **vs. SIGMA**: PriX's `sigma` mode reproduces SIGMA's communication and key sizes within 4% (Tables 2/5 of their paper); the `default` preset then needs **20% fewer rounds, 15% less online traffic, 42% smaller keys and ~2.7× less CPU time at equal accuracy** (block MAE 0.0007 vs. 0.0006 once SIGMA's LayerNorm table covers the same variance range; SIGMA's published configuration gives 0.0017). SIGMA's C++/CUDA build remains faster per PRG call (AES-NI; PriX is Python/XLA) and ships a cryptographic PRG.
 - **The protocol study** (paper §6) is reproducible with one script: `python benchmarks/benchmark_fss_modes.py [--device cuda]`, or the [GPU Colab](examples/prix_fss_wave_sigma_gpu_colab.ipynb).
 
 ---
@@ -109,7 +109,7 @@ prix.cfg.mpc.fss_bits = 48                      # effective bit-width of FSS com
 
 | | |
 |---|---|
-| [Paper (PDF)](paper/prix_arxiv.pdf) · [LaTeX](paper/main.tex) | *PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX* — architecture, CrypTen comparison, and the FSS/wavelet protocol study (§6). |
+| [Paper (PDF)](paper/prix_arxiv.pdf) · [LaTeX](paper/main.tex) | *PriX: Private Accelerated Transformers via Secure Multi-Party Computation in JAX*: architecture, CrypTen comparison, and the FSS/wavelet protocol study (§6). |
 | [Quickstart & CrypTen migration](docs/quickstart.md) | Side-by-side cheat sheet, arithmetic vs. binary sharing, `TFP` vs. `TTP`. |
 | [Modes & configuration](docs/modes_and_configuration.md) | Every preset, every `prix.cfg` knob, valid input ranges per function. |
 | [Benchmarks](docs/benchmarks.md) | CPU/GPU tables and charts vs. CrypTen, transport ablation, FSS-mode comparison with key sizes. |
@@ -133,14 +133,14 @@ Tests: `JAX_PLATFORMS=cpu python -m pytest tests -q`.
 
 ## References
 
-- **CrypTen** — Knott et al., *CrypTen: Secure Multi-Party Computation Meets Machine Learning*, NeurIPS 2021 ([paper](https://arxiv.org/abs/2109.00984), [code](https://github.com/facebookresearch/CrypTen)).
-- **SIGMA** — Gupta et al., *SIGMA: Secure GPT Inference with Function Secret Sharing*, PoPETs 2024 ([paper](https://doi.org/10.56553/popets-2024-0107), [code](https://github.com/mpc-msri/EzPC)).
-- **Wave** — Reis, Ugurbil, Wagh, Henry, de Vega, *Wave Hello to Privacy: Efficient Mixed-Mode MPC using Wavelet Transforms*, PoPETs 2025 ([paper](https://doi.org/10.56553/popets-2025-0083)).
-- **Curl** — Santos, Mouris, Ugurbil, Jarecki, Reis, Sengupta, de Vega, *Curl: Private LLMs through Wavelet-Encoded Look-Up Tables*, CAMLIS 2024 ([ePrint](https://eprint.iacr.org/2024/1127), [code](https://github.com/jimouris/curl)).
-- **PUMA** — Dong et al., *PUMA: Secure Inference of LLaMA-7B in Five Minutes*, 2023 ([arXiv](https://arxiv.org/abs/2307.12533), [code](https://github.com/secretflow/spu)).
-- **SHAFT** — Kei, Chow, *SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference*, NDSS 2025 ([paper](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), [code](https://github.com/andeskyl/SHAFT)).
-- **Fission** — Ugurbil, Mouris, Santos, Cabrero-Holgueras, de Vega, Sengupta, *Fission: Distributed Privacy-Preserving Large Language Model Inference*, IEEE CNS 2025 ([ePrint](https://eprint.iacr.org/2025/653)).
-- **TruncPr** — Escudero, Ghosh, Keller, Rachuri, Scholl, *Improved Primitives for MPC over Mixed Arithmetic-Binary Circuits*, CRYPTO 2020 (`[EGK+20]`).
+- **CrypTen**: Knott et al., *CrypTen: Secure Multi-Party Computation Meets Machine Learning*, NeurIPS 2021 ([paper](https://arxiv.org/abs/2109.00984), [code](https://github.com/facebookresearch/CrypTen)).
+- **SIGMA**: Gupta et al., *SIGMA: Secure GPT Inference with Function Secret Sharing*, PoPETs 2024 ([paper](https://doi.org/10.56553/popets-2024-0107), [code](https://github.com/mpc-msri/EzPC)).
+- **Wave**: Reis, Ugurbil, Wagh, Henry, de Vega, *Wave Hello to Privacy: Efficient Mixed-Mode MPC using Wavelet Transforms*, PoPETs 2025 ([paper](https://doi.org/10.56553/popets-2025-0083)).
+- **Curl**: Santos, Mouris, Ugurbil, Jarecki, Reis, Sengupta, de Vega, *Curl: Private LLMs through Wavelet-Encoded Look-Up Tables*, CAMLIS 2024 ([ePrint](https://eprint.iacr.org/2024/1127), [code](https://github.com/jimouris/curl)).
+- **PUMA**: Dong et al., *PUMA: Secure Inference of LLaMA-7B in Five Minutes*, 2023 ([arXiv](https://arxiv.org/abs/2307.12533), [code](https://github.com/secretflow/spu)).
+- **SHAFT**: Kei, Chow, *SHAFT: Secure, Handy, Accurate, and Fast Transformer Inference*, NDSS 2025 ([paper](https://www.ndss-symposium.org/ndss-paper/shaft-secure-handy-accurate-and-fast-transformer-inference/), [code](https://github.com/andeskyl/SHAFT)).
+- **Fission**: Ugurbil, Mouris, Santos, Cabrero-Holgueras, de Vega, Sengupta, *Fission: Distributed Privacy-Preserving Large Language Model Inference*, IEEE CNS 2025 ([ePrint](https://eprint.iacr.org/2025/653)).
+- **TruncPr**: Escudero, Ghosh, Keller, Rachuri, Scholl, *Improved Primitives for MPC over Mixed Arithmetic-Binary Circuits*, CRYPTO 2020 (`[EGK+20]`).
 
 ### Citing PriX
 

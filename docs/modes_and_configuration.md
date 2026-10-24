@@ -116,8 +116,8 @@ Each cell is median absolute error / worst-case absolute error over the test gri
 <!-- generated:accuracy_ranges:end -->
 
 **Known limits:**
-- **`default` / `wave`:** `exp` assumes non-positive inputs (`all_neg: True`; positive inputs return about 0 — Softmax only ever needs $x - \max \le 0$). `reciprocal` and `log` are tabulated on $[0, 64)$ with spacing $1/4$ and are only accurate for $x \gtrsim 1$ (the $[0.1, 1)$ part of the test grid hits the pole; Softmax denominators are $\ge 1$ and the table is widened to the sequence length automatically). `inv_sqrt` is range-extended to variances in $[2^{-8}, 2^{16})$; GeLU/SiLU cover $|x| < 8$ / $|x| < 16$. Within those ranges every function is accurate to $\le 10^{-4}$ median error.
-- **`sigma`:** same `exp`/`reciprocal` conventions as SIGMA ($f=12$-style tables at $f=16$); `inv_sqrt` keeps SIGMA's two-interval table, which stops at 16 — **LayerNorm is wrong for row variances above 16** (the `sigma_ext` benchmark variant shows the effect of lifting this).
+- **`default` / `wave`:** `exp` assumes non-positive inputs (`all_neg: True`; positive inputs return about 0; Softmax only ever needs $x - \max \le 0$). `reciprocal` and `log` are tabulated on $[0, 64)$ with spacing $1/4$ and are only accurate for $x \gtrsim 1$ (the $[0.1, 1)$ part of the test grid hits the pole; Softmax denominators are $\ge 1$ and the table is widened to the sequence length automatically). `inv_sqrt` is range-extended to variances in $[2^{-8}, 2^{16})$; GeLU/SiLU cover $|x| < 8$ / $|x| < 16$. Within those ranges every function is accurate to $\le 10^{-4}$ median error.
+- **`sigma`:** same `exp`/`reciprocal` conventions as SIGMA ($f=12$-style tables at $f=16$); `inv_sqrt` keeps SIGMA's two-interval table, which stops at 16, so **LayerNorm is wrong for row variances above 16** (the `sigma_ext` benchmark variant shows the effect of lifting this).
 - **`curl` (Curl defaults, identical to the Curl reference):**
   - `inv_sqrt` only covers inputs in [0, 2) (`lut_max_bits: 1`), so **LayerNorm is wrong whenever a row's variance is 2 or more**.
   - GeLU only covers |x| < 4 (`lut_max_bits: 2`).

@@ -781,7 +781,7 @@ def run_crypten(crypten_root, device, tmp_dir, modes, bench_args, prix_root=None
 # Report
 # ============================================================================
 def _fmt(v):
-    return "—" if v is None or v != v else f"{v:.2f}"
+    return "n/a" if v is None or v != v else f"{v:.2f}"
 
 
 def print_report(data):
@@ -818,7 +818,7 @@ def print_report(data):
             print("|---|---:|---:|---:|")
             for k in dict.fromkeys(list(p_sec) + list(c_sec)):
                 c_val, p_val = c_sec.get(k), p_sec.get(k)
-                speedup = f"**{c_val / p_val:.2f}x**" if c_val and p_val else "—"
+                speedup = f"**{c_val / p_val:.2f}x**" if c_val and p_val else "n/a"
                 print(f"| {k} | {_fmt(c_val)} | {_fmt(p_val)} | {speedup} |")
 
 

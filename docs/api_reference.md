@@ -7,12 +7,12 @@
   Decorator that spawns `world_size` MPC processes, initializes PriX with the specified `mode` (`"curl"`, `"poly"`, `"shaft"`, `"crypten"`, `"fission"`), executes the decorated function, and returns Party 0's return value to the caller.
 - **`prix.run(fn, *args, world_size=2, mode=None, evaluator_size=0, device=None, **kwargs)`**
   Functional equivalent of `@prix.mpc.run_multiprocess`: runs `fn(*args, **kwargs)` across `world_size` MPC parties and returns Party 0's result. Automatically sets `evaluator_size=1` when `mode="fission"`.
-- **Process start method (`start_method=`)** — accepted by `prix.run`, `@prix.mpc.run_multiprocess` and `MultiProcessLauncher`; can also be set with the `PRIX_START_METHOD` environment variable.
+- **Process start method (`start_method=`)**: accepted by `prix.run`, `@prix.mpc.run_multiprocess` and `MultiProcessLauncher`; can also be set with the `PRIX_START_METHOD` environment variable.
   - `"auto"` (the default) **forks** the MPC parties. Forking is fast and works with functions defined in notebooks.
   - If JAX has already run computations in the calling process, forking can deadlock the children. In that case `"auto"` switches to **`spawn`**: the function and its arguments are serialized with `cloudpickle`, and the parent's `prix.cfg` settings (including `temp_override`) are copied to the children. This adds about 2 s of startup per run.
   - `"fork"`, `"spawn"` and `"forkserver"` force a specific method.
   - Plain scripts that use `spawn` must put their top-level code under `if __name__ == "__main__":`.
-- **Transport (`transport=`, `tls=`)** — accepted by `prix.run`, `@prix.mpc.run_multiprocess` and `MultiProcessLauncher`; the default can be set with `PRIX_TRANSPORT`.
+- **Transport (`transport=`, `tls=`)**: accepted by `prix.run`, `@prix.mpc.run_multiprocess` and `MultiProcessLauncher`; the default can be set with `PRIX_TRANSPORT`.
   - `"tcp"` (default): direct peer-to-peer TCP over loopback, the same code path as a multi-host deployment. `tls={"certfile", "keyfile", "cafile"}` enables mutual TLS. See [Transports](transports.md).
   - `"shm"`: shared memory between local processes, a single-host simulation shortcut.
 - **`prix.set_mode(mode, device=None)`**

@@ -49,12 +49,12 @@ out = prix.run(my_fn, world_size=2, mode="shaft")  # transport="tcp" is the defa
 
 You do **not** need two computers to test the multi-host TCP stack. Open two terminal tabs on the same machine; each process binds to its own port on `127.0.0.1` (`29500` and `29501` by default):
 
-**Terminal 1 (Party 0 — holds the secret input `x`):**
+**Terminal 1 (Party 0, holds the secret input `x`):**
 ```bash
 python3 examples/multi_party_tcp.py --rank 0 --mode shaft --workload mlp
 ```
 
-**Terminal 2 (Party 1 — holds the secret model weights `W`):**
+**Terminal 2 (Party 1, holds the secret model weights `W`):**
 ```bash
 python3 examples/multi_party_tcp.py --rank 1 --mode shaft --workload mlp
 ```
