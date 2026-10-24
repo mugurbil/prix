@@ -42,6 +42,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import prix.communicator as comm
+from prix import ringprobe
 from prix.config import cfg
 from prix.encoder import resolve_device, to_jax
 from prix.random import _sm64_raw
@@ -123,6 +124,127 @@ def _prg2_u64(seeds: jnp.ndarray):
     return sL, tL, sR, tR
 
 
+# ------------------------------------------------------------------------------
+# 128-bit seeds with a ChaCha PRG (`cfg.mpc.fss_prg = "chacha"`).
+#
+# Seeds and correction words then carry a leading lane axis of size 2, `(lo, hi)`, so a seed
+# is 128 bits as in SIGMA/Grotto/Wave (lambda = 128). The two control bits of every level live
+# in bits 0 and 1 of the `lo` lane, exactly as in the 64-bit layout. Whether an array carries
+# lanes is a static property of its shape (`seed.ndim == ref.ndim + 1`), so the evaluation
+# kernels below serve both layouts without extra arguments, and the 64-bit SplitMix64 path is
+# bit-for-bit unchanged.
+#
+# The PRG is one ChaCha block (RFC 8439 round function, 128-bit-key "expand 16-byte k"
+# constants) keyed by the seed, with a fixed counter/nonce per use for domain separation; its
+# 512-bit output supplies `sL, sR` (2 x 128 bits), `tL, tR` and the DCF payloads `vL, vR`.
+# The round count is `cfg.mpc.fss_prg_rounds` (default 12), read when a kernel is first traced.
+# ------------------------------------------------------------------------------
+_SEED_MASK = ~jnp.uint64(3)
+_TAU = (0x61707865, 0x3120646E, 0x79622D36, 0x6B206574)  # "expand 16-byte k"
+
+
+def fss_prg_lanes():
+    """2 if FSS seeds are 128-bit (ChaCha PRG), else 1 (62-bit SplitMix64 seeds)."""
+    return 2 if str(getattr(cfg.mpc, "fss_prg", "splitmix64")).lower() == "chacha" else 1
+
+
+def _chacha_rounds():
+    return int(getattr(cfg.mpc, "fss_prg_rounds", 12))
+
+
+def _rotl32(x, n):
+    return (x << jnp.uint32(n)) | (x >> jnp.uint32(32 - n))
+
+
+def _chacha_core(init, rounds: int):
+    """ChaCha block function (RFC 8439 Sec. 2.3) on 16 uint32 state words; returns 16 words."""
+    x = list(init)
+
+    def qr(a, b, c, d):
+        x[a] = x[a] + x[b]; x[d] = _rotl32(x[d] ^ x[a], 16)  # noqa: E702
+        x[c] = x[c] + x[d]; x[b] = _rotl32(x[b] ^ x[c], 12)  # noqa: E702
+        x[a] = x[a] + x[b]; x[d] = _rotl32(x[d] ^ x[a], 8)  # noqa: E702
+        x[c] = x[c] + x[d]; x[b] = _rotl32(x[b] ^ x[c], 7)  # noqa: E702
+
+    for _ in range(rounds // 2):
+        qr(0, 4, 8, 12); qr(1, 5, 9, 13); qr(2, 6, 10, 14); qr(3, 7, 11, 15)  # noqa: E702
+        qr(0, 5, 10, 15); qr(1, 6, 11, 12); qr(2, 7, 8, 13); qr(3, 4, 9, 14)  # noqa: E702
+    return [xi + ii for xi, ii in zip(x, init)]
+
+
+def _chacha_block(seed, nonce: int, rounds: int):
+    """
+    One ChaCha block keyed by 128-bit seeds `seed` of shape (2, ...) uint64 (`lo`, `hi`).
+    Returns the 16 output words (uint32 arrays of shape `seed.shape[1:]`).
+    """
+    lo, hi = seed[0], seed[1]
+    k = [lo.astype(jnp.uint32), (lo >> jnp.uint64(32)).astype(jnp.uint32),
+         hi.astype(jnp.uint32), (hi >> jnp.uint64(32)).astype(jnp.uint32)]
+    z = jnp.zeros_like(k[0])
+    init = [z + jnp.uint32(c) for c in _TAU] + k + k + [z, z + jnp.uint32(nonce), z, z]
+    return _chacha_core(init, rounds)
+
+
+def _u64(w_lo, w_hi):
+    return w_lo.astype(jnp.uint64) | (w_hi.astype(jnp.uint64) << jnp.uint64(32))
+
+
+def _chacha_prg4(seed):
+    """(sL, tL, vL, sR, tR, vR) from one ChaCha block; sL/sR are (2, ...) 128-bit seeds."""
+    w = _chacha_block(seed, 0x50524734, _chacha_rounds())  # nonce "PRG4"
+    sL = jnp.stack([_u64(w[0], w[1]) & _SEED_MASK, _u64(w[2], w[3])], axis=0)
+    sR = jnp.stack([_u64(w[4], w[5]) & _SEED_MASK, _u64(w[6], w[7])], axis=0)
+    tL = (w[8] & jnp.uint32(1)).astype(jnp.uint64)
+    tR = (w[9] & jnp.uint32(1)).astype(jnp.uint64)
+    vL = jax.lax.bitcast_convert_type(_u64(w[10], w[11]), DATATYPE)
+    vR = jax.lax.bitcast_convert_type(_u64(w[12], w[13]), DATATYPE)
+    return sL, tL, vL, sR, tR, vR
+
+
+def _lanes(seed, ref) -> bool:
+    """Static: True if `seed` carries the leading (lo, hi) lane axis relative to `ref`."""
+    return seed.ndim == ref.ndim + 1
+
+
+def _lane0(a, lanes: bool):
+    return a[0] if lanes else a
+
+
+def _smask(seed, lanes: bool):
+    """Clears the two control-bit positions (bits 0, 1 of the `lo` lane)."""
+    return seed.at[0].set(seed[0] & _SEED_MASK) if lanes else seed & _SEED_MASK
+
+
+def _cw_pack(s_cw, t_cw_L, t_cw_R, lanes: bool):
+    tb = t_cw_L | (t_cw_R << jnp.uint64(1))
+    return s_cw.at[0].set(s_cw[0] | tb) if lanes else s_cw | tb
+
+
+def _cw_unpack(cw, lanes: bool):
+    """Returns `(s_cw, t_cw_L, t_cw_R)` from a packed per-level correction word."""
+    lo = _lane0(cw, lanes)
+    return _smask(cw, lanes), lo & jnp.uint64(1), (lo >> jnp.uint64(1)) & jnp.uint64(1)
+
+
+def _prg2(seed, lanes: bool):
+    if lanes:
+        sL, tL, _, sR, tR, _ = _chacha_prg4(seed)
+        return sL, tL, sR, tR
+    return _prg2_u64(seed)
+
+
+def seed_from_raw(raw_lo, raw_hi=None):
+    """Root seed from raw int64/uint64 randomness: (n,) for SplitMix64, (2, n) with `raw_hi`."""
+    lo = jax.lax.bitcast_convert_type(raw_lo, jnp.uint64) & _SEED_MASK
+    if raw_hi is None:
+        return lo
+    return jnp.stack([lo, jax.lax.bitcast_convert_type(raw_hi, jnp.uint64)], axis=0)
+
+
+def cw_from_i64(cw_i64):
+    return jax.lax.bitcast_convert_type(cw_i64, jnp.uint64)
+
+
 @functools.partial(jax.jit, static_argnames=("nbits",))
 def dpf_gen_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, nbits: int = 63):
     """
@@ -130,18 +252,18 @@ def dpf_gen_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, nbits:
     Returns `cw_all` of shape `(nbits, N)` uint64 where each level packs
     `s_cw | t_cw_L | (t_cw_R << 1)` into a single 64-bit word.
     """
-    mask = ~jnp.uint64(3)
-    s0 = k0_0 & mask
-    s1 = k1_0 & mask
-    t0 = jnp.zeros_like(s0)
-    t1 = jnp.ones_like(s1)
+    lanes = _lanes(k0_0, alpha)
+    s0 = _smask(k0_0, lanes)
+    s1 = _smask(k1_0, lanes)
+    t0 = jnp.zeros_like(alpha)
+    t1 = jnp.ones_like(alpha)
 
     def body(i, carry):
         s0, t0, s1, t1, cw_all = carry
         shift = jnp.uint64(nbits - 1 - i)
         alpha_i = (alpha >> shift) & jnp.uint64(1)
-        s0L, t0L, s0R, t0R = _prg2_u64(s0)
-        s1L, t1L, s1R, t1R = _prg2_u64(s1)
+        s0L, t0L, s0R, t0R = _prg2(s0, lanes)
+        s1L, t1L, s1R, t1R = _prg2(s1, lanes)
 
         go_right = alpha_i == jnp.uint64(1)
         s_lose_0 = jnp.where(go_right, s0L, s0R)
@@ -151,7 +273,7 @@ def dpf_gen_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, nbits:
         t_cw_L = t0L ^ t1L ^ alpha_i ^ jnp.uint64(1)
         t_cw_R = t0R ^ t1R ^ alpha_i
 
-        cw_packed = s_cw | t_cw_L | (t_cw_R << jnp.uint64(1))
+        cw_packed = _cw_pack(s_cw, t_cw_L, t_cw_R, lanes)
         cw_all = cw_all.at[i].set(cw_packed)
 
         s0_keep = jnp.where(go_right, s0R, s0L)
@@ -166,7 +288,7 @@ def dpf_gen_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, nbits:
         t1_next = t1_keep ^ (t1 & t_cw_keep)
         return s0_next, t0_next, s1_next, t1_next, cw_all
 
-    cw_init = jnp.zeros((nbits,) + alpha.shape, dtype=jnp.uint64)
+    cw_init = jnp.zeros((nbits,) + k0_0.shape, dtype=jnp.uint64)
     _, _, _, _, cw_all = jax.lax.fori_loop(0, nbits, body, (s0, t0, s1, t1, cw_init))
     return cw_all
 
@@ -183,21 +305,18 @@ def dpf_eval_lt_jit(
     Vectorized DPF prefix-comparison evaluation returning a binary (XOR) share
     in `{0, 1}` of `1{x < alpha}` for `nbits`-bit unsigned integer `x`.
     """
-    mask = ~jnp.uint64(3)
-    s = s_init & mask
-    t = jnp.full_like(s, jnp.uint64(party_id))
-    acc = jnp.zeros_like(s)
+    lanes = _lanes(s_init, x)
+    s = _smask(s_init, lanes)
+    t = jnp.full_like(x, jnp.uint64(party_id))
+    acc = jnp.zeros_like(x)
 
     def body(i, carry):
         s, t, acc = carry
         shift = jnp.uint64(nbits - 1 - i)
         x_i = (x >> shift) & jnp.uint64(1)
-        sL, tL, sR, tR = _prg2_u64(s)
+        sL, tL, sR, tR = _prg2(s, lanes)
 
-        cw_packed = cw_all[i]
-        s_cw = cw_packed & mask
-        t_cw_L = cw_packed & jnp.uint64(1)
-        t_cw_R = (cw_packed >> jnp.uint64(1)) & jnp.uint64(1)
+        s_cw, t_cw_L, t_cw_R = _cw_unpack(cw_all[i], lanes)
 
         go_right = x_i == jnp.uint64(1)
         s_next_raw = jnp.where(go_right, sR, sL)
@@ -277,28 +396,25 @@ def fss_msb_eval_3way_jit(
     z2 = (~xh2) & low_mask
 
     # Evaluate all 3 queries in a single fused loop over the tree levels
-    mask = ~jnp.uint64(3)
-    s0 = s_init & mask
+    lanes = _lanes(s_init, xh0)
+    s0 = _smask(s_init, lanes)
     s1 = s0
     s2 = s0
-    t0 = jnp.full_like(s0, jnp.uint64(party_id))
+    t0 = jnp.full_like(xh0, jnp.uint64(party_id))
     t1 = t0
     t2 = t0
-    acc0 = jnp.zeros_like(s0)
+    acc0 = jnp.zeros_like(xh0)
     acc1 = acc0
     acc2 = acc0
 
     def body(i, carry):
         s0, t0, acc0, s1, t1, acc1, s2, t2, acc2 = carry
         shift = jnp.uint64(nbits - 1 - i)
-        cw_packed = cw_all[i]
-        s_cw = cw_packed & mask
-        t_cw_L = cw_packed & jnp.uint64(1)
-        t_cw_R = (cw_packed >> jnp.uint64(1)) & jnp.uint64(1)
+        s_cw, t_cw_L, t_cw_R = _cw_unpack(cw_all[i], lanes)
 
         def step_one(z, s, t, acc):
             z_i = (z >> shift) & jnp.uint64(1)
-            sL, tL, sR, tR = _prg2_u64(s)
+            sL, tL, sR, tR = _prg2(s, lanes)
             go_r = z_i == jnp.uint64(1)
             s_nr = jnp.where(go_r, sR, sL)
             t_nr = jnp.where(go_r, tR, tL)
@@ -369,20 +485,20 @@ def _ltz_abs_lt_combine_jit(x_share, x_hat, rA_share, w_share, z_both, is_rank0:
 
 @functools.partial(
     jax.jit,
-    static_argnames=("shape", "nbits", "mode", "is_rank0"),
+    static_argnames=("shape", "nbits", "mode", "is_rank0", "lanes"),
 )
 def _tfp_dcf_key_jit(
-    c_glob, c0, c1, s_glob, s0, s1, shape, nbits: int, mode: str, is_rank0: bool
+    c_glob, c0, c1, s_glob, s0, s1, shape, nbits: int, mode: str, is_rank0: bool, lanes: int = 1
 ):
     """
     Vectorized, JIT-compiled TFP dealer generating correlated FSS/DCF keys
     and B2A / DReLU-mul masks without inter-party communication.
     """
     n = int(np.prod(shape)) if len(shape) > 0 else 1
-    glob_raw = _sm64_raw(s_glob, c_glob, (4, n))
+    glob_raw = _sm64_raw(s_glob, c_glob, (4 + 2 * (lanes - 1), n))
     r_in = glob_raw[0]
-    k0_0 = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
-    k1_0 = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
+    k0_0 = seed_from_raw(glob_raw[1], glob_raw[4] if lanes == 2 else None)
+    k1_0 = seed_from_raw(glob_raw[2], glob_raw[5] if lanes == 2 else None)
     r_bits = glob_raw[3]
 
     neg_r_u = jax.lax.bitcast_convert_type(-r_in, jnp.uint64)
@@ -531,6 +647,7 @@ def fss_ltz_and_abs_lt(x, width, return_neg_part=False):
       - Round 2: open 2 bit-packed B2A bits (0.25 B/elem), reconstruct `ltz`, `check`,
         and `neg_part = ltz * x`.
     """
+    ringprobe.record("cmp", x.share)
     from prix.array import Array, Ptype
     from prix.provider import get_default_provider
 
@@ -585,6 +702,17 @@ def _prg4_u64(seeds: jnp.ndarray):
     return sL, tL, vL, sR, tR, vR
 
 
+def _prg4(seed, lanes: bool):
+    return _chacha_prg4(seed) if lanes else _prg4_u64(seed)
+
+
+def _convert_g_lanes(seed, lanes: bool):
+    if lanes:
+        w = _chacha_block(_smask(seed, True), 0x47525043, _chacha_rounds())  # nonce "CPRG"
+        return jax.lax.bitcast_convert_type(_u64(w[0], w[1]), DATATYPE)
+    return _convert_g(seed)
+
+
 @jax.jit
 def _convert_g(seeds: jnp.ndarray):
     """Maps a 62-bit seed to an arithmetic group element in Z_{2^64}."""
@@ -601,11 +729,11 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
     `beta = 1` in Z_{2^64} (`WaveHelloToPrivacy/experiments/include/dcf.hpp`).
     Returns `(cw_all, v_cw_all, g_cw)`.
     """
-    mask = ~jnp.uint64(3)
-    s0 = k0_0 & mask
-    s1 = k1_0 & mask
-    t0 = jnp.zeros_like(s0)
-    t1 = jnp.ones_like(s1)
+    lanes = _lanes(k0_0, alpha)
+    s0 = _smask(k0_0, lanes)
+    s1 = _smask(k1_0, lanes)
+    t0 = jnp.zeros_like(alpha)
+    t1 = jnp.ones_like(alpha)
     V = jnp.zeros(alpha.shape, dtype=DATATYPE)
 
     def body(i, carry):
@@ -614,8 +742,8 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
         alpha_i = (alpha >> shift) & jnp.uint64(1)
         go_right = alpha_i == jnp.uint64(1)
 
-        s0L, t0L, v0L, s0R, t0R, v0R = _prg4_u64(s0)
-        s1L, t1L, v1L, s1R, t1R, v1R = _prg4_u64(s1)
+        s0L, t0L, v0L, s0R, t0R, v0R = _prg4(s0, lanes)
+        s1L, t1L, v1L, s1R, t1R, v1R = _prg4(s1, lanes)
 
         s_lose_0 = jnp.where(go_right, s0L, s0R)
         s_lose_1 = jnp.where(go_right, s1L, s1R)
@@ -623,7 +751,7 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
 
         t_cw_L = t0L ^ t1L ^ alpha_i ^ jnp.uint64(1)
         t_cw_R = t0R ^ t1R ^ alpha_i
-        cw_packed = s_cw | t_cw_L | (t_cw_R << jnp.uint64(1))
+        cw_packed = _cw_pack(s_cw, t_cw_L, t_cw_R, lanes)
         cw_all = cw_all.at[i].set(cw_packed)
 
         v0_lose = jnp.where(go_right, v0L, v0R)
@@ -650,7 +778,7 @@ def dcf_gen_arith_jit(alpha: jnp.ndarray, k0_0: jnp.ndarray, k1_0: jnp.ndarray, 
         t1_next = t1_keep ^ (t1 & t_cw_keep)
         return s0_next, t0_next, s1_next, t1_next, V_next, cw_all, v_cw_all
 
-    cw_init = jnp.zeros((nbits,) + alpha.shape, dtype=jnp.uint64)
+    cw_init = jnp.zeros((nbits,) + k0_0.shape, dtype=jnp.uint64)
     v_cw_init = jnp.zeros((nbits,) + alpha.shape, dtype=DATATYPE)
     _, _, _, t1_end, V_end, cw_all, v_cw_all = jax.lax.fori_loop(
         0, nbits, body, (s0, t0, s1, t1, V, cw_init, v_cw_init)
@@ -674,9 +802,9 @@ def dcf_eval_arith_jit(
     Evaluates the Boyle et al. arithmetic DCF on `x`, returning an additive share in Z_{2^64}
     such that `share_0 + share_1 = 1{x < alpha} (mod 2^64)`.
     """
-    mask = ~jnp.uint64(3)
-    s = s_init & mask
-    t = jnp.full_like(s, jnp.uint64(party_id))
+    lanes = _lanes(s_init, x)
+    s = _smask(s_init, lanes)
+    t = jnp.full_like(x, jnp.uint64(party_id))
     acc = jnp.zeros(x.shape, dtype=DATATYPE)
     sign = jnp.int64(-1 if party_id == 1 else 1)
 
@@ -686,11 +814,8 @@ def dcf_eval_arith_jit(
         x_i = (x >> shift) & jnp.uint64(1)
         go_right = x_i == jnp.uint64(1)
 
-        sL, tL, vL, sR, tR, vR = _prg4_u64(s)
-        cw_packed = cw_all[i]
-        s_cw = cw_packed & mask
-        t_cw_L = cw_packed & jnp.uint64(1)
-        t_cw_R = (cw_packed >> jnp.uint64(1)) & jnp.uint64(1)
+        sL, tL, vL, sR, tR, vR = _prg4(s, lanes)
+        s_cw, t_cw_L, t_cw_R = _cw_unpack(cw_all[i], lanes)
         v_cw = v_cw_all[i]
 
         s_next_raw = jnp.where(go_right, sR, sL)
@@ -730,16 +855,13 @@ def grotto_segment_parities_jit(
          share of `1{i == msb_J(a)}`.
     Returns `p` of shape `(2^J, N)` uint64 with values in `{0, 1}`.
     """
-    mask = ~jnp.uint64(3)
-    s_tree = (s_init & mask)[None, :]
-    t_tree = jnp.full_like(s_tree, jnp.uint64(party_id))
+    lanes = _lanes(s_init, x_J)
+    s_tree = _smask(s_init, lanes)[..., None, :]
+    t_tree = jnp.full_like(x_J[None, :], jnp.uint64(party_id))
 
     for lvl in range(J):
-        sL, tL, sR, tR = _prg2_u64(s_tree)
-        cw_packed = cw_all[lvl][None, :]
-        s_cw = cw_packed & mask
-        t_cw_L = cw_packed & jnp.uint64(1)
-        t_cw_R = (cw_packed >> jnp.uint64(1)) & jnp.uint64(1)
+        sL, tL, sR, tR = _prg2(s_tree, lanes)
+        s_cw, t_cw_L, t_cw_R = _cw_unpack(cw_all[lvl][..., None, :], lanes)
 
         t_is_1 = t_tree == jnp.uint64(1)
         sL_next = sL ^ jnp.where(t_is_1, s_cw, jnp.uint64(0))
@@ -747,7 +869,10 @@ def grotto_segment_parities_jit(
         tL_next = tL ^ (t_tree & t_cw_L)
         tR_next = tR ^ (t_tree & t_cw_R)
 
-        s_tree = jnp.stack([sL_next, sR_next], axis=1).reshape(1 << (lvl + 1), -1)
+        if lanes:
+            s_tree = jnp.stack([sL_next, sR_next], axis=2).reshape(2, 1 << (lvl + 1), -1)
+        else:
+            s_tree = jnp.stack([sL_next, sR_next], axis=1).reshape(1 << (lvl + 1), -1)
         t_tree = jnp.stack([tL_next, tR_next], axis=1).reshape(1 << (lvl + 1), -1)
 
     t_top = t_tree
@@ -758,11 +883,8 @@ def grotto_segment_parities_jit(
             s_cur, t_cur, beta_cur = carry
             shift = jnp.uint64(j_depth - 1 - k)
             z_k = ((z_lo >> shift) & jnp.uint64(1))[None, :]
-            sL, tL, sR, tR = _prg2_u64(s_cur)
-            cw_packed = cw_all[J + k][None, :]
-            s_cw = cw_packed & mask
-            t_cw_L = cw_packed & jnp.uint64(1)
-            t_cw_R = (cw_packed >> jnp.uint64(1)) & jnp.uint64(1)
+            sL, tL, sR, tR = _prg2(s_cur, lanes)
+            s_cw, t_cw_L, t_cw_R = _cw_unpack(cw_all[J + k][..., None, :], lanes)
 
             go_right = z_k == jnp.uint64(1)
             s_nr = jnp.where(go_right, sR, sL)
@@ -789,7 +911,7 @@ def grotto_segment_parities_jit(
 
 @functools.partial(
     jax.jit,
-    static_argnames=("shape", "J", "j_depth", "mode", "is_rank0"),
+    static_argnames=("shape", "J", "j_depth", "mode", "is_rank0", "lanes"),
 )
 def _tfp_wave_key_jit(
     c_glob,
@@ -803,6 +925,7 @@ def _tfp_wave_key_jit(
     j_depth: int,
     mode: str,
     is_rank0: bool,
+    lanes: int = 1,
 ):
     """
     Vectorized, JIT-compiled TFP dealer generating correlated Wave FSS keys:
@@ -815,11 +938,11 @@ def _tfp_wave_key_jit(
     two_j_mask = jnp.uint64((1 << j_depth) - 1) if j_depth > 0 else jnp.uint64(0)
 
     if mode == "haar":
-        glob_raw = _sm64_raw(s_glob, c_glob, (5, n))
+        glob_raw = _sm64_raw(s_glob, c_glob, (5 + 2 * (lanes - 1), n))
         r_i64 = glob_raw[0]
         r_u = jax.lax.bitcast_convert_type(r_i64, jnp.uint64)
-        k0_dpf = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
-        k1_dpf = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
+        k0_dpf = seed_from_raw(glob_raw[1], glob_raw[5] if lanes == 2 else None)
+        k1_dpf = seed_from_raw(glob_raw[2], glob_raw[6] if lanes == 2 else None)
         U = glob_raw[3]
         IP = glob_raw[4]
         C = U * IP
@@ -846,11 +969,11 @@ def _tfp_wave_key_jit(
             bvr_sh = diff[1:4]
         return r_sh, s_dpf, cw_dpf, bvr_sh
     elif mode == "bior_prob":
-        glob_raw = _sm64_raw(s_glob, c_glob, (7, n))
+        glob_raw = _sm64_raw(s_glob, c_glob, (7 + 2 * (lanes - 1), n))
         r_i64 = glob_raw[0]
         r_u = jax.lax.bitcast_convert_type(r_i64, jnp.uint64)
-        k0_dpf = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
-        k1_dpf = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
+        k0_dpf = seed_from_raw(glob_raw[1], glob_raw[7] if lanes == 2 else None)
+        k1_dpf = seed_from_raw(glob_raw[2], glob_raw[8] if lanes == 2 else None)
         U = glob_raw[3]
         A = glob_raw[4]
         B = glob_raw[5]
@@ -876,13 +999,13 @@ def _tfp_wave_key_jit(
             bvr_sh = diff[1:9]
         return r_sh, s_dpf, cw_dpf, bvr_sh
     else:
-        glob_raw = _sm64_raw(s_glob, c_glob, (9, n))
+        glob_raw = _sm64_raw(s_glob, c_glob, (9 + 4 * (lanes - 1), n))
         r_i64 = glob_raw[0]
         r_u = jax.lax.bitcast_convert_type(r_i64, jnp.uint64)
-        k0_dpf = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
-        k1_dpf = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
-        k0_dcf = jax.lax.bitcast_convert_type(glob_raw[3], jnp.uint64) & ~jnp.uint64(3)
-        k1_dcf = jax.lax.bitcast_convert_type(glob_raw[4], jnp.uint64) & ~jnp.uint64(3)
+        k0_dpf = seed_from_raw(glob_raw[1], glob_raw[9] if lanes == 2 else None)
+        k1_dpf = seed_from_raw(glob_raw[2], glob_raw[10] if lanes == 2 else None)
+        k0_dcf = seed_from_raw(glob_raw[3], glob_raw[11] if lanes == 2 else None)
+        k1_dcf = seed_from_raw(glob_raw[4], glob_raw[12] if lanes == 2 else None)
         U = glob_raw[5]
         A = glob_raw[6]
         B = glob_raw[7]
@@ -1070,8 +1193,8 @@ def _wave_bior_r2_jit(hat_4: jnp.ndarray, bvr_sh: jnp.ndarray, j_depth: int, is_
     return y_raw >> jnp.int64(j_depth)
 
 
-@functools.partial(jax.jit, static_argnames=("shape", "j_depth", "is_rank0"))
-def _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, j_depth: int, is_rank0: bool):
+@functools.partial(jax.jit, static_argnames=("shape", "j_depth", "is_rank0", "lanes"))
+def _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, j_depth: int, is_rank0: bool, lanes: int = 1):
     """
     Vectorized, JIT-compiled TFP dealer for SIGMA's 1-round faithful Truncate-Reduce
     (Pi^TR_{n,f}, Theorem 4 / Wave Figure 5): generates mask `r_tr`, its high/low shares,
@@ -1079,11 +1202,11 @@ def _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, j_depth: int, i
     """
     n = int(np.prod(shape)) if len(shape) > 0 else 1
     two_j_mask = jnp.uint64((1 << j_depth) - 1)
-    glob_raw = _sm64_raw(s_glob, c_glob, (3, n))
+    glob_raw = _sm64_raw(s_glob, c_glob, (3 + 2 * (lanes - 1), n))
     r_i64 = glob_raw[0]
     r_u = jax.lax.bitcast_convert_type(r_i64, jnp.uint64)
-    k0_dcf = jax.lax.bitcast_convert_type(glob_raw[1], jnp.uint64) & ~jnp.uint64(3)
-    k1_dcf = jax.lax.bitcast_convert_type(glob_raw[2], jnp.uint64) & ~jnp.uint64(3)
+    k0_dcf = seed_from_raw(glob_raw[1], glob_raw[3] if lanes == 2 else None)
+    k1_dcf = seed_from_raw(glob_raw[2], glob_raw[4] if lanes == 2 else None)
 
     r_lo = r_u & two_j_mask
     r_hi_i64 = jax.lax.bitcast_convert_type(r_u >> jnp.uint64(j_depth), DATATYPE)
@@ -1131,6 +1254,7 @@ def sigma_tr_trunc(x, truncation: int):
     active provider (`TFP` simulated dealer or `TTP`); the result is exact modulo 2^(64 - j),
     which is all its consumers (LUT bin indices, `x - 2^j * x_high`) require.
     """
+    ringprobe.record("sigma_tr", x.share)
     from prix.array import Array, Ptype
     from prix.provider import get_default_provider
 
@@ -1166,6 +1290,7 @@ def wave_haar_lut(x, lut, truncation=0, probabilistic=None):
       - Round 2 (16 B/elem): Beaver multiplication `[u] * [ip]`.
     Total: 2 rounds, 24 B/elem.
     """
+    ringprobe.record("lut_in", x.share)
     from prix.array import Array, Ptype
     from prix.provider import get_default_provider
 
@@ -1226,6 +1351,7 @@ def wave_bior_lut(x, luts, truncation, probabilistic=None):
         generalized Beaver 8-tuple (`beaver.cpp` / Appendix G).
     Total: 2 rounds, 40 B/elem (vs. 4 rounds, 40 B/elem in Curl).
     """
+    ringprobe.record("lut_in", x.share)
     from prix.array import Array, Ptype
     from prix.provider import get_default_provider
 

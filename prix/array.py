@@ -14,6 +14,7 @@ import jax.numpy as jnp
 import numpy as np
 
 import prix.communicator as comm
+from prix import ringprobe
 from prix.config import cfg
 from prix.encoder import DATATYPE, FixedPointEncoder, decode, encode, resolve_device, to_jax
 from prix.provider import _eval_ring_op, _int64_matmul, get_default_provider
@@ -485,6 +486,7 @@ class Array:
                     op == "mul"
                     and cfg.encoder.truncation == "crypten"
                     and comm.get().get_world_size() <= 2
+                    and not ringprobe.ENABLED
                 ):
                     y_int = int(round((1 << result.precision) * float(y)))
                     trunc_div = (1 << result.precision) if self.precision > 0 else 1
@@ -539,6 +541,7 @@ class Array:
                     and cfg.encoder.truncation == "crypten"
                     and comm.get().get_world_size() <= 2
                     and op in ("mul", "matmul")
+                    and not ringprobe.ENABLED
                 )
                 trunc_div = (1 << result.precision) if do_local_trunc else 1
                 beaver_out = _beaver_protocol(
@@ -685,7 +688,9 @@ class Array:
         ):
             if comm.get().get_world_size() > 2:
                 _truncate(self, y)
-            elif isinstance(y, (int, np.integer)):
+                return self
+            ringprobe.record("trunc_local", self.share)
+            if isinstance(y, (int, np.integer)):
                 self.share = _div_scalar_jit(self.share, int(y))
             else:
                 y_arr = jnp.asarray(y, dtype=DATATYPE)
@@ -732,6 +737,7 @@ class Array:
             self.precision > 0
             and method != "egk"
             and comm.get().get_world_size() <= 2
+            and not ringprobe.ENABLED
         )
         trunc_div = (1 << self.precision) if do_local_trunc else 1
         sq = _square(self, trunc_div=trunc_div)
@@ -775,6 +781,7 @@ class Array:
 
     def _ltz(self):
         """Returns 1 for elements that are < 0 and 0 otherwise (with precision=0)."""
+        ringprobe.record("cmp", self.share)
         if comm.get().get_world_size() == 2:
             if getattr(cfg.mpc, "protocol", "beaver") == "fss":
                 from prix import fss
@@ -1686,6 +1693,7 @@ def _egk_post_reveal(c, r_share, b_share, l: int, m: int, is_rank0: bool):
 
 def _egk_trunc_pr(x, l, m):
     """Probabilistic truncation by m bits using the [EGK+20] protocol."""
+    ringprobe.record("trunc_egk", x.share)
     provider = get_default_provider()
     is_rank0 = comm.get().get_rank() == 0
     if (

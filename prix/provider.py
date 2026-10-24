@@ -78,6 +78,20 @@ def _acct_preproc(bits, bits_l128=None):
     _PREPROC_STATS["calls"] += 1
 
 
+def _seed_shape(n):
+    """Shape of the raw randomness for `n` FSS root seeds: (n,) or (2, n) for 128-bit seeds."""
+    from prix.fss import fss_prg_lanes
+
+    return (n,) if fss_prg_lanes() == 1 else (2, n)
+
+
+def _seed(raw):
+    """Root seeds from raw ring randomness drawn with `_seed_shape`."""
+    from prix.fss import seed_from_raw
+
+    return seed_from_raw(raw) if raw.ndim == 1 else seed_from_raw(raw[0], raw[1])
+
+
 def _acct_fss_key(n, dpf_levels=0, dcf_levels=0, ring_elems=0, bit_elems=0):
     """
     Accounts one party's FSS key for `n` elements:
@@ -88,8 +102,11 @@ def _acct_fss_key(n, dpf_levels=0, dcf_levels=0, ring_elems=0, bit_elems=0):
     seed_bits = dpf_levels + dcf_levels
     value_bits = (dcf_levels + (1 if dcf_levels > 0 else 0)) * 64
     share_bits = ring_elems * 64 + bit_elems
-    bits = n * (seed_bits * 64 + value_bits + share_bits)
     bits_l128 = n * (seed_bits * 128 + value_bits + share_bits)
+    from prix.fss import fss_prg_lanes
+
+    # With 128-bit seeds (ChaCha PRG) the key PriX produces IS the lambda = 128 key.
+    bits = bits_l128 if fss_prg_lanes() == 2 else n * (seed_bits * 64 + value_bits + share_bits)
     _acct_preproc(bits, bits_l128)
 
 
@@ -1138,7 +1155,7 @@ class TrustedFirstParty(TupleProvider):
         for `mode` in ('ltz', 'relu', 'ltz_abs_lt').
         """
         import prix
-        from prix.fss import _tfp_dcf_key_jit
+        from prix.fss import _tfp_dcf_key_jit, fss_prg_lanes
 
         shape = tuple(size)
         n = int(np.prod(shape)) if len(shape) > 0 else 1
@@ -1146,7 +1163,8 @@ class TrustedFirstParty(TupleProvider):
         g_glob = prix.generators.get("global")
         g0 = prix.generators.get("prev")
         g1 = prix.generators.get("next")
-        s_glob, c_glob = g_glob.next_offset(4 * n)
+        lanes = fss_prg_lanes()
+        s_glob, c_glob = g_glob.next_offset((4 + 2 * (lanes - 1)) * n)
         k_przs = 4 if mode == "ltz" else (5 if mode == "relu" else 7)
         s0, c0 = g0.next_offset(k_przs * n)
         s1, c1 = g1.next_offset(k_przs * n)
@@ -1158,7 +1176,7 @@ class TrustedFirstParty(TupleProvider):
         else:
             _acct_fss_key(n, dpf_levels=int(nbits), ring_elems=4, bit_elems=3)
         return _tfp_dcf_key_jit(
-            c_glob, c0, c1, s_glob, s0, s1, shape, int(nbits), str(mode), is_rank0
+            c_glob, c0, c1, s_glob, s0, s1, shape, int(nbits), str(mode), is_rank0, lanes
         )
 
     def generate_sigma_tr_key(self, size, j_depth, device=None):
@@ -1168,7 +1186,7 @@ class TrustedFirstParty(TupleProvider):
         arithmetic DCF key for the carry `1{x_hat_lo < r_lo}`.
         """
         import prix
-        from prix.fss import _tfp_sigma_tr_key_jit
+        from prix.fss import _tfp_sigma_tr_key_jit, fss_prg_lanes
 
         shape = tuple(size)
         n = int(np.prod(shape)) if len(shape) > 0 else 1
@@ -1176,11 +1194,12 @@ class TrustedFirstParty(TupleProvider):
         g_glob = prix.generators.get("global")
         g0 = prix.generators.get("prev")
         g1 = prix.generators.get("next")
-        s_glob, c_glob = g_glob.next_offset(3 * n)
+        lanes = fss_prg_lanes()
+        s_glob, c_glob = g_glob.next_offset((3 + 2 * (lanes - 1)) * n)
         s0, c0 = g0.next_offset(2 * n)
         s1, c1 = g1.next_offset(2 * n)
         _acct_fss_key(n, dcf_levels=int(j_depth), ring_elems=2)  # j-level arithmetic DCF + (r, r_hi) shares
-        return _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, int(j_depth), is_rank0)
+        return _tfp_sigma_tr_key_jit(c_glob, c0, c1, s_glob, s0, s1, shape, int(j_depth), is_rank0, lanes)
 
     def generate_wave_key(self, size, J=5, j_depth=14, mode="bior", device=None):
         """
@@ -1190,7 +1209,7 @@ class TrustedFirstParty(TupleProvider):
             Generalized Beaver 8-tuple (U, A, B, X, A*X - B, U*X, U*A, U*(A*X - B)).
         """
         import prix
-        from prix.fss import _tfp_wave_key_jit
+        from prix.fss import _tfp_wave_key_jit, fss_prg_lanes
 
         shape = tuple(size)
         n = int(np.prod(shape)) if len(shape) > 0 else 1
@@ -1199,7 +1218,9 @@ class TrustedFirstParty(TupleProvider):
         g0 = prix.generators.get("prev")
         g1 = prix.generators.get("next")
         mode_s = str(mode)
+        lanes = fss_prg_lanes()
         k_glob = 5 if mode_s == "haar" else (7 if mode_s == "bior_prob" else 9)
+        k_glob += (2 if mode_s in ("haar", "bior_prob") else 4) * (lanes - 1)
         k_przs = 4 if mode_s == "haar" else (9 if mode_s == "bior_prob" else 10)
         s_glob, c_glob = g_glob.next_offset(k_glob * n)
         s0, c0 = g0.next_offset(k_przs * n)
@@ -1212,7 +1233,7 @@ class TrustedFirstParty(TupleProvider):
         else:
             _acct_fss_key(n, dpf_levels=int(J) + int(j_depth), dcf_levels=int(j_depth), ring_elems=10)
         return _tfp_wave_key_jit(
-            c_glob, c0, c1, s_glob, s0, s1, shape, int(J), int(j_depth), mode_s, is_rank0
+            c_glob, c0, c1, s_glob, s0, s1, shape, int(J), int(j_depth), mode_s, is_rank0, lanes
         )
 
 
@@ -1440,8 +1461,8 @@ class TrustedThirdParty(TupleProvider):
         mode_s = str(mode)
 
         r_in_sh = generate_random_ring_element(shape, generator=generator, device=device)
-        s_raw = generate_random_ring_element((n,), generator=generator, device=device)
-        s_init = jax.lax.bitcast_convert_type(s_raw, jnp.uint64) & ~jnp.uint64(3)
+        s_raw = generate_random_ring_element(_seed_shape(n), generator=generator, device=device)
+        s_init = _seed(s_raw)
         msb_raw = generate_kbit_random_tensor((n,), bitlength=1, generator=generator, device=device)
         msb_r_sh = jax.lax.bitcast_convert_type(msb_raw, jnp.uint64)
         b2a_shape = ((2,) + shape) if mode_s == "ltz_abs_lt" else shape
@@ -1483,8 +1504,8 @@ class TrustedThirdParty(TupleProvider):
         mode_s = str(mode)
 
         r_sh = generate_random_ring_element((n,), generator=generator, device=device)
-        s_dpf_raw = generate_random_ring_element((n,), generator=generator, device=device)
-        s_dpf = jax.lax.bitcast_convert_type(s_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
+        s_dpf_raw = generate_random_ring_element(_seed_shape(n), generator=generator, device=device)
+        s_dpf = _seed(s_dpf_raw)
 
         if mode_s in ("haar", "bior_prob"):
             bvr_rows = 3 if mode_s == "haar" else 8
@@ -1506,8 +1527,8 @@ class TrustedThirdParty(TupleProvider):
                 bvr_sh = generate_random_ring_element((bvr_rows, n), generator=generator, device=device)
             return r_sh, s_dpf, cw_dpf, bvr_sh
         else:
-            s_dcf_raw = generate_random_ring_element((n,), generator=generator, device=device)
-            s_dcf = jax.lax.bitcast_convert_type(s_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+            s_dcf_raw = generate_random_ring_element(_seed_shape(n), generator=generator, device=device)
+            s_dcf = _seed(s_dcf_raw)
             if comm.get().get_rank() == 0:
                 cw_dpf_i64 = TTPClient.get().ttp_request("wave_cw", device, shape, J_i, j_i, mode_s)
                 cw_dpf = jax.lax.bitcast_convert_type(cw_dpf_i64, jnp.uint64)
@@ -1549,8 +1570,8 @@ class TrustedThirdParty(TupleProvider):
         j_i = int(j_depth)
 
         r_sh = generate_random_ring_element((n,), generator=generator, device=device)
-        s_dcf_raw = generate_random_ring_element((n,), generator=generator, device=device)
-        s_dcf = jax.lax.bitcast_convert_type(s_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+        s_dcf_raw = generate_random_ring_element(_seed_shape(n), generator=generator, device=device)
+        s_dcf = _seed(s_dcf_raw)
         if comm.get().get_rank() == 0:
             cw_dcf_i64 = TTPClient.get().ttp_request("sigma_tr_cw", device, shape, j_i)
             cw_dcf = jax.lax.bitcast_convert_type(cw_dcf_i64, jnp.uint64)
@@ -1825,10 +1846,10 @@ class TTPServer:
         mode_s = str(mode)
 
         r_in = self._get_additive_PRSS(shape)
-        s0_raw = generate_random_ring_element((n,), generator=self.generators[0])
-        s1_raw = generate_random_ring_element((n,), generator=self.generators[1])
-        k0_0 = jax.lax.bitcast_convert_type(s0_raw, jnp.uint64) & ~jnp.uint64(3)
-        k1_0 = jax.lax.bitcast_convert_type(s1_raw, jnp.uint64) & ~jnp.uint64(3)
+        s0_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[0])
+        s1_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[1])
+        k0_0 = _seed(s0_raw)
+        k1_0 = _seed(s1_raw)
 
         neg_r_u = jax.lax.bitcast_convert_type(-r_in.reshape(-1), jnp.uint64)
         low_mask = (
@@ -1881,10 +1902,10 @@ class TTPServer:
 
         r_in = self._get_additive_PRSS((n,))
         r_u = jax.lax.bitcast_convert_type(r_in, jnp.uint64)
-        s0_dpf_raw = generate_random_ring_element((n,), generator=self.generators[0])
-        s1_dpf_raw = generate_random_ring_element((n,), generator=self.generators[1])
-        k0_dpf = jax.lax.bitcast_convert_type(s0_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
-        k1_dpf = jax.lax.bitcast_convert_type(s1_dpf_raw, jnp.uint64) & ~jnp.uint64(3)
+        s0_dpf_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[0])
+        s1_dpf_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[1])
+        k0_dpf = _seed(s0_dpf_raw)
+        k1_dpf = _seed(s1_dpf_raw)
 
         two_J_mask = jnp.uint64((1 << J_i) - 1)
         two_j_mask = jnp.uint64((1 << j_i) - 1) if j_i > 0 else jnp.uint64(0)
@@ -1920,10 +1941,10 @@ class TTPServer:
             bvr_plain = jnp.stack([U, A, B, X, AXmB, UX, UA, UAXmB], axis=0)
             self._pending_wave_bvr = bvr_plain - self._get_additive_PRSS((8, n), remove_rank=True)
         else:
-            s0_dcf_raw = generate_random_ring_element((n,), generator=self.generators[0])
-            s1_dcf_raw = generate_random_ring_element((n,), generator=self.generators[1])
-            k0_dcf = jax.lax.bitcast_convert_type(s0_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
-            k1_dcf = jax.lax.bitcast_convert_type(s1_dcf_raw, jnp.uint64) & ~jnp.uint64(3)
+            s0_dcf_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[0])
+            s1_dcf_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[1])
+            k0_dcf = _seed(s0_dcf_raw)
+            k1_dcf = _seed(s1_dcf_raw)
             cw_dcf, v_cw_dcf, g_cw_dcf = dcf_gen_arith_jit(alpha_lo, k0_dcf, k1_dcf, j_i)
             cw_dcf_i64 = jax.lax.bitcast_convert_type(cw_dcf, DATATYPE)
             comm.get().send(cw_dcf_i64, 1)
@@ -1956,10 +1977,10 @@ class TTPServer:
         j_i = int(j_depth)
         r_in = self._get_additive_PRSS((n,))  # parties hold r_sh from their TTP generators
         r_u = jax.lax.bitcast_convert_type(r_in, jnp.uint64)
-        s0_raw = generate_random_ring_element((n,), generator=self.generators[0])
-        s1_raw = generate_random_ring_element((n,), generator=self.generators[1])
-        k0 = jax.lax.bitcast_convert_type(s0_raw, jnp.uint64) & ~jnp.uint64(3)
-        k1 = jax.lax.bitcast_convert_type(s1_raw, jnp.uint64) & ~jnp.uint64(3)
+        s0_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[0])
+        s1_raw = generate_random_ring_element(_seed_shape(n), generator=self.generators[1])
+        k0 = _seed(s0_raw)
+        k1 = _seed(s1_raw)
         two_j_mask = jnp.uint64((1 << j_i) - 1)
         r_lo = r_u & two_j_mask
         r_hi_i64 = jax.lax.bitcast_convert_type(r_u >> jnp.uint64(j_i), DATATYPE)

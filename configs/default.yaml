@@ -104,6 +104,8 @@ functions:
 mpc:
   active_security: False
   provider: "TFP"
+  fss_prg: "splitmix64"   # PRG for DPF/DCF trees: splitmix64 (62-bit seeds, fast, NOT cryptographic) | chacha (128-bit seeds)
+  fss_prg_rounds: 12       # ChaCha rounds when fss_prg == "chacha" (8 | 12 | 20)
   protocol: "fss"
   fss_bits: 48   # effective bit-width for FSS comparisons (SIGMA Sec. 5.4.1): exact for |x| < 2^(fss_bits-2), i.e. |x| < 2^30 at f=16; -24% PRG calls vs. 64
 nn:

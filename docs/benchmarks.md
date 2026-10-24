@@ -190,3 +190,21 @@ GPU session: `Tesla T4` (Google Colab), JAX `0.12.0.1`, commit `5ee61bc`, 3 repe
 ### 2.4 Deterministic vs. probabilistic truncation (2-round Wave)
 
 `benchmarks/benchmark_fss_modes.py --ablation` runs the four combinations of `lut_indexing ∈ {wave, wave_prob}` × `truncation ∈ {egk, crypten}`; the paper's Section 6.4 discusses them. In short: probabilistic LUT indexing (`wave_prob`) is ~3× faster locally and needs 40 % less key but raises block MAE from 0.0028 to 0.019 (Curl's level); local product truncation (`crypten`) saves 25 % of the rounds with no measurable accuracy change on these blocks, but is not a secure protocol in general (Section 6.4 of the paper explains the wrap-around failure modes).
+
+### 2.5 Ring width: could PriX use $\mathbb{Z}_{2^{32}}$?
+
+`benchmarks/ring_sweep.py` runs one `BERT-base`-shaped block ($L=128$, random weights) per mode at fixed-point precision $f \in \{16, 12, 10, 8\}$ with the ring probe on (`PRIX_RING_PROBE=1`, `prix/ringprobe.py`). The probe reconstructs every value where a 32-bit ring would first break and counts violations: TruncPr inputs $\ge 2^{29}$, comparison inputs $\ge 2^{30}$, LUT / Truncate-Reduce inputs $\ge 2^{31}$, and the *expected* number of catastrophic local (SecureML-style) truncations, $\sum |x| / 2^{31}$. When both are zero, the 64-bit result at precision $f$ is what a 32-bit ring would compute. Cells show block MAE; ✗ marks a configuration that would be wrong in 32 bits.
+
+<!-- generated:ring_sweep:begin -->
+| Mode | $f=16$ | $f=12$ | $f=10$ | $f=8$ |
+|---|---:|---:|---:|---:|
+| PriX default | 0.00071 ✗ | 0.0017 ✓ | 0.0061 ✓ | 0.025 ✓ |
+| Wave | 0.0028 ✗ | 0.0032 ✓ | 0.0067 ✓ | 0.025 ✓ |
+| SIGMA + ext. LN | 0.00056 ✗ | 0.0015 ✓ | 0.0057 ✓ | 0.02 ✓ |
+| Curl | 0.019 ✗ | 0.019 ✗ | 0.02 ✗ | 0.029 ✓ |
+| SHAFT | 0.0015 ✗ | 0.0027 ✗ | 0.031 ✗ | 7.2e+02 ✗ |
+| Piecewise poly | 0.0023 ✗ | diverges ✗ | diverges ✗ | diverges ✗ |
+| CrypTen approx. | 0.0022 ✗ | diverges ✗ | diverges ✗ | diverges ✗ |
+<!-- generated:ring_sweep:end -->
+
+Reading: only the FSS/LUT modes (`default`, `wave`, `sigma`) fit a 32-bit ring, at $f \le 12$, with block MAE 2–3× higher than at $f=16$ and only 0.6 bits of headroom (largest TruncPr input $2^{28.4}$ vs. the $2^{29}$ limit, with random weights). SHAFT and the CrypTen-style modes rely on local share truncation, which in 32 bits fails catastrophically with probability $|x|/2^{31}$ per element (thousands of failures per block); the iterative `exp`/`reciprocal` of `poly` and `crypten` also diverge below $f=16$ even in 64 bits. Curl's wavelet LUT products reach $2^{47}$ at $f=16$ and need $f \le 8$.

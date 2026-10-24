@@ -507,6 +507,54 @@ def write_provenance():
     write(os.path.join(ROOT, "docs", "provenance.md"), "\n".join(lines) + "\n")
 
 
+RING_MODES = [("default", "PriX default"), ("wave", "Wave"), ("sigma_ext", "SIGMA + ext. LN"), ("curl", "Curl"),
+              ("shaft", "SHAFT"), ("poly", "Piecewise poly"), ("crypten", "CrypTen approx.")]
+
+
+def ring_sweep_tables(d):
+    """docs §2.5 + paper/tables/ring_sweep.tex: block MAE per (mode, f) with 32-bit violation marks."""
+    if not d:
+        return None
+    env = env_of(d)
+    PROVENANCE.append(("docs §2.5, tab:ring_sweep", "ring_sweep.py", "results/ring_sweep.json", env.get("git_commit"), env.get("timestamp")))
+    precs = sorted({int(f) for m, _ in RING_MODES if m in d for f in d[m]}, reverse=True)
+
+    def cell(m, f):
+        r = d.get(m, {}).get(str(f), {}).get("bert_base_block")
+        if r is None:
+            return None, None, False
+        pr = r.get("probe", {})
+        viol = sum(s.get("viol_k32", 0) for s in pr.values())
+        efail = pr.get("trunc_local", {}).get("expected_fail_k32", 0.0)
+        ok32 = viol == 0 and efail < 1.0
+        mae = r.get("mae")
+        return mae, (max(s["max_abs_log2"] for s in pr.values() if s.get("max_abs_log2") is not None) if pr else None), ok32
+
+    md = ["| Mode | " + " | ".join(f"$f={f}$" for f in precs) + " |", "|---|" + "---:|" * len(precs)]
+    tex = []
+    for m, label in RING_MODES:
+        if m not in d:
+            continue
+        mc, tc = [], []
+        for f in precs:
+            mae, mx, ok = cell(m, f)
+            if mae is None:
+                mc.append("n/a"); tc.append("--")  # noqa: E702
+                continue
+            v = f"{mae:.2g}" if mae < 1e3 else "diverges"
+            mc.append(f"{v} {'✓' if ok else '✗'}")
+            tc.append(f"{v}" + ("" if ok else r"$^{\times}$"))
+            macro(f"Ring{m.title().replace('_', '')}F{f}Mae", v)
+            macro(f"Ring{m.title().replace('_', '')}F{f}Ok", "yes" if ok else "no")
+            if mx is not None:
+                macro(f"Ring{m.title().replace('_', '')}F{f}MaxLog", f"{mx:.1f}")
+        md.append(f"| {label} | " + " | ".join(mc) + " |")
+        tex.append(f"{label} & " + " & ".join(tc) + r" \\")
+    write(os.path.join(TABLES, "ring_sweep.tex"),
+          tabular("l" + "r" * len(precs), "Mode & " + " & ".join(f"$f={f}$" for f in precs) + " \\\\\n\\midrule\n" + "\n".join(tex) + "\n"))
+    return "\n".join(md)
+
+
 def md_hero_caption(cpu, gpu, row="GPT2 (1-Block, seq=16)"):
     """README caption under the hero figure: best PriX/CrypTen speedup on one GPT-2 block, CPU and GPU."""
     def best(d):
@@ -553,6 +601,9 @@ def main():
             replace_block(docs_bench, f"{tag}_env", md_env(d, ["cpu_model", "gpu_model", "python_version", "jax_version", "torch_version", "prix_commit", "timestamp_utc", "loadavg_1m_at_start"]))
     replace_block(docs_bench, "transport", md_transport(cpu, gpu))
     replace_block(os.path.join(ROOT, "README.md"), "hero_caption", md_hero_caption(cpu, gpu))
+    ring_md = ring_sweep_tables(load("ring_sweep.json"))
+    if ring_md:
+        replace_block(docs_bench, "ring_sweep", ring_md)
     fss_gpu_md = md_fss_gpu(load("fss_modes_gpu.json"), load("fss_modes_cpu.json"))
     if fss_gpu_md:
         replace_block(docs_bench, "fss_gpu", fss_gpu_md)

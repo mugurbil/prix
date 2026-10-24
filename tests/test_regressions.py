@@ -529,6 +529,60 @@ def _basic_2pc_siphash_check():
 
 
 
+
+def _prg_checks():
+    from prix.fss import fss_prg_lanes
+    from prix.provider import get_default_provider, get_preproc_stats, reset_preproc_stats
+
+    c = prix.comm.get()
+    c.set_verbosity(True)
+    x_np = np.linspace(-3.5, 3.5, 256, dtype=np.float32)
+    x = prix.array(x_np, src=0)
+    reset_preproc_stats()
+    c.reset_communication_stats()
+    y = x.gelu()
+    st = get_preproc_stats()
+    rounds, nbytes = int(c.comm_rounds), int(c.comm_bytes)
+    ltz = prix.array(np.array([-3.0, 2.0, -1e-3, 5e3], dtype=np.float32), src=0)._ltz()
+    return {
+        "lanes": fss_prg_lanes(),
+        "provider": type(get_default_provider()).__name__,
+        "x": x_np,
+        "gelu": np.asarray(y.reconstruct()),
+        "rounds": rounds,
+        "bytes": nbytes,
+        "key": (st["bytes"], st["bytes_l128"]),
+        "ltz": np.asarray(ltz.reconstruct()),
+    }
+
+
+class TestChaChaPRG(unittest.TestCase):
+    """128-bit-seed ChaCha PRG for DPF/DCF trees (`cfg.mpc.fss_prg = "chacha"`)."""
+
+    def test_chacha_matches_splitmix_protocols(self):
+        from scipy.special import erf
+
+        for mode in ("default", "wave"):  # SIGMA-TR + DPF LUT; Grotto DPF + arithmetic DCF
+            base = _run_preset(_prg_checks, mode, {})
+            self.assertEqual(base["lanes"], 1)
+            for prov in ("TFP", "TTP"):
+                res = _run_preset(_prg_checks, mode, {"mpc.provider": prov, "mpc.fss_prg": "chacha"})
+                tag = f"{mode}/{prov}"
+                self.assertEqual(res["lanes"], 2, tag)
+                self.assertEqual(res["provider"], {"TFP": "TrustedFirstParty", "TTP": "TrustedThirdParty"}[prov], tag)
+                x64 = res["x"].astype(np.float64)
+                ref_tol = {"default": 5e-3, "wave": 2e-2}[mode]  # wave: 16-knot GeLU, max error 0.016 (paper)
+                np.testing.assert_allclose(res["gelu"], 0.5 * x64 * (1 + erf(x64 / np.sqrt(2))), atol=ref_tol, err_msg=tag)
+                np.testing.assert_allclose(res["gelu"], base["gelu"], atol=3e-4, err_msg=tag)
+                np.testing.assert_array_equal(res["ltz"], [1.0, 0.0, 1.0, 0.0], err_msg=tag)
+                # Same online protocol: identical rounds and bytes.
+                self.assertEqual((res["rounds"], res["bytes"]), (base["rounds"], base["bytes"]), tag)
+                if prov == "TFP":
+                    # With 128-bit seeds the produced key IS the lambda = 128 key.
+                    self.assertEqual(res["key"][0], res["key"][1], tag)
+                    self.assertEqual(res["key"][1], base["key"][1], tag)
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -537,6 +591,19 @@ if __name__ == "__main__":
 # v0.2.1 audit tests: default preset (SIGMA Truncate-Reduce indexing, range-robust softmax /
 # LayerNorm, per-window LUT tables, preprocessing accounting, effective comparison bit-width).
 # ----------------------------------------------------------------------------------------------
+
+
+def _run_preset(fn, mode, overrides, timeout=300):
+    """Runs `fn` on 2 parties with preset `mode` plus `overrides`.
+
+    `prix.run(..., mode=...)` reloads the preset and would discard `cfg.temp_override`
+    settings, so the preset is loaded first and the overrides applied on top.
+    """
+    with prix.cfg.temp_override({}):
+        prix.cfg.load_config(mode)
+        for k, v in overrides.items():
+            setattr(prix.cfg, k, v)
+        return prix.run(fn, world_size=2, timeout=timeout)
 
 
 def _default_preset_checks():
@@ -609,8 +676,7 @@ class TestDefaultPresetAudit(unittest.TestCase):
 
         ref_tfp = None
         for prov in ("TFP", "TTP"):
-            with prix.cfg.temp_override({"mpc.provider": prov}):
-                res = prix.run(_default_preset_checks, world_size=2, mode="default", timeout=300)
+            res = _run_preset(_default_preset_checks, "default", {"mpc.provider": prov})
 
             # (a) SIGMA-TR indexed bior(5,3) GeLU: 3 rounds, 48 B/elem, 32-knot accuracy.
             rounds, nbytes, gelu, key_bytes = res["gelu"]

@@ -55,6 +55,8 @@ functions:
 mpc:
   active_security: False
   provider: "TFP"
+  fss_prg: "splitmix64"   # PRG for DPF/DCF trees: splitmix64 (62-bit seeds, fast, NOT cryptographic) | chacha (128-bit seeds)
+  fss_prg_rounds: 12       # ChaCha rounds when fss_prg == "chacha" (8 | 12 | 20)
   protocol: "beaver"
 nn:
   dpsmpc:

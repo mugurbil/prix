@@ -142,7 +142,7 @@ def _err(got, ref):
     return {"mae": float(np.mean(np.abs(got - ref))), "max_err": float(np.max(np.abs(got - ref)))}
 
 
-def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
+def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers, fss_prg=None, fss_prg_rounds=None):
     mode, lut_trunc, prod_trunc, title = {**VARIANTS, **ABLATION_VARIANTS}[key]
     prix.set_mode(mode)
     if lut_trunc is not None:
@@ -151,10 +151,15 @@ def run_variant(key, n_prim, repeats, models, skip_primitives, skip_sublayers):
         cfg.encoder.truncation = prod_trunc
     for k, v in EXTRA_OVERRIDES.get(key, {}).items():
         setattr(cfg, k, v)
+    if fss_prg is not None:
+        cfg.mpc.fss_prg = fss_prg
+    if fss_prg_rounds is not None:
+        cfg.mpc.fss_prg_rounds = int(fss_prg_rounds)
     c = prix.comm.get()
     c.set_verbosity(True)
     rng = np.random.RandomState(42)
-    res = {"title": title, "mode": mode, "config": {"truncation": cfg.encoder.truncation, "lut_indexing": cfg.encoder.lut_indexing}, "primitives": {}, "sublayers": {}, "models": {}}
+    res = {"title": title, "mode": mode, "config": {"truncation": cfg.encoder.truncation, "lut_indexing": cfg.encoder.lut_indexing,
+                                                       "fss_prg": str(getattr(cfg.mpc, "fss_prg", "splitmix64")), "fss_prg_rounds": int(getattr(cfg.mpc, "fss_prg_rounds", 12))}, "primitives": {}, "sublayers": {}, "models": {}}
 
     if not skip_primitives:
         prim_inputs = {
@@ -259,7 +264,8 @@ def _party_main(args):
 
     out = {}
     for key in args.variants:
-        out[key] = run_variant(key, args.n_prim, args.repeats, args.models, args.skip_primitives, args.skip_sublayers)
+        out[key] = run_variant(key, args.n_prim, args.repeats, args.models, args.skip_primitives, args.skip_sublayers,
+                               args.fss_prg, args.fss_prg_rounds)
     out["_env"] = {
         "git_commit": _git_commit(),
         "prix_version": getattr(prix, "__version__", None),
@@ -268,6 +274,8 @@ def _party_main(args):
         "repeats": args.repeats,
         "n_prim": args.n_prim,
         "variants": list(args.variants),
+        "fss_prg": args.fss_prg or "splitmix64",
+        "fss_prg_rounds": args.fss_prg_rounds,
         "backend": jax.default_backend(),
         "devices": [str(d) for d in jax.devices()],
         "jax": jax.__version__,
@@ -293,6 +301,8 @@ def main():
     p.add_argument("--repeats", type=int, default=3)
     p.add_argument("--skip-primitives", action="store_true")
     p.add_argument("--skip-sublayers", action="store_true")
+    p.add_argument("--fss-prg", default=None, choices=["splitmix64", "chacha"], help="PRG for DPF/DCF trees (default: preset's, i.e. splitmix64)")
+    p.add_argument("--fss-prg-rounds", type=int, default=None, help="ChaCha rounds (8, 12, 20) when --fss-prg chacha")
     p.add_argument("--out", default=None, help="JSON output path (default: benchmarks/results/fss_modes_<device>.json)")
     args = p.parse_args()
     if args.modes:
