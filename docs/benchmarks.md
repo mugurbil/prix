@@ -142,6 +142,8 @@ Two parties, CPU, $f=16$, `BERT-base` shapes ($L=128$). Online bytes and preproc
 | `shaft` | SHAFT Fourier activations + ODE Softmax | 1,200 | 5.51 GB | 9.1 GB | 23.6 s | 0.0015 |
 <!-- generated:fss_bert_base:end -->
 
+- **vs. SIGMA**: PriX's `sigma` mode reproduces SIGMA's communication and key sizes within 4% (Tables 2/5 of their paper); the `default` preset then needs **20% fewer rounds, 15% less online traffic, 42% smaller keys and ~2.7× less CPU time at equal accuracy** (block MAE 0.0007 vs. 0.0006 once SIGMA's LayerNorm table covers the same variance range; SIGMA's published configuration gives 0.0017). SIGMA's C++/CUDA build remains faster per PRG call (AES-NI; PriX is Python/XLA) and ships a cryptographic PRG.
+
 ### 2.2 Sublayers and models
 <!-- generated:fss_sublayers:begin -->
 | Benchmark | Metric | **PriX default** | **Wave** | **Wave + SIGMA TR** | **Wave-Prob** | **SIGMA** | **SIGMA + ext. LN** | **Curl** | **SHAFT** |

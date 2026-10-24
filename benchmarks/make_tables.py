@@ -271,7 +271,7 @@ def fss_tables(d):
     if d is None:
         return None
     env = env_of(d)
-    PROVENANCE.append(("tab:wave_primitives, tab:keysize, README table", "benchmark_fss_modes.py", "results/fss_modes_cpu.json", env.get("git_commit"), env.get("timestamp")))
+    PROVENANCE.append(("tab:wave_primitives, tab:keysize, docs §2.1 table", "benchmark_fss_modes.py", "results/fss_modes_cpu.json", env.get("git_commit"), env.get("timestamp")))
     cols = [c for c in FSS_COLS if c[0] in d]
     keys = [c[0] for c in cols]
 
@@ -349,7 +349,7 @@ def fss_tables(d):
     if "sigma" in d:
         g = d["sigma"]["primitives"]["gelu"]["key_bytes_per_elem_l128"]
         macro("SigmaGeluKeyBytes", f"{g:,.0f}"); macro("SigmaGeluKeyMatchPct", f"{100 * abs(g / 1430 - 1):.0f}")
-    # README block
+    # docs/benchmarks.md block
     desc = {"default": "Wave bior(5,3) FSS tables + SIGMA Truncate-Reduce + `[EGK+20]`", "wave_det": "2-round Wave (Grotto DPF + DCF)",
             "wave_sigma_tr": "Wave tables, SIGMA Truncate-Reduce indexing (3 rounds)", "wave_prob": "Wave tables, probabilistic indexing",
             "sigma": "SIGMA 0th-order Haar FSS LUTs", "sigma_ext": "SIGMA with the default preset's LayerNorm domain",
@@ -507,6 +507,18 @@ def write_provenance():
     write(os.path.join(ROOT, "docs", "provenance.md"), "\n".join(lines) + "\n")
 
 
+def md_hero_caption(cpu, gpu, row="GPT2 (1-Block, seq=16)"):
+    """README caption under the hero figure: best PriX/CrypTen speedup on one GPT-2 block, CPU and GPU."""
+    def best(d):
+        if not d or "prix" not in d or "crypten" not in d:
+            return None
+        return max(d["crypten"][m]["llm"][row] / d["prix"][m]["llm"][row] for m in d["prix"] if m in d["crypten"])
+    c, g = best(cpu), best(gpu)
+    parts = [f"{c:.1f}× faster on CPU" if c else None, f"{g:.1f}× on a T4 GPU" if g else None]
+    return ('<p align="center"><sub>One GPT-2 block, 2 parties, same protocols on both sides: up to '
+            + " and ".join(p for p in parts if p) + '. <a href="docs/benchmarks.md">More benchmarks</a></sub></p>')
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cpu", default=None, help="CrypTen-comparison CPU results JSON (default: newest results/cpu_*.json)")
@@ -532,7 +544,6 @@ def main():
     ablation_table(load("fss_trunc_ablation_cpu.json"))
     docs_bench = os.path.join(ROOT, "docs", "benchmarks.md")
     if fss_md:
-        replace_block(os.path.join(ROOT, "README.md"), "fss_bert_base", fss_md)
         replace_block(docs_bench, "fss_bert_base", "\n".join(fss_md.splitlines()[:-1]))
         replace_block(docs_bench, "fss_sublayers", md_fss_sublayers(load("fss_modes_cpu.json")))
     for d, tag in ((cpu, "cpu"), (gpu, "gpu")):
@@ -541,6 +552,7 @@ def main():
             replace_block(docs_bench, f"{tag}_llm_latency", t[0]); replace_block(docs_bench, f"{tag}_llm_speedup", t[1]); replace_block(docs_bench, f"{tag}_ops", t[2])
             replace_block(docs_bench, f"{tag}_env", md_env(d, ["cpu_model", "gpu_model", "python_version", "jax_version", "torch_version", "prix_commit", "timestamp_utc", "loadavg_1m_at_start"]))
     replace_block(docs_bench, "transport", md_transport(cpu, gpu))
+    replace_block(os.path.join(ROOT, "README.md"), "hero_caption", md_hero_caption(cpu, gpu))
     fss_gpu_md = md_fss_gpu(load("fss_modes_gpu.json"), load("fss_modes_cpu.json"))
     if fss_gpu_md:
         replace_block(docs_bench, "fss_gpu", fss_gpu_md)

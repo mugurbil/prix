@@ -210,4 +210,4 @@ Any process holding a certificate from this CA is trusted, so use a CA dedicated
 
 ## Security Notes
 
-The transport protects messages in flight. It does not change PriX's threat model (semi-honest parties, non-colluding dealer and evaluators) or its other limitations, such as the non-cryptographic PRNGs; see the README's security warning.
+The transport protects messages in flight. It does not change PriX's threat model (semi-honest parties, non-colluding dealer and evaluators) or its other limitations, such as the non-cryptographic PRNGs; see [Security](security.md).
