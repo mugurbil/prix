@@ -530,8 +530,6 @@ def main():
     acc_md = accuracy_table(load("accuracy_sweep.json"))
     fss_md = fss_tables(load("fss_modes_cpu.json"))
     ablation_table(load("fss_trunc_ablation_cpu.json"))
-    write_macros()
-    write_provenance()
     docs_bench = os.path.join(ROOT, "docs", "benchmarks.md")
     if fss_md:
         replace_block(os.path.join(ROOT, "README.md"), "fss_bert_base", fss_md)
@@ -551,6 +549,8 @@ def main():
         write_provenance()
     if acc_md:
         replace_block(os.path.join(ROOT, "docs", "modes_and_configuration.md"), "accuracy_ranges", acc_md)
+    write_macros()
+    write_provenance()
     print(f"wrote {len(os.listdir(TABLES))} files to paper/tables, {len(MACROS)} macros, {len(PROVENANCE)} provenance rows")
     if args.check:
         after = subprocess.check_output(["git", "-C", ROOT, "status", "--porcelain", "paper/tables", "README.md", "docs"], text=True)
