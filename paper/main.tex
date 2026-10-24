@@ -58,6 +58,8 @@
 
 \date{}
 
+\input{tables/numbers}
+
 \begin{document}
 \emergencystretch=3em
 
@@ -369,11 +371,7 @@ Figures~\ref{fig:llm_latency}--\ref{fig:primitive_speedup} summarize the results
 \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9} \cmidrule(lr){10-11}
 \textbf{Model} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} \\
 \midrule
-BertTiny (2-Blk)   & 1423.31 & \textbf{582.27 (2.44$\times$)} & 1687.14 & \textbf{560.17 (3.01$\times$)} & 1010.66 & \textbf{434.93 (2.32$\times$)} & 1106.85 & \textbf{446.87 (2.48$\times$)} & 443.46 & \textbf{163.33 (2.72$\times$)} \\
-BertBase (1-Blk)   & 2950.74 & \textbf{737.85 (4.00$\times$)} & 2968.03 & \textbf{733.66 (4.05$\times$)} & 3154.52 & \textbf{735.38 (4.29$\times$)} & 2167.78 & \textbf{582.69 (3.72$\times$)} & 2081.62 & \textbf{449.65 (4.63$\times$)} \\
-GPT2 (1-Blk)       & 3480.96 & \textbf{809.60 (4.30$\times$)} & 3524.84 & \textbf{574.84 (6.13$\times$)} & 3915.11 & \textbf{519.49 (7.54$\times$)} & 2702.19 & \textbf{482.07 (5.61$\times$)} & 2776.97 & \textbf{357.22 (7.77$\times$)} \\
-Llama (1-Blk)      & 2317.26 & \textbf{566.54 (4.09$\times$)} & 2779.46 & \textbf{612.08 (4.54$\times$)} & 3021.76 & \textbf{600.14 (5.04$\times$)} & 2068.08 & \textbf{525.26 (3.94$\times$)} & 2244.43 & \textbf{463.35 (4.84$\times$)} \\
-ModernBert (1-Blk) & 1899.87 & \textbf{557.62 (3.41$\times$)} & 2099.36 & \textbf{514.43 (4.08$\times$)} & 2236.08 & \textbf{450.99 (4.96$\times$)} & 1685.12 & \textbf{425.10 (3.96$\times$)} & 1432.81 & \textbf{307.39 (4.66$\times$)} \\
+\input{tables/cpu_llm}\\
 \bottomrule
 \end{tabular}%
 }
@@ -389,16 +387,7 @@ ModernBert (1-Blk) & 1899.87 & \textbf{557.62 (3.41$\times$)} & 2099.36 & \textb
 \toprule
 \textbf{Operation (Shape)} & \textbf{CrypTen Approx.} & \textbf{Piecewise Poly} & \textbf{SHAFT (Fourier+ODE)} & \textbf{Curl Wavelet LUTs} & \textbf{Fission Evaluator} \\
 \midrule
-Private MatMul ($128\times 128$)   & 23.89 / \textbf{5.82 (4.10$\times$)} & 24.54 / \textbf{6.55 (3.75$\times$)} & 25.05 / \textbf{6.15 (4.08$\times$)} & 28.34 / \textbf{7.49 (3.78$\times$)} & 29.61 / \textbf{7.70 (3.84$\times$)} \\
-Private Mul ($128\times 128$)      & 5.29 / \textbf{4.95 (1.07$\times$)} & 5.89 / \textbf{3.65 (1.61$\times$)} & 4.85 / \textbf{4.57 (1.06$\times$)} & 9.48 / \textbf{6.39 (1.48$\times$)} & 6.90 / \textbf{4.47 (1.54$\times$)} \\
-Comparison / ReLU ($32\times 64$)  & 32.52 / \textbf{9.46 (3.44$\times$)} & 36.94 / \textbf{9.50 (3.89$\times$)} & 31.10 / \textbf{10.06 (3.09$\times$)} & 30.12 / \textbf{13.09 (2.30$\times$)} & 41.98 / \textbf{13.25 (3.17$\times$)} \\
-Exp ($32\times 64$)                & 21.08 / \textbf{14.97 (1.41$\times$)} & 52.61 / \textbf{19.06 (2.76$\times$)} & 20.77 / \textbf{17.73 (1.17$\times$)} & 68.19 / \textbf{14.94 (4.56$\times$)} & 10.90 / \textbf{2.67 (4.08$\times$)} \\
-Reciprocal ($32\times 64$)         & 105.89 / \textbf{49.65 (2.13$\times$)} & 128.86 / \textbf{40.38 (3.19$\times$)} & 95.99 / \textbf{59.46 (1.61$\times$)} & 50.35 / \textbf{9.53 (5.29$\times$)} & 19.56 / \textbf{2.67 (7.33$\times$)} \\
-InvSqrt ($32\times 64$)            & 65.45 / \textbf{34.43 (1.90$\times$)} & 67.89 / \textbf{31.04 (2.19$\times$)} & 69.75 / \textbf{45.42 (1.54$\times$)} & 122.58 / \textbf{19.72 (6.22$\times$)} & 20.26 / \textbf{1.53 (13.25$\times$)} \\
-GeLU ($32\times 64$)               & 114.98 / \textbf{62.66 (1.83$\times$)} & 59.24 / \textbf{24.05 (2.46$\times$)} & 83.85 / \textbf{24.27 (3.45$\times$)} & 34.11 / \textbf{8.18 (4.17$\times$)} & 11.13 / \textbf{2.60 (4.29$\times$)} \\
-SiLU ($32\times 64$)               & 83.53 / \textbf{39.35 (2.12$\times$)} & 53.84 / \textbf{23.47 (2.29$\times$)} & 74.87 / \textbf{34.21 (2.19$\times$)} & 35.45 / \textbf{7.40 (4.79$\times$)} & 12.00 / \textbf{1.80 (6.68$\times$)} \\
-Softmax ($4\times 32\times 32$)    & 382.48 / \textbf{169.38 (2.26$\times$)} & 442.88 / \textbf{159.95 (2.77$\times$)} & 178.78 / \textbf{136.92 (1.31$\times$)} & 378.89 / \textbf{120.87 (3.13$\times$)} & 18.56 / \textbf{2.87 (6.46$\times$)} \\
-LayerNorm ($4\times 32\times 64$)  & 75.40 / \textbf{28.37 (2.66$\times$)} & 72.25 / \textbf{31.84 (2.27$\times$)} & 76.07 / \textbf{40.36 (1.88$\times$)} & 55.58 / \textbf{13.91 (4.00$\times$)} & 21.72 / \textbf{3.07 (7.07$\times$)} \\
+\input{tables/cpu_ops}\\
 \bottomrule
 \end{tabular}%
 }
@@ -426,11 +415,7 @@ Tables~\ref{tab:cpu_llm} and~\ref{tab:cpu_ops} report the CPU results. PriX has 
 \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7} \cmidrule(lr){8-9} \cmidrule(lr){10-11}
 \textbf{Model} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} & CrypTen & \textbf{PriX (Speedup)} \\
 \midrule
-BertTiny (2-Blk)   & 1935.00 & \textbf{867.19 (2.23$\times$)} & 1815.61 & \textbf{826.13 (2.20$\times$)} & 1197.88 & \textbf{537.35 (2.23$\times$)} & 1968.48 & \textbf{639.19 (3.08$\times$)} & 396.46 & \textbf{155.38 (2.55$\times$)} \\
-BertBase (1-Blk)   & 1662.57 & \textbf{761.04 (2.18$\times$)} & 1676.78 & \textbf{763.90 (2.20$\times$)} & 1321.44 & \textbf{650.66 (2.03$\times$)} & 1694.65 & \textbf{600.76 (2.82$\times$)} & 926.40 & \textbf{350.81 (2.64$\times$)} \\
-GPT2 (1-Blk)       & 1663.77 & \textbf{712.28 (2.34$\times$)} & 1609.94 & \textbf{794.24 (2.03$\times$)} & 1290.56 & \textbf{645.33 (2.00$\times$)} & 1634.65 & \textbf{604.11 (2.71$\times$)} & 838.81 & \textbf{320.92 (2.61$\times$)} \\
-Llama (1-Blk)      & 1632.13 & \textbf{739.13 (2.21$\times$)} & 1580.11 & \textbf{729.44 (2.17$\times$)} & 1286.35 & \textbf{603.96 (2.13$\times$)} & 1728.45 & \textbf{658.25 (2.63$\times$)} & 983.09 & \textbf{402.74 (2.44$\times$)} \\
-ModernBert (1-Blk) & 1445.26 & \textbf{686.65 (2.10$\times$)} & 1390.71 & \textbf{628.84 (2.21$\times$)} & 1085.58 & \textbf{568.86 (1.91$\times$)} & 1480.95 & \textbf{531.07 (2.79$\times$)} & 689.95 & \textbf{297.91 (2.32$\times$)} \\
+\input{tables/gpu_llm}\\
 \bottomrule
 \end{tabular}%
 }
@@ -446,16 +431,7 @@ ModernBert (1-Blk) & 1445.26 & \textbf{686.65 (2.10$\times$)} & 1390.71 & \textb
 \toprule
 \textbf{Operation (Shape)} & \textbf{CrypTen Approx.} & \textbf{Piecewise Poly} & \textbf{SHAFT (Fourier+ODE)} & \textbf{Curl Wavelet LUTs} & \textbf{Fission Evaluator} \\
 \midrule
-Private MatMul ($128\times 128$)   & 11.45 / \textbf{4.35 (2.63$\times$)} & 12.66 / \textbf{3.07 (4.12$\times$)} & 11.87 / \textbf{3.61 (3.29$\times$)} & 16.47 / \textbf{7.71 (2.14$\times$)} & 11.13 / \textbf{3.64 (3.05$\times$)} \\
-Private Mul ($128\times 128$)      & 4.91 / \textbf{3.23 (1.52$\times$)} & 4.51 / \textbf{3.12 (1.45$\times$)} & 4.08 / \textbf{3.31 (1.23$\times$)} & 8.59 / \textbf{5.42 (1.59$\times$)} & 4.99 / \textbf{2.89 (1.73$\times$)} \\
-Comparison / ReLU ($32\times 64$)  & 50.43 / \textbf{15.73 (3.21$\times$)} & 44.18 / \textbf{15.18 (2.91$\times$)} & 41.51 / \textbf{15.77 (2.63$\times$)} & 40.80 / \textbf{14.97 (2.73$\times$)} & 45.86 / \textbf{15.65 (2.93$\times$)} \\
-Exp ($32\times 64$)                & 28.30 / \textbf{19.07 (1.48$\times$)} & 79.72 / \textbf{31.14 (2.56$\times$)} & 27.03 / \textbf{17.71 (1.53$\times$)} & 67.40 / \textbf{28.30 (2.38$\times$)} & 6.85 / \textbf{1.97 (3.49$\times$)} \\
-Reciprocal ($32\times 64$)         & 129.92 / \textbf{65.24 (1.99$\times$)} & 134.66 / \textbf{68.01 (1.98$\times$)} & 137.68 / \textbf{69.79 (1.97$\times$)} & 56.21 / \textbf{12.59 (4.47$\times$)} & 17.61 / \textbf{1.48 (11.87$\times$)} \\
-InvSqrt ($32\times 64$)            & 90.38 / \textbf{39.73 (2.28$\times$)} & 87.97 / \textbf{38.64 (2.28$\times$)} & 85.92 / \textbf{40.36 (2.13$\times$)} & 141.19 / \textbf{12.20 (11.57$\times$)} & 17.45 / \textbf{1.52 (11.49$\times$)} \\
-GeLU ($32\times 64$)               & 150.42 / \textbf{73.75 (2.04$\times$)} & 68.45 / \textbf{37.10 (1.84$\times$)} & 92.71 / \textbf{29.91 (3.10$\times$)} & 23.39 / \textbf{12.35 (1.89$\times$)} & 6.81 / \textbf{1.71 (3.98$\times$)} \\
-SiLU ($32\times 64$)               & 132.88 / \textbf{50.49 (2.63$\times$)} & 67.45 / \textbf{36.06 (1.87$\times$)} & 90.73 / \textbf{27.87 (3.26$\times$)} & 26.20 / \textbf{12.55 (2.09$\times$)} & 7.30 / \textbf{1.71 (4.26$\times$)} \\
-Softmax ($4\times 32\times 32$)    & 551.32 / \textbf{251.27 (2.19$\times$)} & 586.34 / \textbf{252.38 (2.32$\times$)} & 199.67 / \textbf{106.15 (1.88$\times$)} & 507.15 / \textbf{200.35 (2.53$\times$)} & 7.23 / \textbf{1.74 (4.15$\times$)} \\
-LayerNorm ($4\times 32\times 64$)  & 103.48 / \textbf{43.67 (2.37$\times$)} & 103.03 / \textbf{47.66 (2.16$\times$)} & 99.32 / \textbf{49.61 (2.00$\times$)} & 158.90 / \textbf{24.92 (6.38$\times$)} & 9.46 / \textbf{2.48 (3.81$\times$)} \\
+\input{tables/gpu_ops}\\
 \bottomrule
 \end{tabular}%
 }
@@ -486,21 +462,7 @@ CrypTen and PriX use different transports (Section~\ref{sec:collectives}), so th
 \cmidrule(lr){2-4} \cmidrule(lr){5-7}
 \textbf{Platform / Mode} & TCP (default) & gloo & Shared mem. & TCP (default) & gloo & Shared mem. \\
 \midrule
-\multicolumn{7}{@{}l}{\emph{CPU (AMD EPYC 7B12)}} \\
-CrypTen approx.  & 3.58$\times$ & 2.50$\times$ & 3.76$\times$ & 2.14$\times$ & 1.35$\times$ & 2.88$\times$ \\
-Piecewise poly   & 4.25$\times$ & 3.21$\times$ & 4.98$\times$ & 2.63$\times$ & 1.59$\times$ & 3.08$\times$ \\
-SHAFT            & 4.51$\times$ & 3.73$\times$ & 5.22$\times$ & 1.93$\times$ & 1.48$\times$ & 2.89$\times$ \\
-Curl LUTs        & 3.81$\times$ & 2.77$\times$ & 3.35$\times$ & 3.70$\times$ & 2.05$\times$ & 4.13$\times$ \\
-Fission          & 4.66$\times$ & 3.71$\times$ & 4.52$\times$ & 5.00$\times$ & 3.97$\times$ & 5.17$\times$ \\
-\textbf{All modes (CPU)} & \textbf{4.14$\times$} & \textbf{3.14$\times$} & \textbf{4.31$\times$} & \textbf{2.89$\times$} & \textbf{1.92$\times$} & \textbf{3.53$\times$} \\
-\midrule
-\multicolumn{7}{@{}l}{\emph{GPU (NVIDIA Tesla T4)}} \\
-CrypTen approx.  & 2.21$\times$ & 1.96$\times$ & 2.32$\times$ & 2.18$\times$ & 1.74$\times$ & 2.33$\times$ \\
-Piecewise poly   & 2.16$\times$ & 1.94$\times$ & 2.33$\times$ & 2.26$\times$ & 1.77$\times$ & 2.37$\times$ \\
-SHAFT            & 2.06$\times$ & 2.08$\times$ & 2.35$\times$ & 2.19$\times$ & 1.75$\times$ & 2.45$\times$ \\
-Curl LUTs        & 2.80$\times$ & 2.47$\times$ & 2.87$\times$ & 3.06$\times$ & 2.35$\times$ & 3.07$\times$ \\
-Fission          & 2.51$\times$ & 2.46$\times$ & 2.47$\times$ & 4.26$\times$ & 3.84$\times$ & 4.54$\times$ \\
-\textbf{All modes (GPU)} & \textbf{2.33$\times$} & \textbf{2.17$\times$} & \textbf{2.46$\times$} & \textbf{2.69$\times$} & \textbf{2.17$\times$} & \textbf{2.85$\times$} \\
+\input{tables/transport}\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -538,20 +500,7 @@ The latency results above say nothing about whether each mode computes the right
 \footnotesize
 \begin{tabular}{@{}lrrrrr@{}}
 \toprule
-\textbf{Function (inputs)} & \texttt{crypten} & \texttt{poly} & \texttt{shaft} & \texttt{curl} & \texttt{fission} \\
-\midrule
-$\exp$, $[-8, 0]$         & 4e-4 / 1e-3 & 2e-3 / 0.011 & 4e-4 / 1e-3 & 3e-4 / \textbf{0.12} & 4e-6 \\
-$\exp$, $[-4, 2]$         & 1e-3 / 0.070 & 3e-3 / 0.011 & 1e-3 / 0.056 & 9e-3 / \textbf{7.4}$^\dagger$ & 5e-6 \\
-$\log$, $[0.1, 50]$       & 0.020 / 0.033 & 0.020 / 0.032 & 0.020 / 0.033 & 1e-5 / \textbf{2.0}$^\dagger$ & 4e-6 \\
-$1/x$, $[0.1, 50]$        & 9e-5 / 6e-4 & 9e-5 / 6e-4 & 9e-5 / 6e-4 & 7e-6 / \textbf{1.6e4}$^\dagger$ & 3e-6 \\
-$1/\sqrt{x}$, $[0.05, 50]$ & 2e-5 / \textbf{0.24} & 2e-5 / \textbf{0.24} & 2e-5 / \textbf{0.24} & \textbf{0.13} / \textbf{193}$^\dagger$ & 4e-6 \\
-Sigmoid, $[-8, 8]$        & 2e-4 / 2e-3 & 1e-3 / 9e-3 & 0.019 / \textbf{0.50} & 5e-5 / 4e-3 & 4e-6 \\
-Tanh, $[-6, 6]$           & 1e-4 / 4e-3 & 1e-3 / 0.018 & 0.035 / 0.093 & 2e-5 / 9e-3 & 3e-6 \\
-Erf, $[-4, 4]$            & \textbf{0.24} / \textbf{7.2e4}$^\dagger$ & 2e-3 / 0.015 & 0.027 / 0.071 & 5e-5 / 0.011 & 3e-6 \\
-GeLU, $[-6, 6]$           & \textbf{0.92} / \textbf{1.4e6}$^\dagger$ & 4e-4 / 4e-3 & 4e-4 / 4e-3 & 3e-4 / \textbf{0.13} & 3e-6 \\
-SiLU, $[-8, 8]$           & 6e-4 / 2e-3 & 5e-3 / 0.015 & 6e-4 / 5e-3 & 3e-3 / \textbf{0.32} & 4e-6 \\
-Softmax                   & 1e-4 / 4e-3 & 6e-4 / 6e-3 & 3e-4 / 0.052 & 1e-4 / 0.015 & 4e-6 \\
-LayerNorm                 & 9e-6 / 9e-5 & 9e-6 / 8e-5 & 1e-5 / 1e-4 & 1e-5 / 9e-5 & 4e-6 \\
+\input{tables/accuracy}\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -612,43 +561,7 @@ SHAFT~\cite{kei2025shaft} (Table~VII) reported $3.7\times$--$6.4\times$ lower $\
 \vspace{2pt}
 \footnotesize
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}llcccc@{}}
-\toprule
-\textbf{Primitive (Range)} & \textbf{Metric} & \textbf{Wave (\texttt{mode="wave"})} & \textbf{SIGMA (\texttt{mode="sigma"})} & \textbf{Curl (\texttt{mode="curl"})} & \textbf{SHAFT (\texttt{mode="shaft"})} \\
-\midrule
-\multirow{2}{*}{$\operatorname{GeLU}$ ($[-3.8, 3.8]$)}
- & Rounds / Comm (1P) & \textbf{2 rds} / $\mathbf{40.0\,\text{B}}$ & 6 rds / $56.3\,\text{B}$ & 4 rds / $\mathbf{40.0\,\text{B}}$ & 11 rds / $544.0\,\text{B}$ \\
- & Time / MAE & $\mathbf{10.5\,\text{ms}}$ / $1.75\times 10^{-3}$ & $28.8\,\text{ms}$ / $\mathbf{3.49\times 10^{-4}}$ & $15.1\,\text{ms}$ / $9.07\times 10^{-3}$ & $15.5\,\text{ms}$ / $9.41\times 10^{-4}$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{SiLU}$ ($[-7.5, 7.5]$)}
- & Rounds / Comm (1P) & \textbf{2 rds} / $\mathbf{40.0\,\text{B}}$ & 6 rds / $56.3\,\text{B}$ & 4 rds / $\mathbf{40.0\,\text{B}}$ & 11 rds / $544.0\,\text{B}$ \\
- & Time / MAE & $7.9\,\text{ms}$ / $3.47\times 10^{-3}$ & $32.4\,\text{ms}$ / $\mathbf{4.96\times 10^{-4}}$ & $\mathbf{7.2\,\text{ms}}$ / $1.69\times 10^{-2}$ & $23.1\,\text{ms}$ / $8.55\times 10^{-4}$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{Sigmoid}$ ($[-7.5, 7.5]$)}
- & Rounds / Comm (1P) & 6 rds / $80.3\,\text{B}$ & 7 rds / $72.3\,\text{B}$ & 15 rds / $592.0\,\text{B}$ & \textbf{1 rd} / $\mathbf{8.0\,\text{B}}$ \\
- & Time / MAE & $36.8\,\text{ms}$ / $\mathbf{7.24\times 10^{-5}}$ & $26.5\,\text{ms}$ / $4.16\times 10^{-3}$ & $21.7\,\text{ms}$ / $3.70\times 10^{-4}$ & $\mathbf{3.2\,\text{ms}}$ / $2.24\times 10^{-2}$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{Tanh}$ ($[-4.5, 4.5]$)}
- & Rounds / Comm (1P) & 6 rds / $80.3\,\text{B}$ & 7 rds / $72.3\,\text{B}$ & 15 rds / $592.0\,\text{B}$ & \textbf{1 rd} / $\mathbf{8.0\,\text{B}}$ \\
- & Time / MAE & $32.0\,\text{ms}$ / $\mathbf{1.17\times 10^{-4}}$ & $21.3\,\text{ms}$ / $6.93\times 10^{-3}$ & $23.2\,\text{ms}$ / $5.24\times 10^{-4}$ & $\mathbf{1.8\,\text{ms}}$ / $3.03\times 10^{-2}$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{Erf}$ ($[-3.5, 3.5]$)}
- & Rounds / Comm (1P) & 9 rds / $104.3\,\text{B}$ & 10 rds / $96.3\,\text{B}$ & 23 rds / $424.0\,\text{B}$ & \textbf{1 rd} / $\mathbf{8.0\,\text{B}}$ \\
- & Time / MAE & $37.6\,\text{ms}$ / $\mathbf{1.68\times 10^{-4}}$ & $34.3\,\text{ms}$ / $8.93\times 10^{-3}$ & $29.0\,\text{ms}$ / $8.29\times 10^{-4}$ & $\mathbf{2.8\,\text{ms}}$ / $2.37\times 10^{-2}$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{nexp}$ ($\exp(x), [-15, 0)$)}
- & Rounds / Comm (1P) & \textbf{5 rds} / $64.1\,\text{B}$ & 12 rds / $120.1\,\text{B}$ & 13 rds / $224.0\,\text{B}$ & 8 rds / $\mathbf{64.0\,\text{B}}$ \\
- & Time / MAE & $\mathbf{12.3\,\text{ms}}$ / $6.04\times 10^{-4}$ & $38.7\,\text{ms}$ / $\mathbf{1.13\times 10^{-5}}$ & $13.0\,\text{ms}$ / $2.24\times 10^{-3}$ & $12.5\,\text{ms}$ / $3.09\times 10^{-4}$ \\
-\midrule
-\multirow{2}{*}{$1/x$ ($[1.0, 30.0]$)}
- & Rounds / Comm (1P) & \textbf{2 rds} / $40.0\,\text{B}$ & 3 rds / $\mathbf{32.0\,\text{B}}$ & 4 rds / $40.0\,\text{B}$ & 28 rds / $304.0\,\text{B}$ \\
- & Time / MAE & $31.6\,\text{ms}$ / $8.51\times 10^{-5}$ & $20.7\,\text{ms}$ / $5.36\times 10^{-4}$ & $\mathbf{10.0\,\text{ms}}$ / $3.42\times 10^{-4}$ & $56.2\,\text{ms}$ / $\mathbf{8.08\times 10^{-5}}$ \\
-\midrule
-\multirow{2}{*}{$1/\sqrt{x}$ ($[0.1, 15.0]$)}
- & Rounds / Comm (1P) & \textbf{2 rds} / $\mathbf{40.0\,\text{B}}$ & 10 rds / $104.1\,\text{B}$ & 4 rds / $\mathbf{40.0\,\text{B}}$ & 17 rds / $184.0\,\text{B}$ \\
- & Time / MAE & $97.1\,\text{ms}$ / $\mathbf{2.61\times 10^{-5}}$ & $45.8\,\text{ms}$ / $2.25\times 10^{-4}$ & $\mathbf{15.6\,\text{ms}}$ / $1.03\times 10^{-4}$ & $22.0\,\text{ms}$ / $4.65\times 10^{-4}$ \\
-\bottomrule
-\end{tabular}%
+\IfFileExists{tables/fss_primitives.tex}{\input{tables/fss_primitives}}{\fbox{pending}}%
 }
 \end{table}
 
@@ -663,65 +576,7 @@ SHAFT~\cite{kei2025shaft} (Table~VII) reported $3.7\times$--$6.4\times$ lower $\
 \vspace{2pt}
 \footnotesize
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}llccccccc@{}}
-\toprule
-\textbf{Benchmark} & \textbf{Metric} & \textbf{PriX default} & \textbf{Wave} & \textbf{Wave + SIGMA TR} & \textbf{Wave-Prob} & \textbf{SIGMA} & \textbf{Curl} & \textbf{SHAFT} \\
- & & (\texttt{mode="default"}) & (\texttt{lut\_indexing="wave"}) & (\texttt{lut\_indexing="sigma"}) & (\texttt{lut\_indexing="wave\_prob"}) & (\texttt{mode="sigma"}) & (\texttt{mode="curl"}) & (\texttt{mode="shaft"}) \\
-\midrule
-\multirow{3}{*}{$\operatorname{GeLU}$}
- & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
- & Key (B, $\lambda{=}128$) & 528 & 768 & 536 & \textbf{152} & 1,488 & 304 & 1,024 \\
- & Time / MAE & $9.8\,\text{ms}$ / $4.12\text{e}-4$ & $7.4\,\text{ms}$ / $1.75\text{e}-3$ & $5.7\,\text{ms}$ / $1.75\text{e}-3$ & $3.9\,\text{ms}$ / $8.62\text{e}-3$ & $14.8\,\text{ms}$ / $3.49\text{e}-4$ & $8.9\,\text{ms}$ / $8.96\text{e}-3$ & $13.7\,\text{ms}$ / $9.41\text{e}-4$ \\
-\midrule
-\multirow{3}{*}{$\operatorname{SiLU}$}
- & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 6 / 56.3 & 4 / 40.0 & 11 / 544.0 \\
- & Key (B, $\lambda{=}128$) & 552 & 808 & 560 & \textbf{152} & 1,496 & 304 & 1,088 \\
- & Time / MAE & $7.1\,\text{ms}$ / $7.68\text{e}-4$ & $6.9\,\text{ms}$ / $3.47\text{e}-3$ & $9.2\,\text{ms}$ / $3.47\text{e}-3$ & $4.2\,\text{ms}$ / $1.62\text{e}-2$ & $24.3\,\text{ms}$ / $4.96\text{e}-4$ & $8.9\,\text{ms}$ / $1.75\text{e}-2$ & $16.1\,\text{ms}$ / $8.55\text{e}-4$ \\
-\midrule
-\multirow{3}{*}{$1/x$}
- & Rounds / Online (B) & 3 / 48.0 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 3 / 32.0 & 4 / 40.0 & 28 / 304.0 \\
- & Key (B, $\lambda{=}128$) & 560 & 776 & 560 & \textbf{200} & 504 & 2,096 & 528 \\
- & Time / MAE & $10.2\,\text{ms}$ / $8.50\text{e}-5$ & $32.3\,\text{ms}$ / $8.52\text{e}-5$ & $9.5\,\text{ms}$ / $8.51\text{e}-5$ & $6.3\,\text{ms}$ / $3.49\text{e}-4$ & $14.5\,\text{ms}$ / $5.36\text{e}-4$ & $7.1\,\text{ms}$ / $3.16\text{e}-4$ & $52.4\,\text{ms}$ / $8.01\text{e}-5$ \\
-\midrule
-\multirow{3}{*}{$1/\sqrt{x}$}
- & Rounds / Online (B) & 6 / 192.3 & 2 / 40.0 & 3 / 48.0 & 2 / 40.0 & 10 / 104.1 & 4 / 40.0 & 17 / 184.0 \\
- & Key (B, $\lambda{=}128$) & 3,888 & 712 & 560 & \textbf{296} & 1,888 & 8,240 & 320 \\
- & Time / MAE & $301.8\,\text{ms}$ / $1.88\text{e}-5$ & $988.3\,\text{ms}$ / $2.64\text{e}-5$ & $216.9\,\text{ms}$ / $2.61\text{e}-5$ & $204.3\,\text{ms}$ / $8.47\text{e}-5$ & $40.4\,\text{ms}$ / $2.25\text{e}-4$ & $15.1\,\text{ms}$ / $1.11\text{e}-4$ & $42.1\,\text{ms}$ / $4.65\text{e}-4$ \\
-\midrule
-\multirow{3}{*}{$\operatorname{GeLU}$ $(1,128,3072)$}
- & Rounds / Online (MB) & 3 / 18.9 & 2 / 15.7 & 3 / 18.9 & 2 / 15.7 & 6 / 22.1 & 4 / 15.7 & 11 / 213.9 \\
- & Key (GB, $\lambda{=}128$) & 0.208 & 0.302 & 0.211 & \textbf{0.060} & 0.585 & 0.119 & 0.403 \\
- & Time / MAE & $0.66\,\text{s}$ / $4.45\text{e}-4$ & $1.66\,\text{s}$ / $1.90\text{e}-3$ & $0.48\,\text{s}$ / $1.90\text{e}-3$ & $0.21\,\text{s}$ / $9.84\text{e}-3$ & $2.59\,\text{s}$ / $3.79\text{e}-4$ & $0.13\,\text{s}$ / $9.82\text{e}-3$ & $0.52\,\text{s}$ / $9.80\text{e}-4$ \\
-\midrule
-\multirow{3}{*}{$\operatorname{Softmax}$ $(1,12,128,128)$}
- & Rounds / Online (MB) & 25 / 19.0 & 23 / 17.4 & 25 / 19.0 & 23 / 17.4 & 31 / 28.4 & 98 / 155.9 & 41 / 173.0 \\
- & Key (GB, $\lambda{=}128$) & 0.418 & 0.564 & 0.518 & 0.442 & 0.526 & 0.312 & \textbf{0.271} \\
- & Time / MAE & $0.78\,\text{s}$ / $6.86\text{e}-5$ & $1.77\,\text{s}$ / $6.86\text{e}-5$ & $0.89\,\text{s}$ / $6.86\text{e}-5$ & $0.74\,\text{s}$ / $2.76\text{e}-4$ & $2.16\,\text{s}$ / $1.05\text{e}-5$ & $0.64\,\text{s}$ / $2.78\text{e}-4$ & $0.63\,\text{s}$ / $3.02\text{e}-4$ \\
-\midrule
-\multirow{3}{*}{$\operatorname{LayerNorm}$ $(1,128,768)$}
- & Rounds / Online (MB) & 12 / 4.7 & 8 / 4.7 & 9 / 4.7 & 8 / 4.7 & 16 / 4.7 & 10 / 4.7 & 20 / 2.4 \\
- & Key (GB, $\lambda{=}128$) & 0.008 & 0.007 & 0.007 & 0.007 & 0.007 & 0.008 & \textbf{0.005} \\
- & Time / MAE & $0.10\,\text{s}$ / $4.24\text{e}-5$ & $0.23\,\text{s}$ / $3.25\text{e}-5$ & $0.08\,\text{s}$ / $3.29\text{e}-5$ & $0.07\,\text{s}$ / $5.56\text{e}-5$ & $0.07\,\text{s}$ / $9.27\text{e}-4$ & $0.06\,\text{s}$ / $4.53\text{e}-5$ & $0.05\,\text{s}$ / $8.97\text{e}-4$ \\
-\midrule
-\multirow{4}{*}{\texttt{BERT-base} (12L)}
- & Rounds / Online 1P (GB) & 828 / 0.833 & 696 / 0.775 & 756 / 0.832 & 696 / 0.775 & 1,032 / 0.984 & 1,668 / 3.117 & 1,200 / 5.512 \\
- & Key 1P (GB, $\lambda{=}128$) & 8.07 & 10.94 & 9.30 & 6.57 & 13.89 & \textbf{6.43} & 9.12 \\
- & Time & $24.2\,\text{s}$ & $50.6\,\text{s}$ & $22.6\,\text{s}$ & \textbf{$17.7\,\text{s}$} & $65.9\,\text{s}$ & $18.0\,\text{s}$ & $20.5\,\text{s}$ \\
- & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0191$ & $0.0017$ & $0.0191$ & $0.0015$ \\
-\midrule
-\multirow{4}{*}{\texttt{BERT-large} (24L)}
- & Rounds / Online 1P (GB) & 1,656 / 2.220 & 1,392 / 2.067 & 1,512 / 2.219 & 1,392 / 2.067 & 2,064 / 2.624 & 3,336 / 8.916 & 2,400 / 15.302 \\
- & Key 1P (GB, $\lambda{=}128$) & 21.50 & 29.18 & 24.79 & \textbf{17.52} & 37.03 & 17.74 & 24.92 \\
- & Time & $65.3\,\text{s}$ & $140.0\,\text{s}$ & $57.0\,\text{s}$ & \textbf{$49.4\,\text{s}$} & $189.4\,\text{s}$ & $55.3\,\text{s}$ & $61.8\,\text{s}$ \\
- & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0192$ & $0.0016$ & $0.0192$ & $0.0015$ \\
-\midrule
-\multirow{4}{*}{\texttt{GPT-2} (12L, $L{=}64$)}
- & Rounds / Online 1P (GB) & 804 / 0.345 & 672 / 0.321 & 732 / 0.345 & 672 / 0.321 & 1,008 / 0.393 & 1,656 / 1.391 & 1,200 / 2.572 \\
- & Key 1P (GB, $\lambda{=}128$) & 2.76 & 3.76 & 3.07 & \textbf{1.94} & 5.34 & 2.56 & 4.08 \\
- & Time & $12.2\,\text{s}$ & $24.2\,\text{s}$ & $9.9\,\text{s}$ & \textbf{$8.5\,\text{s}$} & $27.6\,\text{s}$ & $12.9\,\text{s}$ & $12.3\,\text{s}$ \\
- & Block MAE & \textbf{$0.0007$} & $0.0028$ & $0.0028$ & $0.0193$ & $0.0015$ & $0.0194$ & $0.0015$ \\
-\bottomrule
-\end{tabular}%
+\IfFileExists{tables/fss_keysize.tex}{\input{tables/fss_keysize}}{\fbox{pending}}%
 }
 \end{table}
 
@@ -757,39 +612,7 @@ In mixed-mode wavelet protocols such as Wave and Curl, fixed-point truncation oc
 \vspace{2pt}
 \footnotesize
 \resizebox{\textwidth}{!}{%
-\begin{tabular}{@{}llcccc@{}}
-\toprule
-\textbf{Benchmark} & \textbf{Metric} & \textbf{\texttt{wave\_det\_egk}} & \textbf{\texttt{wave\_det\_crypten}} & \textbf{\texttt{wave\_prob\_egk}} & \textbf{\texttt{wave\_prob\_crypten}} \\
- & & (\texttt{lut\_indexing="wave", truncation="egk"}) & (\texttt{lut\_indexing="wave", truncation="crypten"}) & (\texttt{lut\_indexing="wave\_prob", truncation="egk"}) & (\texttt{lut\_indexing="wave\_prob", truncation="crypten"}) \\
-\midrule
-\multirow{2}{*}{$\operatorname{GeLU}$ $(1, 128, 3072)$}
- & Rounds / 2P Comm & 2 rds / $31.46\,\text{MB}$ & 2 rds / $31.46\,\text{MB}$ & 2 rds / $31.46\,\text{MB}$ & 2 rds / $31.46\,\text{MB}$ \\
- & Time / MAE / Max & $1.862\,\text{s}$ / $\mathbf{.00190}$ / $\mathbf{.0158}$ & $2.371\,\text{s}$ / $\mathbf{.00190}$ / $\mathbf{.0158}$ & $0.249\,\text{s}$ / $.00977$ / $.2091$ & $\mathbf{0.195\,\text{s}}$ / $.00977$ / $.2084$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{Softmax}$ $(1, 12, 128, 128)$}
- & Rounds / 2P Comm & 23 rds / $34.82\,\text{MB}$ & \textbf{22 rds} / $\mathbf{31.68\,\text{MB}}$ & 23 rds / $34.82\,\text{MB}$ & \textbf{22 rds} / $\mathbf{31.68\,\text{MB}}$ \\
- & Time / MAE / Max & $2.010\,\text{s}$ / $\mathbf{6.8\text{e-}5}$ / $\mathbf{.0009}$ & $2.133\,\text{s}$ / $\mathbf{6.8\text{e-}5}$ / $\mathbf{.0009}$ & $0.752\,\text{s}$ / $2.8\text{e-}4$ / $.0075$ & $\mathbf{0.734\,\text{s}}$ / $2.8\text{e-}4$ / $.0081$ \\
-\midrule
-\multirow{2}{*}{$\operatorname{LayerNorm}$ $(1, 128, 768)$}
- & Rounds / 2P Comm & 6 rds / $6.30\,\text{MB}$ & \textbf{4 rds} / $\mathbf{3.16\,\text{MB}}$ & 6 rds / $6.30\,\text{MB}$ & \textbf{4 rds} / $\mathbf{3.16\,\text{MB}}$ \\
- & Time / MAE / Max & $0.054\,\text{s}$ / $\mathbf{3.0\text{e-}5}$ / $\mathbf{.0002}$ & $0.031\,\text{s}$ / $\mathbf{3.0\text{e-}5}$ / $\mathbf{.0002}$ & $0.028\,\text{s}$ / $4.0\text{e-}5$ / $.0005$ & $\mathbf{0.024\,\text{s}}$ / $4.0\text{e-}5$ / $.0004$ \\
-\midrule
-\multirow{3}{*}{\texttt{BERT-base} (12L, $L=128$)}
- & Rounds / 2P Comm & 696 rds / $1.551\,\text{GB}$ & \textbf{504 rds} / $\mathbf{1.135\,\text{GB}}$ & 696 rds / $1.551\,\text{GB}$ & \textbf{504 rds} / $\mathbf{1.135\,\text{GB}}$ \\
- & Total Time (12L) & $63.99\,\text{s}$ & $62.66\,\text{s}$ & $24.06\,\text{s}$ & $\mathbf{18.48\,\text{s}}$ \\
- & Block MAE / Max & $\mathbf{0.0028}$ / $0.0160$ & $\mathbf{0.0028}$ / $\mathbf{0.0159}$ & $0.0190$ / $0.1075$ & $0.0192$ / $0.1058$ \\
-\midrule
-\multirow{3}{*}{\texttt{BERT-large} (24L, $L=128$)}
- & Rounds / 2P Comm & 1,392 rds / $4.135\,\text{GB}$ & \textbf{1,008 rds} / $\mathbf{3.028\,\text{GB}}$ & 1,392 rds / $4.135\,\text{GB}$ & \textbf{1,008 rds} / $\mathbf{3.028\,\text{GB}}$ \\
- & Total Time (24L) & $161.58\,\text{s}$ & $164.30\,\text{s}$ & $62.74\,\text{s}$ & $\mathbf{47.36\,\text{s}}$ \\
- & Block MAE / Max & $\mathbf{0.0028}$ / $\mathbf{0.0159}$ & $\mathbf{0.0028}$ / $\mathbf{0.0159}$ & $0.0195$ / $0.1087$ & $0.0194$ / $0.1081$ \\
-\midrule
-\multirow{3}{*}{\texttt{GPT-2} (12L, $L=64$)}
- & Rounds / 2P Comm & 672 rds / $0.643\,\text{GB}$ & \textbf{480 rds} / $\mathbf{0.464\,\text{GB}}$ & 672 rds / $0.643\,\text{GB}$ & \textbf{480 rds} / $\mathbf{0.464\,\text{GB}}$ \\
- & Total Time (12L) & $28.67\,\text{s}$ & $27.75\,\text{s}$ & $9.61\,\text{s}$ & $\mathbf{8.53\,\text{s}}$ \\
- & Block MAE / Max & $\mathbf{0.0028}$ / $\mathbf{0.0154}$ & $\mathbf{0.0028}$ / $\mathbf{0.0154}$ & $0.0191$ / $0.1139$ & $0.0190$ / $0.0990$ \\
-\bottomrule
-\end{tabular}%
+\IfFileExists{tables/fss_trunc_ablation.tex}{\input{tables/fss_trunc_ablation}}{\fbox{pending}}%
 }
 \end{table}
 

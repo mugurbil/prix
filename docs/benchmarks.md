@@ -162,13 +162,17 @@ In addition to the five CrypTen-compatible modes above, PriX implements 2-party 
 
 `prix.provider.get_preproc_stats()` reports the key bytes one party would receive from a real dealer (seed correction words re-counted at $\lambda=128$, i.e. 16 B / DPF level, for comparability with SIGMA/Orca). The accounting reproduces SIGMA Table 2 (`1,488 B` vs. `1.43 KB` on GeLU, `1,888 B` vs. `1.93 KB` on Rsqrt). Run [`benchmarks/benchmark_fss_modes.py`](../benchmarks/benchmark_fss_modes.py) (`--device cuda` for GPU; Colab: [`examples/prix_fss_wave_sigma_gpu_colab.ipynb`](../examples/prix_fss_wave_sigma_gpu_colab.ipynb)) to reproduce:
 
-| `BERT-base` (12L, $L=128$), per party | **PriX default** | **Wave** (`lut_indexing="wave"`) | **Wave + SIGMA TR** (`lut_indexing="sigma"`) | **Wave-Prob** (`lut_indexing="wave_prob"`) | **SIGMA** | **Curl** | **SHAFT** |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Online rounds | 828 | **696** | 756 | **696** | 1,032 | 1,668 | 1,200 |
-| Online bytes (1P) | 0.832 GB | **0.775 GB** | 0.832 GB | **0.775 GB** | 0.984 GB | 3.117 GB | 5.512 GB |
-| Preprocessing key (1P, $\lambda=128$) | 8.06 GB | 10.94 GB | 9.30 GB | **6.57 GB** | 13.89 GB | 6.43 GB | 9.12 GB |
-| Local CPU time (12L) | 24.2 s | 50.6 s | 22.6 s | **17.7 s** | 65.9 s | 18.0 s | 20.5 s |
-| Block MAE | **0.0007** | 0.0028 | 0.0028 | 0.0191 | 0.0017 | 0.0191 | 0.0015 |
+<!-- generated:fss_bert_base:begin -->
+| `mode` | Nonlinearities | Rounds | Online | Key (λ=128) | CPU time | Block MAE |
+|---|---|---:|---:|---:|---:|---:|
+| `default` | Wave bior(5,3) FSS tables + SIGMA Truncate-Reduce + `[EGK+20]` | 828 | 0.83 GB | 8.1 GB | 24.2 s | **0.0007** |
+| `wave` | 2-round Wave (Grotto DPF + DCF) | **696** | **0.78 GB** | 10.9 GB | 50.6 s | 0.0028 |
+| `wave`, `lut_indexing="sigma"` | Wave tables, SIGMA Truncate-Reduce indexing (3 rounds) | 756 | 0.83 GB | 9.3 GB | 22.6 s | 0.0028 |
+| `wave`, `lut_indexing="wave_prob"` | Wave tables, probabilistic indexing | **696** | **0.78 GB** | 6.6 GB | **17.7 s** | 0.0191 |
+| `sigma` | SIGMA 0th-order Haar FSS LUTs | 1,032 | 0.98 GB | 13.9 GB | 65.9 s | 0.0017 |
+| `curl` | Curl wavelet LUTs (one-hot) + `[EGK+20]` | 1,668 | 3.12 GB | **6.4 GB** | 18.0 s | 0.0191 |
+| `shaft` | SHAFT Fourier activations + ODE Softmax | 1,200 | 5.51 GB | 9.1 GB | 20.5 s | 0.0015 |
+<!-- generated:fss_bert_base:end -->
 
 - **Wave + SIGMA TR** replaces the $(J+\mathfrak{j})$-level Grotto carry loop (evaluated at all $2^J$ leaves) with SIGMA's single-path $\mathfrak{j}$-level DCF followed by a $J$-level DPF, keeping Wave's exact deterministic accuracy while cutting PriX's CPU time by **$2.2\times$** on `BERT-base` (`50.6 s` → `22.6 s`), **$3.4\times$** on GeLU `(1,128,3072)` (`1.66 s` → `0.49 s`) and **$4.6\times$** on `inv_sqrt`, and the key by $15\%$–$30\%$—for `+1` round and `+8 B`/elem per LUT. Versus `mode="sigma"` it needs $1.36\times$ fewer rounds, $15\%$ less online traffic, $33\%$ less key and $2.9\times$ less CPU time. The **default preset** adds 32-knot GeLU/SiLU tables (4× lower activation error for +32 B key, no extra round) and 48-bit comparisons (SIGMA's effective bit-width, −24% PRG calls), reaching block MAE **0.0007** — the most accurate mode in PriX — at `24.2 s` (828 rounds, including the range-extended LayerNorm).
 - **Preprocessing dominates every FSS scheme** (key ≈ $8.5\times$–$14\times$ online bytes), so total bytes is the honest metric: Wave-Prob `7.3 GB` < default `8.9 GB` < Curl `9.5 GB` < Wave + SIGMA TR `10.1 GB` < Wave `11.7 GB` < SHAFT `14.6 GB` < SIGMA `14.9 GB`.

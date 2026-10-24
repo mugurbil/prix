@@ -32,14 +32,18 @@ Seven nonlinearity paradigms share one API and are selected with a single argume
 
 `BERT-base` (12 layers, $L=128$), 2 parties, one host, CPU, $f=16$. Online rounds/bytes and preprocessing key bytes are per party; details, GPU numbers and primitives in [docs/benchmarks.md](docs/benchmarks.md) and Section 6 of the [paper](paper/prix_arxiv.pdf).
 
+<!-- generated:fss_bert_base:begin -->
 | `mode` | Nonlinearities | Rounds | Online | Key (λ=128) | CPU time | Block MAE |
 |---|---|---:|---:|---:|---:|---:|
-| **`default`** | Wave bior(5,3) FSS tables + SIGMA Truncate-Reduce + `[EGK+20]` | 828 | 0.83 GB | 8.1 GB | 24.2 s | **0.0007** |
+| `default` | Wave bior(5,3) FSS tables + SIGMA Truncate-Reduce + `[EGK+20]` | 828 | 0.83 GB | 8.1 GB | 24.2 s | **0.0007** |
 | `wave` | 2-round Wave (Grotto DPF + DCF) | **696** | **0.78 GB** | 10.9 GB | 50.6 s | 0.0028 |
+| `wave`, `lut_indexing="sigma"` | Wave tables, SIGMA Truncate-Reduce indexing (3 rounds) | 756 | 0.83 GB | 9.3 GB | 22.6 s | 0.0028 |
+| `wave`, `lut_indexing="wave_prob"` | Wave tables, probabilistic indexing | **696** | **0.78 GB** | 6.6 GB | **17.7 s** | 0.0191 |
 | `sigma` | SIGMA 0th-order Haar FSS LUTs | 1,032 | 0.98 GB | 13.9 GB | 65.9 s | 0.0017 |
-| `curl` | Curl wavelet LUTs (one-hot) + `[EGK+20]` | 1,668 | 3.12 GB | **6.4 GB** | **18.0 s** | 0.0191 |
+| `curl` | Curl wavelet LUTs (one-hot) + `[EGK+20]` | 1,668 | 3.12 GB | **6.4 GB** | 18.0 s | 0.0191 |
 | `shaft` | SHAFT Fourier activations + ODE Softmax | 1,200 | 5.51 GB | 9.1 GB | 20.5 s | 0.0015 |
 | `crypten` / `poly` / `fission` | CrypTen Newton/limit · PUMA polynomials · hybrid evaluator | see [benchmarks](docs/benchmarks.md) | | | | |
+<!-- generated:fss_bert_base:end -->
 
 - **vs. CrypTen**: identical API (`prix.cryptensor`, `@prix.mpc.run_multiprocess`, `prix.nn`), **2.3–7.8× faster Transformer blocks on CPU and 1.9–3.1× on GPU**, with the same protocols ([details](docs/benchmarks.md#prix-jax-vs-crypten-pytorch)).
 - **vs. SIGMA**: PriX's `sigma` mode reproduces SIGMA's communication and key sizes within 3% (Tables 2/5 of their paper); the `default` preset then needs **20% fewer rounds, 15% less online traffic, 42% smaller keys and is 2.4× more accurate**. SIGMA's C++/CUDA build remains faster per PRG call (AES-NI; PriX is Python/XLA) and ships a cryptographic PRG.

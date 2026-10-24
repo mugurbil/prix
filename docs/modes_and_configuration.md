@@ -96,20 +96,24 @@ def hybrid_curl_shaft():
 
 Each mode's approximations are only accurate on a limited input range, and **inputs outside that range are not clamped or flagged: they silently return wrong values.** The table shows the measured error of each function as shipped (default config of each mode, 2 parties, 10 repeats, compared with exact float64 results). Each cell is *median absolute error / typical worst error within one run*; ⚠ marks runs where some output was off by more than 1.
 
-| Function (tested inputs) | `crypten` | `poly` | `shaft` | `curl` | `fission` |
+<!-- generated:accuracy_ranges:begin -->
+| Function (inputs) | `curl` | `poly` | `shaft` | `crypten` | `fission` |
 |---|---:|---:|---:|---:|---:|
-| exp, x ≤ 0 ([−8, 0]) | 4e-4 / 1e-3 | 2e-3 / 0.011 | 4e-4 / 2e-3 | 8e-3 / **0.66** | 4e-6 |
-| exp, mixed sign ([−4, 2]) | 1e-3 / 0.056 | 3e-3 / 0.011 | 1e-3 / 0.069 | 0.11 / **7.4 ⚠** | 5e-6 |
-| log ([0.1, 50]) | 0.020 / 0.033 | 0.020 / 0.033 | 0.020 / 0.032 | 1e-5 / **2.3 ⚠** | 4e-6 |
-| reciprocal ([0.1, 50]) | 8e-5 / 6e-4 | 9e-5 / 6e-4 | 9e-5 / 6e-4 | 8e-6 / **2.4e4 ⚠** | 3e-6 |
-| inv_sqrt ([0.05, 50]) | 2e-5 / 0.24 | 2e-5 / 0.24 | 2e-5 / 0.24 | **0.76 / 145 ⚠** | 4e-6 |
-| sigmoid ([−8, 8]) | 2e-4 / 2e-3 | 1e-3 / 9e-3 | 0.019 / 0.50 | 5e-5 / 4e-3 | 4e-6 |
-| tanh ([−6, 6]) | 1e-4 / 4e-3 | 1e-3 / 0.018 | 0.035 / 0.093 | 2e-5 / 9e-3 | 3e-6 |
-| erf ([−4, 4]) | **2e3 / 4e6 ⚠** | 2e-3 / 0.015 | 0.027 / 0.071 | 5e-5 / 0.011 | 3e-6 |
-| GeLU ([−6, 6]) | **7e3 / 6e7 ⚠** | 4e-4 / 4e-3 | 4e-4 / 4e-3 | 2e-3 / **6.0 ⚠** | 3e-6 |
-| SiLU ([−8, 8]) | 6e-4 / 2e-3 | 5e-3 / 0.015 | 6e-4 / 5e-3 | 3e-3 / 0.30 | 4e-6 |
-| softmax (N(0, 2) logits) | 1e-4 / 4e-3 | 6e-4 / 6e-3 | 3e-4 / 0.052 | 2e-3 / 0.16 | 4e-6 |
-| LayerNorm (N(0.5, 2) inputs) | 9e-6 / 9e-5 | 9e-6 / 8e-5 | 1e-5 / 8e-5 | **0.55 / 19 ⚠** | 4e-6 |
+| exp, [-8, 0] | 3e-4 / 0.158 | 2e-3 / 0.011 | 4e-4 / 2e-3 | 4e-4 / 2e-3 | 4e-6 / 8e-6 |
+| exp, [-4, 2] | 9e-3 / 7.39 | 3e-3 / 0.0115 | 1e-3 / 0.0602 | 1e-3 / 0.0702 | 5e-6 / 5e-5 |
+| log, [0.1, 50] | 1e-5 / 2.7 | 0.02 / 0.0335 | 0.0201 / 0.0339 | 0.0202 / 0.034 | 4e-6 / 6e-5 |
+| 1/x, [0.1, 50] | 7e-6 / 1.6e4 | 9e-5 / 7e-4 | 9e-5 / 7e-4 | 9e-5 / 7e-4 | 3e-6 / 6e-4 |
+| 1/sqrt{x}, [0.05, 50] | 0.125 / 193.21 | 2e-5 / 0.235 | 2e-5 / 0.239 | 2e-5 / 0.236 | 4e-6 / 1e-4 |
+| Sigmoid, [-8, 8] | 5e-5 / 4e-3 | 1e-3 / 9e-3 | 0.0187 / 0.5 | 2e-4 / 2e-3 | 4e-6 / 8e-6 |
+| Tanh, [-6, 6] | 2e-5 / 1e-2 | 1e-3 / 0.0176 | 0.0351 / 0.093 | 1e-4 / 5e-3 | 3e-6 / 9e-6 |
+| Erf, [-4, 4] | 5e-5 / 0.0112 | 2e-3 / 0.015 | 0.0273 / 0.0712 | 0.243 / 5.3e5 | 3e-6 / 8e-6 |
+| GeLU, [-6, 6] | 3e-4 / 0.183 | 4e-4 / 4e-3 | 4e-4 / 4e-3 | 0.919 / 5.8e7 | 3e-6 / 1e-5 |
+| SiLU, [-8, 8] | 3e-3 / 0.392 | 5e-3 / 0.0148 | 6e-4 / 5e-3 | 6e-4 / 2e-3 | 4e-6 / 8e-6 |
+| Softmax (L=32) | 1e-4 / 0.0185 | 6e-4 / 6e-3 | 3e-4 / 0.0523 | 1e-4 / 4e-3 | 4e-6 / 8e-6 |
+| LayerNorm (d=64) | 1e-5 / 9e-5 | 9e-6 / 9e-5 | 1e-5 / 2e-4 | 9e-6 / 1e-4 | 4e-6 / 1e-5 |
+
+Each cell is median absolute error / worst-case absolute error over the test grid (10 runs); worst-case values above 1 indicate an input-range violation, not approximation error.
+<!-- generated:accuracy_ranges:end -->
 
 **Known limits:**
 - **`curl` (Curl defaults, identical to the Curl reference):**
