@@ -7,6 +7,12 @@ python examples/llms/launcher.py --world_size 2 --tensor_size 1,10 --multiproces
 import argparse
 import logging
 import os
+import sys
+
+# Allow `python examples/llms/launcher.py` from any working directory (the `examples` package lives at the repo root).
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
 
 import prix
 from prix.config import cfg
